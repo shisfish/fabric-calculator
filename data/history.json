@@ -1,0 +1,114 @@
+[
+  {
+    "id": "20260429141649",
+    "timestamp": "2026-04-29 14:16:49",
+    "type": "precise",
+    "category": "coat",
+    "params": {
+      "category": "大衣",
+      "fabric_width": 145.0,
+      "fabric_type": "woven",
+      "fabric_weight_gsm": 300.0,
+      "shrinkage_rate": 3.0,
+      "wastage_rate": 8.0,
+      "quantity": 100
+    },
+    "result": {
+      "per_piece_length_m": 0.032,
+      "total_area_m2": 3.2836,
+      "utilization_rate": 78.0,
+      "fabric_weight_kg": 1.0639
+    },
+    "input_data": {
+      "category": "coat",
+      "fabric_width": 145,
+      "fabric_type": "woven",
+      "fabric_weight_gsm": 300,
+      "shrinkage_rate": 3,
+      "wastage_rate": 8,
+      "quantity": 100,
+      "pieces": [
+        {
+          "name": "前片（左+右）",
+          "length": 85,
+          "width": 60,
+          "count": 2,
+          "shape": "rectangle",
+          "material": "main",
+          "seam_allowance": 1.5
+        },
+        {
+          "name": "后片",
+          "length": 88,
+          "width": 58,
+          "count": 1,
+          "shape": "rectangle",
+          "material": "main",
+          "seam_allowance": 1.5
+        },
+        {
+          "name": "袖子（左+右）",
+          "length": 62,
+          "width": 30,
+          "count": 2,
+          "shape": "trapezoid",
+          "material": "main",
+          "seam_allowance": 1.5
+        },
+        {
+          "name": "领子",
+          "length": 45,
+          "width": 8,
+          "count": 2,
+          "shape": "rectangle",
+          "material": "main",
+          "seam_allowance": 1
+        },
+        {
+          "name": "里布",
+          "length": 85,
+          "width": 58,
+          "count": 2,
+          "shape": "rectangle",
+          "material": "lining",
+          "seam_allowance": 1
+        }
+      ]
+    }
+  },
+  {
+    "id": "20260429141629",
+    "timestamp": "2026-04-29 14:16:29",
+    "type": "quick",
+    "category": "coat",
+    "params": {
+      "garment_length": 90.0,
+      "chest": 110.0,
+      "shoulder": 45.0,
+      "sleeve_length": 62.0,
+      "has_hood": false,
+      "has_lining": true,
+      "style_complexity": "medium",
+      "fabric_width": 145.0,
+      "fabric_weight_gsm": 300.0,
+      "quantity": 100
+    },
+    "result": {
+      "main_fabric_per_piece_m": 0.054,
+      "lining_per_piece_m": 0.04
+    },
+    "input_data": {
+      "category": "coat",
+      "garment_length": 90,
+      "chest": 110,
+      "shoulder": 45,
+      "sleeve_length": 62,
+      "has_hood": false,
+      "has_lining": true,
+      "style_complexity": "medium",
+      "fabric_width": 145,
+      "fabric_weight_gsm": 300,
+      "quantity": 100
+    }
+  }
+]

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报价管理 - 面料用量快速计算系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="nav-icon">✂️</span>
+            <span class="nav-title">面料用量快速计算系统</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">精确计算</a>
+            <a href="/curves" class="nav-link">曲线计算</a>
+            <a href="/quick" class="nav-link">快速估算</a>
+            <a href="/quotation" class="nav-link active">报价管理</a>
+            <a href="/history" class="nav-link">历史记录</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>💰 报价管理</h2>
+            <p class="page-desc">基于用量计算结果，输入材料价格和加工费用，自动生成报价单</p>
+        </div>
+
+        <div class="two-column">
+            <!-- 左侧：用量数据 & 材料价格 -->
+            <div class="column">
+                <div class="card">
+                    <h3>📋 用量数据</h3>
+                    <p class="card-hint">请先在"精确计算"或"快速估算"页面完成用量计算，然后点击"生成报价单"跳转至此</p>
+                    <div id="quotation-consumption-info" class="quotation-info">
+                        <p class="empty-hint">暂无用量数据，请先完成用量计算</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🏷️ 材料价格</h3>
+                    <div class="table-container">
+                        <table class="data-table" id="pricing-table">
+                            <thead>
+                                <tr>
+                                    <th>材料名称</th>
+                                    <th>单价</th>
+                                    <th>供应商</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pricing-tbody">
+                                <tr>
+                                    <td><input type="text" class="inline-input" value="主面料" data-type="main" data-field="name"></td>
+                                    <td><input type="number" class="inline-input" placeholder="45.00" data-type="main" data-field="unit_price_per_m" step="0.01"> 元/米</td>
+                                    <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="main" data-field="supplier"></td>
+                                </tr>
+                                <tr>
+                                    <td><input type="text" class="inline-input" value="里布" data-type="lining" data-field="name"></td>
+                                    <td><input type="number" class="inline-input" placeholder="12.00" data-type="lining" data-field="unit_price_per_m" step="0.01"> 元/米</td>
+                                    <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="lining" data-field="supplier"></td>
+                                </tr>
+                                <tr>
+                                    <td><input type="text" class="inline-input" value="衬布" data-type="interlining" data-field="name"></td>
+                                    <td><input type="number" class="inline-input" placeholder="8.00" data-type="interlining" data-field="unit_price_per_m" step="0.01"> 元/米</td>
+                                    <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="interlining" data-field="supplier"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="btn btn-sm btn-outline" onclick="addPricingRow()">+ 添加材料</button>
+                </div>
+
+                <div class="card">
+                    <h3>⚙️ 其他费用</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>单件加工费 (元)</label>
+                            <input type="number" id="labor-cost" value="35" step="1" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>单件辅料费 (元)</label>
+                            <input type="number" id="accessories-cost" value="8" step="1" min="0">
+                            <span class="form-hint">拉链、纽扣、线等</span>
+                        </div>
+                        <div class="form-group">
+                            <label>单件包装费 (元)</label>
+                            <input type="number" id="packaging-cost" value="2" step="0.5" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>其他费用 (元/件)</label>
+                            <input type="number" id="other-cost" value="0" step="0.5" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>利润率 (%)</label>
+                            <input type="number" id="profit-margin" value="15" step="1" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label>税率 (%)</label>
+                            <input type="number" id="tax-rate" value="13" step="1" min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-large btn-block" onclick="calculateQuotation()">
+                    💰 计算报价
+                </button>
+            </div>
+
+            <!-- 右侧：报价结果 -->
+            <div class="column">
+                <div class="card" id="quotation-result-card" style="display:none;">
+                    <h3>📊 报价结果</h3>
+                    <div id="quotation-result-content">
+                        <!-- 动态生成 -->
+                    </div>
+                    <div class="btn-group" style="margin-top:16px;">
+                        <button class="btn btn-outline" onclick="exportQuotation()">📥 导出报价单</button>
+                        <button class="btn btn-outline" onclick="printQuotation()">🖨️ 打印</button>
+                    </div>
+                </div>
+
+                <div class="card" id="quotation-cost-breakdown" style="display:none;">
+                    <h3>成本构成分析</h3>
+                    <div id="cost-breakdown-chart">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="loading-overlay" id="loading" style="display:none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">计算中...</div>
+    </div>
+
+    <script src="/static/js/quotation.js"></script>
+</body>
+</html>

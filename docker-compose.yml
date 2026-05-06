@@ -1,0 +1,20 @@
+services:
+  fabric-calculator:
+    build: .
+    container_name: fabric-calculator
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # 持久化数据（历史记录、上传图片），使用项目外部目录避免部署覆盖
+      - /opt/fabric-data:/opt/fabric-data
+    environment:
+      - TZ=Asia/Shanghai
+      - FLASK_ENV=production
+      - FABRIC_DATA_DIR=/opt/fabric-data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

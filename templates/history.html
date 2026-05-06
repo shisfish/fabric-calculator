@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>历史记录 - 面料用量快速计算系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="nav-icon">✂️</span>
+            <span class="nav-title">面料用量快速计算系统</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">精确计算</a>
+            <a href="/curves" class="nav-link">曲线计算</a>
+            <a href="/quick" class="nav-link">快速估算</a>
+            <a href="/quotation" class="nav-link">报价管理</a>
+            <a href="/history" class="nav-link active">历史记录</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>📜 历史记录</h2>
+            <p class="page-desc">查看之前的计算记录，方便对比和复用</p>
+            <div class="header-actions">
+                <button class="btn btn-sm btn-outline" onclick="refreshHistory()">🔄 刷新</button>
+                <button class="btn btn-sm btn-danger" onclick="clearHistory()">🗑️ 清空</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table" id="history-table">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>类型</th>
+                        <th>品类</th>
+                        <th>关键参数</th>
+                        <th>单件用量</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="history-tbody">
+                    <tr>
+                        <td colspan="6" class="empty-row">加载中...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script src="/static/js/history.js"></script>
+</body>
+</html>

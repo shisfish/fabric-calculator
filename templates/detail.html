@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>计算详情 - 面料用量快速计算系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="nav-icon">✂️</span>
+            <span class="nav-title">面料用量快速计算系统</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">精确计算</a>
+            <a href="/curves" class="nav-link">曲线计算</a>
+            <a href="/quick" class="nav-link">快速估算</a>
+            <a href="/quotation" class="nav-link">报价管理</a>
+            <a href="/history" class="nav-link active">历史记录</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- 返回按钮和标题 -->
+        <div class="page-header">
+            <a href="/history" class="btn btn-secondary" style="margin-bottom:12px;">← 返回历史记录</a>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <h2 id="detail-title">计算详情</h2>
+                <button class="btn btn-primary" id="btn-edit" style="display:none;" onclick="editRecord()">✏️ 返回修改</button>
+            </div>
+            <p class="page-desc" id="detail-subtitle">加载中...</p>
+        </div>
+
+        <!-- 加载状态 -->
+        <div id="loading-state" style="text-align:center;padding:60px 0;">
+            <div class="loading-spinner" style="margin:0 auto 12px;"></div>
+            <div style="color:var(--text-secondary);">正在加载计算详情...</div>
+        </div>
+
+        <!-- 错误状态 -->
+        <div id="error-state" style="display:none;text-align:center;padding:60px 0;">
+            <div style="font-size:48px;margin-bottom:12px;">😕</div>
+            <p style="color:var(--text-secondary);" id="error-msg">记录不存在或加载失败</p>
+            <a href="/history" class="btn btn-primary" style="margin-top:16px;">返回历史记录</a>
+        </div>
+
+        <!-- 详情内容 -->
+        <div id="detail-content" style="display:none;">
+
+            <!-- 基本信息卡片 -->
+            <div class="card" id="info-card">
+                <h3>📋 基本信息</h3>
+                <div class="info-grid" id="info-grid">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 精确计算结果区域 -->
+            <div id="precise-result-area" style="display:none;">
+                <!-- 材料分类汇总 -->
+                <div class="section">
+                    <h3>📦 材料分类汇总</h3>
+                    <div class="table-container">
+                        <table class="data-table" id="result-material-table">
+                            <thead>
+                                <tr>
+                                    <th>材料名称</th>
+                                    <th>面积(m²)</th>
+                                    <th>用料长度(m)</th>
+                                    <th>重量(kg)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="result-material-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 警告信息 -->
+                <div class="warnings" id="result-warnings" style="display:none;">
+                    <!-- 动态生成 -->
+                </div>
+
+                <!-- 裁片明细 -->
+                <div class="section">
+                    <h3>✂️ 裁片明细</h3>
+                    <div class="table-container">
+                        <table class="data-table" id="result-pieces-table">
+                            <thead>
+                                <tr>
+                                    <th>裁片名称</th>
+                                    <th>原始尺寸(cm)</th>
+                                    <th>含缝份(cm)</th>
+                                    <th>数量</th>
+                                    <th>面积(cm²)</th>
+                                    <th>含缩水面积(cm²)</th>
+                                    <th>材料</th>
+                                </tr>
+                            </thead>
+                            <tbody id="result-pieces-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 快速估算结果区域 -->
+            <div id="quick-result-area" style="display:none;">
+                <div class="two-column">
+                    <div class="column">
+                        <div class="card">
+                            <h3>📊 估算结果概览</h3>
+                            <div class="result-summary" id="quick-result-summary">
+                                <!-- 动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="card" id="quick-detail-card">
+                            <h3>📐 材料用量明细</h3>
+                            <div id="quick-detail-content">
+                                <!-- 动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 输入参数（可折叠） -->
+            <div class="section">
+                <div class="card" style="cursor:pointer;" onclick="toggleParams()">
+                    <h3 style="display:flex;justify-content:space-between;align-items:center;">
+                        🔧 输入参数
+                        <span id="params-toggle-icon" style="font-size:12px;color:var(--text-secondary);">展开 ▼</span>
+                    </h3>
+                </div>
+                <div id="params-detail" style="display:none;">
+                    <div class="card" style="margin-top:-16px;border-top:none;border-radius:0 0 var(--radius) var(--radius);">
+                        <pre id="params-json" style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-all;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="loading-overlay" id="loading" style="display:none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">加载中...</div>
+    </div>
+
+    <script>
+        // 从模板变量获取记录ID
+        const RECORD_ID = '{{ record_id }}';
+
+        // 材料名称映射
+        const MATERIAL_NAMES = {
+            main: '主面料', lining: '里布', interlining: '衬布',
+            filling_fabric_single: '胆料(单层)', filling_fabric_double: '胆料(双层)',
+            rib: '罗纹', other: '其他',
+        };
+
+        // 品类名称映射
+        const CATEGORY_NAMES = {
+            coat: '大衣', down_jacket: '羽绒服', jacket: '夹克',
+            windbreaker: '风衣', cotton_padded: '棉服', pants: '裤子',
+            skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDetail();
+        });
+
+        async function loadDetail() {
+            try {
+                const resp = await fetch(`/api/history/${RECORD_ID}`);
+                const data = await resp.json();
+
+                if (!data.success) {
+                    showError(data.message || '记录不存在');
+                    return;
+                }
+
+                renderDetail(data.data);
+            } catch (e) {
+                showError('加载失败: ' + e.message);
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('error-state').style.display = 'block';
+            document.getElementById('error-msg').textContent = msg;
+        }
+
+        function renderDetail(record) {
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('detail-content').style.display = 'block';
+
+            const isPrecise = record.type === 'precise';
+            const isCurved = record.type === 'curved';
+            currentRecordType = record.type || 'precise';
+            const typeLabel = isCurved ? '曲线计算' : (isPrecise ? '精确计算' : '快速估算');
+            const categoryName = CATEGORY_NAMES[record.category] || record.category || '-';
+
+            // 标题
+            document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
+            document.getElementById('detail-subtitle').textContent = `记录时间: ${record.timestamp}`;
+
+            // 显示返回修改按钮（仅精确计算和曲线计算支持）
+            if ((isPrecise || isCurved) && record.input_data) {
+                document.getElementById('btn-edit').style.display = '';
+            }
+
+            // 基本信息
+            renderInfoCard(record, isPrecise || isCurved, categoryName);
+
+            // 根据类型渲染结果
+            if (isCurved) {
+                renderPreciseResult(record);
+            } else if (isPrecise) {
+                renderPreciseResult(record);
+            } else {
+                renderQuickResult(record);
+            }
+
+            // 输入参数
+            document.getElementById('params-json').textContent = JSON.stringify(record.input_data, null, 2);
+        }
+
+        // 返回修改：通过 URL 参数传递记录 ID
+        function editRecord() {
+            const type = currentRecordType;
+            const targetPage = type === 'curved' ? '/curves' : '/';
+            window.location.href = `${targetPage}?edit=${RECORD_ID}`;
+        }
+
+        // 记录当前类型（供 editRecord 使用）
+        let currentRecordType = 'precise';
+
+        function renderInfoCard(record, isPrecise, categoryName) {
+            const grid = document.getElementById('info-grid');
+            let rows = `
+                <div class="quick-detail-row"><span>记录ID</span><strong>${record.id}</strong></div>
+                <div class="quick-detail-row"><span>计算类型</span><strong>${isPrecise ? '精确计算' : '快速估算'}</strong></div>
+                <div class="quick-detail-row"><span>服装品类</span><strong>${categoryName}</strong></div>
+                <div class="quick-detail-row"><span>记录时间</span><strong>${record.timestamp}</strong></div>
+            `;
+
+            if (record.params) {
+                if (record.params.fabric_width) {
+                    rows += `<div class="quick-detail-row"><span>面料门幅</span><strong>${record.params.fabric_width} cm</strong></div>`;
+                }
+                if (record.params.garment_length) {
+                    rows += `<div class="quick-detail-row"><span>衣长</span><strong>${record.params.garment_length} cm</strong></div>`;
+                }
+                if (record.params.chest) {
+                    rows += `<div class="quick-detail-row"><span>胸围</span><strong>${record.params.chest} cm</strong></div>`;
+                }
+                if (record.params.quantity) {
+                    rows += `<div class="quick-detail-row"><span>订单数量</span><strong>${record.params.quantity} 件</strong></div>`;
+                }
+                if (record.params.fabric_weight_gsm) {
+                    rows += `<div class="quick-detail-row"><span>面料克重</span><strong>${record.params.fabric_weight_gsm} g/m²</strong></div>`;
+                }
+                if (record.params.shrinkage_rate !== undefined) {
+                    rows += `<div class="quick-detail-row"><span>缩水率</span><strong>${record.params.shrinkage_rate}%</strong></div>`;
+                }
+                if (record.params.wastage_rate !== undefined) {
+                    rows += `<div class="quick-detail-row"><span>损耗率</span><strong>${record.params.wastage_rate}%</strong></div>`;
+                }
+            }
+
+            grid.innerHTML = rows;
+        }
+
+        function renderPreciseResult(record) {
+            const area = document.getElementById('precise-result-area');
+            area.style.display = 'block';
+
+            const fullResult = record.full_result;
+            if (!fullResult) {
+                area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
+                return;
+            }
+
+            // 材料汇总
+            const matTbody = document.getElementById('result-material-tbody');
+            const matBreakdown = fullResult.material_breakdown || {};
+            matTbody.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
+                <tr>
+                    <td>${val.name}</td>
+                    <td>${val.area_m2}</td>
+                    <td>${val.length_m}</td>
+                    <td>${val.weight_kg > 0 ? val.weight_kg : '-'}</td>
+                </tr>
+            `).join('');
+
+            // 警告
+            const warningsEl = document.getElementById('result-warnings');
+            if (fullResult.warnings && fullResult.warnings.length > 0) {
+                warningsEl.style.display = 'block';
+                warningsEl.innerHTML = fullResult.warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
+            } else {
+                warningsEl.style.display = 'none';
+            }
+
+            // 裁片明细
+            const piecesTbody = document.getElementById('result-pieces-tbody');
+            piecesTbody.innerHTML = fullResult.pieces_detail.map(p => `
+                <tr>
+                    <td>${p.name}</td>
+                    <td>${p.original_length} × ${p.original_width}</td>
+                    <td>${p.effective_length} × ${p.effective_width}</td>
+                    <td>${p.count}</td>
+                    <td>${p.area_cm2}</td>
+                    <td>${p.area_with_shrinkage_cm2}</td>
+                    <td>${MATERIAL_NAMES[p.material] || p.material}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderQuickResult(record) {
+            const area = document.getElementById('quick-result-area');
+            area.style.display = 'block';
+
+            const fullResult = record.full_result;
+            if (!fullResult) {
+                area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
+                return;
+            }
+
+            // 概览
+            const summary = document.getElementById('quick-result-summary');
+            summary.innerHTML = `
+                <div class="main-label">单件主面料用量</div>
+                <div class="main-value">${fullResult.main_fabric.per_piece_length_m} 米</div>
+                <div class="sub-values">
+                    <div class="sub-item">
+                        <div class="sub-label">总用料长度</div>
+                        <div class="sub-value">${fullResult.main_fabric.total_length_m} 米</div>
+                    </div>
+                    <div class="sub-item">
+                        <div class="sub-label">面料利用率</div>
+                        <div class="sub-value">${fullResult.utilization_rate}%</div>
+                    </div>
+                    <div class="sub-item">
+                        <div class="sub-label">损耗率</div>
+                        <div class="sub-value">${fullResult.wastage_rate}%</div>
+                    </div>
+                    <div class="sub-item">
+                        <div class="sub-label">缩水率</div>
+                        <div class="sub-value">${fullResult.shrinkage_rate}%</div>
+                    </div>
+                </div>
+            `;
+
+            // 明细
+            const detailContent = document.getElementById('quick-detail-content');
+            let detailHTML = `
+                <div class="quick-detail-section">
+                    <h4>🧵 主面料</h4>
+                    <div class="quick-detail-row">
+                        <span>单件用量</span>
+                        <strong>${fullResult.main_fabric.per_piece_length_m} 米</strong>
+                    </div>
+                    <div class="quick-detail-row">
+                        <span>总用量 (${fullResult.params.quantity}件)</span>
+                        <strong>${fullResult.main_fabric.total_length_m} 米</strong>
+                    </div>
+                    ${fullResult.main_fabric.total_weight_kg > 0 ? `
+                    <div class="quick-detail-row">
+                        <span>面料总重</span>
+                        <strong>${fullResult.main_fabric.total_weight_kg} kg</strong>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            if (fullResult.lining) {
+                detailHTML += `
+                    <div class="quick-detail-section">
+                        <h4>🪡 里布</h4>
+                        <div class="quick-detail-row">
+                            <span>单件用量</span>
+                            <strong>${fullResult.lining.per_piece_length_m} 米</strong>
+                        </div>
+                        <div class="quick-detail-row">
+                            <span>总用量 (${fullResult.params.quantity}件)</span>
+                            <strong>${fullResult.lining.total_length_m} 米</strong>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (fullResult.filling_fabric) {
+                detailHTML += `
+                    <div class="quick-detail-section">
+                        <h4>🧶 胆料（双层）</h4>
+                        <div class="quick-detail-row">
+                            <span>单件用量</span>
+                            <strong>${fullResult.filling_fabric.per_piece_length_m} 米</strong>
+                        </div>
+                        <div class="quick-detail-row">
+                            <span>总用量 (${fullResult.params.quantity}件)</span>
+                            <strong>${fullResult.filling_fabric.total_length_m} 米</strong>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (fullResult.warnings && fullResult.warnings.length > 0) {
+                detailHTML += `<div class="warnings">`;
+                fullResult.warnings.forEach(w => {
+                    detailHTML += `<div class="warning-item">⚠️ ${w}</div>`;
+                });
+                detailHTML += `</div>`;
+            }
+
+            detailContent.innerHTML = detailHTML;
+        }
+
+        function toggleParams() {
+            const detail = document.getElementById('params-detail');
+            const icon = document.getElementById('params-toggle-icon');
+            if (detail.style.display === 'none') {
+                detail.style.display = 'block';
+                icon.textContent = '收起 ▲';
+            } else {
+                detail.style.display = 'none';
+                icon.textContent = '展开 ▼';
+            }
+        }
+    </script>
+</body>
+</html>

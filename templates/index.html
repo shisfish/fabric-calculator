@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>面料用量快速计算系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="nav-icon">✂️</span>
+            <span class="nav-title">面料用量快速计算系统</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link active">精确计算</a>
+            <a href="/curves" class="nav-link">曲线计算</a>
+            <a href="/quick" class="nav-link">快速估算</a>
+            <a href="/quotation" class="nav-link">报价管理</a>
+            <a href="/history" class="nav-link">历史记录</a>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <main class="container">
+        <!-- 步骤指示器 -->
+        <div class="steps">
+            <div class="step active" data-step="1">
+                <div class="step-number">1</div>
+                <div class="step-text">选择品类</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="2">
+                <div class="step-number">2</div>
+                <div class="step-text">设置参数</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="3">
+                <div class="step-number">3</div>
+                <div class="step-text">录入裁片</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="4">
+                <div class="step-number">4</div>
+                <div class="step-text">查看结果</div>
+            </div>
+        </div>
+
+        <!-- Step 1: 选择品类 -->
+        <div class="panel active" id="panel-1">
+            <h2>选择服装品类</h2>
+            <p class="panel-desc">请选择要计算的服装类型，系统将自动加载对应的裁片模板</p>
+            <div class="category-grid" id="category-grid">
+                <!-- 动态加载 -->
+            </div>
+        </div>
+
+        <!-- Step 2: 设置参数 -->
+        <div class="panel" id="panel-2">
+            <h2>设置面料与工艺参数</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>面料门幅 (cm)</label>
+                    <input type="number" id="fabric-width" value="145" step="1" min="60" max="300">
+                    <span class="form-hint">常见门幅：140/145/148/150cm</span>
+                </div>
+                <div class="form-group">
+                    <label>面料克重 (g/m²)</label>
+                    <input type="number" id="fabric-weight" value="300" step="10" min="0">
+                    <span class="form-hint">留空则不计算重量</span>
+                </div>
+                <div class="form-group">
+                    <label>面料类型</label>
+                    <select id="fabric-type">
+                        <option value="woven">梭织面料</option>
+                        <option value="knit">针织面料</option>
+                        <option value="down_shell">羽绒服面料</option>
+                        <option value="lining">里布</option>
+                        <option value="interlining">衬布/粘合衬</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>缩水率 (%)</label>
+                    <input type="number" id="shrinkage-rate" value="3" step="0.5" min="0" max="20">
+                    <span class="form-hint">棉布3-5%，化纤1-3%，毛呢2-4%</span>
+                </div>
+                <div class="form-group">
+                    <label>损耗率 (%)</label>
+                    <input type="number" id="wastage-rate" value="8" step="0.5" min="0" max="30">
+                    <span class="form-hint">梭织5-6%，针织6-8%，复杂款8-12%</span>
+                </div>
+                <div class="form-group">
+                    <label>订单数量 (件)</label>
+                    <input type="number" id="quantity" value="100" step="1" min="1">
+                    <span class="form-hint">小批量(<50件)建议增加损耗</span>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>
+                <button class="btn btn-primary" onclick="goStep(3)">下一步：录入裁片</button>
+            </div>
+        </div>
+
+        <!-- Step 3: 录入裁片 -->
+        <div class="panel" id="panel-3">
+            <h2>录入裁片数据</h2>
+            <p class="panel-desc">手动填写各分片测量数据，或使用AI图片识别自动测量。</p>
+
+            <!-- AI识别入口 -->
+            <div class="card ai-card" id="ai-card">
+                <div class="ai-card-header">
+                    <h3>📷 AI图片识别</h3>
+                    <span class="badge badge-ai">辅助测量</span>
+                </div>
+                <p class="ai-card-desc">上传衣服平铺照片（旁边放一把尺子作为参照），在图片上框选各分片区域，系统自动计算尺寸并填入下方表格。</p>
+
+                <!-- 步骤3a: 上传图片 -->
+                <div id="ai-step-upload" class="ai-step">
+                    <div class="upload-zone" id="upload-zone">
+                        <div class="upload-icon">📸</div>
+                        <div class="upload-text">点击或拖拽上传衣服照片</div>
+                        <div class="upload-hint">建议：衣服平铺拍摄，旁边放一把30cm直尺作为参照</div>
+                        <input type="file" id="image-input" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+
+                <!-- 步骤3b: 标定参照物 -->
+                <div id="ai-step-calibrate" class="ai-step" style="display:none;">
+                    <div class="ai-instruction">
+                        <strong>第1步：框选参照物</strong>
+                        <span>在图片中用鼠标框选尺子（或其他参照物）的区域</span>
+                    </div>
+                    <div class="canvas-container" id="calibrate-canvas-container">
+                        <canvas id="calibrate-canvas"></canvas>
+                    </div>
+                    <div class="ai-controls">
+                        <div class="form-group inline-form">
+                            <label>参照物实际长度:</label>
+                            <input type="number" id="ref-length" value="30" step="1" min="1" style="width:80px;">
+                            <span>cm</span>
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="confirmCalibration()">✅ 确认标定</button>
+                        <button class="btn btn-sm btn-secondary" onclick="resetAi()">🔄 重新上传</button>
+                    </div>
+                </div>
+
+                <!-- 步骤3c: 框选裁片 -->
+                <div id="ai-step-measure" class="ai-step" style="display:none;">
+                    <div class="ai-instruction">
+                        <strong>第2步：框选裁片区域</strong>
+                        <span>在图片上依次框选各裁片（前片、后片、袖子等），系统自动计算尺寸</span>
+                    </div>
+                    <div class="canvas-container" id="measure-canvas-container">
+                        <canvas id="measure-canvas"></canvas>
+                    </div>
+                    <div class="ai-controls">
+                        <div class="form-group inline-form">
+                            <label>当前裁片:</label>
+                            <select id="current-piece-select" style="width:160px;">
+                                <option value="">-- 选择裁片 --</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="addMeasurement()">📏 添加测量</button>
+                        <button class="btn btn-sm btn-outline" onclick="undoMeasurement()">↩️ 撤销</button>
+                        <button class="btn btn-sm btn-success" onclick="applyToTable()">✅ 填入表格</button>
+                        <button class="btn btn-sm btn-secondary" onclick="resetAi()">🔄 重新开始</button>
+                    </div>
+
+                    <!-- 已测量裁片列表 -->
+                    <div class="measured-list" id="measured-list" style="display:none;">
+                        <h4>已测量裁片</h4>
+                        <div id="measured-items"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button class="btn btn-sm btn-outline" onclick="addPiece()">+ 添加裁片</button>
+                <button class="btn btn-sm btn-outline" onclick="resetPieces()">重置</button>
+                <span class="toolbar-hint">💡 提示：长度和宽度为裁片平铺后的最大尺寸（含缝份请额外加1-2cm）</span>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table" id="pieces-table">
+                    <thead>
+                        <tr>
+                            <th>裁片名称</th>
+                            <th>长度(cm)</th>
+                            <th>宽度(cm)</th>
+                            <th>数量</th>
+                            <th>形状</th>
+                            <th>材料类型</th>
+                            <th>缝份(cm)</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pieces-tbody">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="goStep(2)">上一步</button>
+                <button class="btn btn-primary btn-large" onclick="calculate()">📐 计算用量</button>
+            </div>
+        </div>
+
+        <!-- Step 4: 计算结果 -->
+        <div class="panel" id="panel-4">
+            <h2>计算结果</h2>
+
+            <!-- 材料分类汇总（表格，按面料分类展示） -->
+            <div class="section">
+                <h3>📦 材料分类汇总</h3>
+                <div class="table-container">
+                    <table class="data-table" id="result-material-table">
+                        <thead>
+                            <tr>
+                                <th>材料名称</th>
+                                <th>面积(m²)</th>
+                                <th>用料长度(m)</th>
+                                <th>重量(kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-material-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 警告信息 -->
+            <div class="warnings" id="result-warnings" style="display:none;">
+                <!-- 动态生成 -->
+            </div>
+
+            <!-- 裁片明细 -->
+            <div class="section">
+                <h3>裁片明细</h3>
+                <div class="table-container">
+                    <table class="data-table" id="result-pieces-table">
+                    <thead>
+                        <tr>
+                            <th>裁片名称</th>
+                            <th>原始尺寸(cm)</th>
+                            <th>含缝份(cm)</th>
+                            <th>数量</th>
+                            <th>面积(cm²)</th>
+                            <th>含缩水面积(cm²)</th>
+                            <th>材料</th>
+                        </tr>
+                    </thead>
+                        <tbody id="result-pieces-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="goStep(3)">返回修改</button>
+                <button class="btn btn-outline" onclick="exportResult()">📥 导出结果</button>
+                <button class="btn btn-primary" onclick="goToQuotation()">💰 生成报价单</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- 加载提示 -->
+    <div class="loading-overlay" id="loading" style="display:none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">计算中...</div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/image-tool.js"></script>
+</body>
+</html>

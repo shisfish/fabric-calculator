@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快速估算 - 面料用量快速计算系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="nav-icon">✂️</span>
+            <span class="nav-title">面料用量快速计算系统</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">精确计算</a>
+            <a href="/curves" class="nav-link">曲线计算</a>
+            <a href="/quick" class="nav-link active">快速估算</a>
+            <a href="/quotation" class="nav-link">报价管理</a>
+            <a href="/history" class="nav-link">历史记录</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="page-header">
+            <h2>⚡ 快速估算</h2>
+            <p class="page-desc">只需输入几个关键尺寸，即可快速估算面料用量。适用于前期快速报价阶段。</p>
+        </div>
+
+        <div class="two-column">
+            <!-- 左侧：输入 -->
+            <div class="column">
+                <div class="card">
+                    <h3>服装信息</h3>
+                    <div class="form-group">
+                        <label>服装品类</label>
+                        <select id="q-category">
+                            <option value="coat">大衣</option>
+                            <option value="down_jacket">羽绒服</option>
+                            <option value="jacket">夹克</option>
+                            <option value="windbreaker">风衣</option>
+                            <option value="cotton_padded">棉服</option>
+                            <option value="pants">裤子</option>
+                            <option value="skirt">裙子</option>
+                            <option value="shirt">衬衫</option>
+                            <option value="tshirt">T恤</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>款式复杂度</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="complexity" value="simple"> 简单（基础款）
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="complexity" value="medium" checked> 中等（常规款）
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="complexity" value="complex"> 复杂（多部件/装饰）
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>关键尺寸 <span class="badge">从成品衣服测量</span></h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>衣长 (cm)</label>
+                            <input type="number" id="q-length" placeholder="如：90" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>胸围 (cm)</label>
+                            <input type="number" id="q-chest" placeholder="如：110" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>肩宽 (cm)</label>
+                            <input type="number" id="q-shoulder" placeholder="如：45" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>袖长 (cm)</label>
+                            <input type="number" id="q-sleeve" placeholder="如：62" step="1">
+                        </div>
+                    </div>
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="q-hood"> 有帽子
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="q-lining" checked> 有里布
+                        </label>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>面料信息</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>面料门幅 (cm)</label>
+                            <input type="number" id="q-fabric-width" value="145" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>面料克重 (g/m²)</label>
+                            <input type="number" id="q-fabric-weight" value="300" step="10">
+                        </div>
+                        <div class="form-group">
+                            <label>订单数量 (件)</label>
+                            <input type="number" id="q-quantity" value="100" step="1" min="1">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-large btn-block" onclick="quickEstimate()">
+                    ⚡ 快速估算
+                </button>
+            </div>
+
+            <!-- 右侧：结果 -->
+            <div class="column">
+                <div class="card" id="quick-result-card" style="display:none;">
+                    <h3>估算结果</h3>
+                    <div class="result-summary" id="quick-result-summary">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <div class="card" id="quick-detail-card" style="display:none;">
+                    <h3>材料用量明细</h3>
+                    <div id="quick-detail-content">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <div class="card" id="quick-tips-card">
+                    <h3>💡 测量提示</h3>
+                    <div class="tips-list">
+                        <div class="tip-item">
+                            <strong>衣长</strong>：从后领中点垂直量到下摆
+                        </div>
+                        <div class="tip-item">
+                            <strong>胸围</strong>：腋下沿胸部最丰满处水平围量一周
+                        </div>
+                        <div class="tip-item">
+                            <strong>肩宽</strong>：两肩端点之间的距离
+                        </div>
+                        <div class="tip-item">
+                            <strong>袖长</strong>：从肩端点沿手臂量到袖口
+                        </div>
+                        <div class="tip-item tip-warning">
+                            ⚠️ 快速估算结果仅供参考，建议在正式生产前进行精确计算
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="loading-overlay" id="loading" style="display:none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">估算中...</div>
+    </div>
+
+    <script src="/static/js/quick.js"></script>
+</body>
+</html>
