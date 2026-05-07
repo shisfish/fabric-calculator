@@ -42,7 +42,7 @@ git checkout "$GIT_BRANCH" 2>/dev/null || git checkout -b "$GIT_BRANCH" 2>/dev/n
 
 log_info "正在拉取最新代码..."
 git fetch "$GIT_REMOTE"
-LOCAL=$(git rev-parse "@")
+LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse "${GIT_REMOTE}/${GIT_BRANCH}")
 
 if [ "$LOCAL" = "$REMOTE" ]; then
