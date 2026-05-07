@@ -7,23 +7,12 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <span class="nav-icon">✂️</span>
-            <span class="nav-title">面料用量快速计算系统</span>
-        </div>
-        <div class="nav-links">
-            <a href="/" class="nav-link">精确计算</a>
-            <a href="/curves" class="nav-link">曲线计算</a>
-            <a href="/quick" class="nav-link">快速估算</a>
-            <a href="/quotation" class="nav-link">报价管理</a>
-            <a href="/history" class="nav-link active">历史记录</a>
-        </div>
-    </nav>
+    {% set active_page = 'history' %}
+    {% include 'includes/navbar.html' %}
 
     <main class="container">
         <!-- 顶部操作按钮区 -->
-        <div class="result-actions-bar" id="top-actions" style="display:none;flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
+        <div class="result-actions-bar" id="top-actions" style="display:none;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
             <a href="/history" class="btn btn-secondary" id="btn-back-history">← 返回历史记录</a>
             <button class="btn btn-primary" id="btn-edit" style="display:none;" onclick="editRecord()">✏️ 返回修改</button>
             <button class="btn btn-outline" id="btn-export" style="display:none;" onclick="exportDetailResult()">📥 导出结果</button>

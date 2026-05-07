@@ -337,8 +337,8 @@ class CurvedPieceCalculator:
 
     def _try_curved_calculation(self, piece_id, piece, length, width, seam_allowance):
         """
-        尝试使用曲线模型计算面积。
-        如果缺少必要的曲线参数，返回 None（回退到矩形）。
+        使用曲线模型计算面积。
+        自动推导曲线参数，无需额外输入肩宽/袖肥/袖口。
         """
         vertices = None
 
@@ -346,18 +346,25 @@ class CurvedPieceCalculator:
             shoulder_width = piece.get('shoulder_width')
             if shoulder_width and float(shoulder_width) > 0:
                 shoulder_width = float(shoulder_width)
-                if piece_id == 'front_body':
-                    vertices = generate_front_body_vertices(length, width, shoulder_width, seam_allowance)
-                else:
-                    vertices = generate_back_body_vertices(length, width, shoulder_width, seam_allowance)
+            else:
+                shoulder_width = width * 0.85
+            if piece_id == 'front_body':
+                vertices = generate_front_body_vertices(length, width, shoulder_width, seam_allowance)
+            else:
+                vertices = generate_back_body_vertices(length, width, shoulder_width, seam_allowance)
 
         elif piece_id == 'sleeve':
             bicep_width = piece.get('bicep_width')
             cuff_width = piece.get('cuff_width')
-            if bicep_width and cuff_width and float(bicep_width) > 0 and float(cuff_width) > 0:
+            if bicep_width and float(bicep_width) > 0:
                 bicep_width = float(bicep_width)
+            else:
+                bicep_width = width
+            if cuff_width and float(cuff_width) > 0:
                 cuff_width = float(cuff_width)
-                vertices = generate_sleeve_vertices(length, width, bicep_width, cuff_width, seam_allowance)
+            else:
+                cuff_width = width * 0.7
+            vertices = generate_sleeve_vertices(length, width, bicep_width, cuff_width, seam_allowance)
 
         if vertices is None or len(vertices) < 3:
             return None
