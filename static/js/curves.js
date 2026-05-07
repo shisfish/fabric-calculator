@@ -390,18 +390,79 @@ async function calculate() {
     }
 }
 
+// 材料名称映射
+const MATERIAL_NAMES = {
+    main: '主面料', lining: '里布', interlining: '衬布',
+    filling_fabric_single: '胆料(单层)', filling_fabric_double: '胆料(双层)',
+    rib: '罗纹', other: '其他',
+};
+
+// 品类名称映射
+const CATEGORY_NAMES = {
+    coat: '大衣', down_jacket: '羽绒服', jacket: '夹克',
+    windbreaker: '风衣', cotton_padded: '棉服', pants: '裤子',
+    skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
+};
+
 // 渲染结果（曲线模式：始终显示计算方法列及差异）
 function renderResult(data) {
-    // 1. 材料分类汇总（表格）
-    const matTbody = document.getElementById('result-material-tbody');
+    // 0. 渲染基本信息（紧凑布局）
+    const infoGrid = document.getElementById('result-info-grid');
+    const params = data.params || {};
+    infoGrid.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">服装品类</span>
+            <strong style="font-size:14px;">${CATEGORY_NAMES[params.category] || params.category || '-'}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">面料门幅</span>
+            <strong style="font-size:14px;">${params.fabric_width} cm</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">订单数量</span>
+            <strong style="font-size:14px;">${params.quantity} 件</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">缩水率</span>
+            <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">损耗率</span>
+            <strong style="font-size:14px;">${params.wastage_rate}%</strong>
+        </div>
+        ${params.fabric_weight_gsm ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">面料克重</span>
+            <strong style="font-size:14px;">${params.fabric_weight_gsm} g/m²</strong>
+        </div>
+        ` : ''}
+    `;
+
+    // 1. 材料分类汇总（卡片展示）
+    const matCards = document.getElementById('result-material-cards');
     const matBreakdown = data.material_breakdown || {};
-    matTbody.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
-        <tr>
-            <td>${val.name}</td>
-            <td>${val.area_m2}</td>
-            <td>${val.length_m}</td>
-            <td>${val.weight_kg > 0 ? val.weight_kg : '-'}</td>
-        </tr>
+    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
+        <div class="card" style="border-left:4px solid #3b82f6;margin:0;">
+            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
+                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
+                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
+                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
+                    <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
+                </div>
+            </div>
+        </div>
     `).join('');
 
     // 2. 警告
@@ -413,7 +474,7 @@ function renderResult(data) {
         warningsEl.style.display = 'none';
     }
 
-    // 4. 裁片明细
+    // 3. 裁片明细
     const piecesTbody = document.getElementById('result-pieces-tbody');
     piecesTbody.innerHTML = data.pieces_detail.map(p => {
         // 计算方法列（始终显示曲线模式）
@@ -442,19 +503,10 @@ function renderResult(data) {
             <td>${methodCell}</td>
             <td>${p.area_cm2}</td>
             <td>${p.area_with_shrinkage_cm2}</td>
-            <td>${getMaterialName(p.material)}</td>
+            <td>${MATERIAL_NAMES[p.material] || p.material}</td>
         </tr>
         `;
     }).join('');
-}
-
-function getMaterialName(type) {
-    const names = {
-        main: '主面料', lining: '里布', interlining: '衬布',
-        filling_fabric_single: '胆料(单层)', filling_fabric_double: '胆料(双层)',
-        rib: '罗纹', other: '其他',
-    };
-    return names[type] || type;
 }
 
 // 导出结果

@@ -1,4 +1,40 @@
 services:
+  # MySQL 8 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: fabric-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=fabric_root_123
+      - MYSQL_DATABASE=fabric_calculator
+      - MYSQL_USER=fabric
+      - MYSQL_PASSWORD=fabric123
+      - TZ=Asia/Shanghai
+      - MYSQL_CHARSET=utf8mb4
+      - MYSQL_COLLATION=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      # 持久化MySQL数据
+      - /opt/fabric-mysql-data:/var/lib/mysql
+      # 初始化脚本（首次启动时自动执行）
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --character-set-client-handshake=FALSE
+      --skip-character-set-client-handshake
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pfabric_root_123"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fabric-network
+
+  # 面料计算器应用服务
   fabric-calculator:
     build: .
     container_name: fabric-calculator
@@ -6,15 +42,30 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # 持久化数据（历史记录、上传图片），使用项目外部目录避免部署覆盖
+      # 持久化数据（上传图片等）
       - /opt/fabric-data:/opt/fabric-data
     environment:
       - TZ=Asia/Shanghai
       - FLASK_ENV=production
       - FABRIC_DATA_DIR=/opt/fabric-data
+      # MySQL配置
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=fabric
+      - MYSQL_PASSWORD=fabric123
+      - MYSQL_DATABASE=fabric_calculator
+    depends_on:
+      mysql:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - fabric-network
+
+networks:
+  fabric-network:
+    driver: bridge

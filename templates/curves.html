@@ -143,24 +143,28 @@
 
         <!-- Step 4: 计算结果 -->
         <div class="panel" id="panel-4">
+            <!-- 顶部操作按钮区 -->
+            <div class="result-actions-bar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
+                <button class="btn btn-secondary" onclick="goStep(3)">✏️ 返回修改</button>
+                <button class="btn btn-outline" onclick="exportResult()">📥 导出结果</button>
+                <button class="btn btn-primary" onclick="goToQuotation()">💰 生成报价单</button>
+            </div>
+
             <h2>计算结果</h2>
 
-            <!-- 材料分类汇总（表格，按面料分类展示） -->
+            <!-- 基本信息卡片（紧凑布局） -->
+            <div class="card" id="result-info-card" style="margin-bottom:20px;">
+                <h3>📋 基本信息</h3>
+                <div class="info-grid-compact" id="result-info-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 24px;">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+
+            <!-- 材料分类汇总（卡片展示） -->
             <div class="section">
                 <h3>📦 材料分类汇总</h3>
-                <div class="table-container">
-                    <table class="data-table" id="result-material-table">
-                        <thead>
-                            <tr>
-                                <th>材料名称</th>
-                                <th>面积(m²)</th>
-                                <th>用料长度(m)</th>
-                                <th>重量(kg)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="result-material-tbody">
-                        </tbody>
-                    </table>
+                <div id="result-material-cards" style="display:flex;flex-direction:column;gap:12px;">
+                    <!-- 动态生成 -->
                 </div>
             </div>
 
@@ -171,31 +175,25 @@
 
             <!-- 裁片明细 -->
             <div class="section">
-                <h3>裁片明细</h3>
+                <h3>✂️ 裁片明细</h3>
                 <div class="table-container">
                     <table class="data-table" id="result-pieces-table">
-                    <thead>
-                        <tr>
-                            <th>裁片名称</th>
-                            <th>原始尺寸(cm)</th>
-                            <th>含缝份(cm)</th>
-                            <th>数量</th>
-                            <th>计算方法</th>
-                            <th>面积(cm²)</th>
-                            <th>含缩水面积(cm²)</th>
-                            <th>材料</th>
-                        </tr>
-                    </thead>
+                        <thead>
+                            <tr>
+                                <th>裁片名称</th>
+                                <th>原始尺寸(cm)</th>
+                                <th>含缝份(cm)</th>
+                                <th>数量</th>
+                                <th>计算方法</th>
+                                <th>面积(cm²)</th>
+                                <th>含缩水面积(cm²)</th>
+                                <th>材料</th>
+                            </tr>
+                        </thead>
                         <tbody id="result-pieces-tbody">
                         </tbody>
                     </table>
                 </div>
-            </div>
-
-            <div class="btn-group">
-                <button class="btn btn-secondary" onclick="goStep(3)">返回修改</button>
-                <button class="btn btn-outline" onclick="exportResult()">📥 导出结果</button>
-                <button class="btn btn-primary" onclick="goToQuotation()">💰 生成报价单</button>
             </div>
         </div>
     </main>

@@ -30,10 +30,24 @@ function renderHistory(records) {
         return;
     }
 
+    const CATEGORY_NAMES = {
+        coat: '大衣', down_jacket: '羽绒服', jacket: '夹克',
+        windbreaker: '风衣', cotton_padded: '棉服', pants: '裤子',
+        skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
+    };
+
+    const MATERIAL_NAMES = {
+        main: '主面料', lining: '里布', interlining: '衬布',
+        filling_fabric_single: '胆料(单层)', filling_fabric_double: '胆料(双层)',
+        rib: '罗纹', other: '其他',
+    };
+
     tbody.innerHTML = records.map(record => {
-        const typeLabel = record.type === 'quick' ? '快速估算' : '精确计算';
+        const typeLabels = { quick: '快速估算', precise: '精确计算', curved: '曲线计算' };
         const typeBadge = record.type === 'quick'
             ? '<span class="badge" style="background:#fef3c7;color:#d97706;">快速估算</span>'
+            : record.type === 'curved'
+            ? '<span class="badge" style="background:#ede9fe;color:#7c3aed;">曲线计算</span>'
             : '<span class="badge">精确计算</span>';
 
         let paramsStr = '';
@@ -47,7 +61,12 @@ function renderHistory(records) {
 
         let resultStr = '-';
         if (record.result) {
-            if (record.result.per_piece_length_m) {
+            // 优先显示材料用量汇总（长度）
+            if (record.result.materials && Object.keys(record.result.materials).length > 0) {
+                resultStr = Object.entries(record.result.materials)
+                    .map(([name, usage]) => `${name}：${usage}m`)
+                    .join('<br>');
+            } else if (record.result.per_piece_length_m) {
                 resultStr = `${record.result.per_piece_length_m} 米/件`;
             } else if (record.result.main_fabric_per_piece_m) {
                 resultStr = `${record.result.main_fabric_per_piece_m} 米/件`;
@@ -58,7 +77,7 @@ function renderHistory(records) {
             <tr>
                 <td>${record.timestamp}</td>
                 <td>${typeBadge}</td>
-                <td>${record.category || '-'}</td>
+                <td>${CATEGORY_NAMES[record.category] || record.category || '-'}</td>
                 <td style="font-size:12px;color:#64748b;">${paramsStr || '-'}</td>
                 <td><strong>${resultStr}</strong></td>
                 <td>

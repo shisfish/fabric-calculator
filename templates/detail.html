@@ -22,12 +22,18 @@
     </nav>
 
     <main class="container">
-        <!-- 返回按钮和标题 -->
+        <!-- 顶部操作按钮区 -->
+        <div class="result-actions-bar" id="top-actions" style="display:none;flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
+            <a href="/history" class="btn btn-secondary" id="btn-back-history">← 返回历史记录</a>
+            <button class="btn btn-primary" id="btn-edit" style="display:none;" onclick="editRecord()">✏️ 返回修改</button>
+            <button class="btn btn-outline" id="btn-export" style="display:none;" onclick="exportDetailResult()">📥 导出结果</button>
+            <button class="btn btn-primary" id="btn-quotation" style="display:none;" onclick="goToQuotationFromDetail()">💰 生成报价单</button>
+        </div>
+
+        <!-- 标题 -->
         <div class="page-header">
-            <a href="/history" class="btn btn-secondary" style="margin-bottom:12px;">← 返回历史记录</a>
             <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
                 <h2 id="detail-title">计算详情</h2>
-                <button class="btn btn-primary" id="btn-edit" style="display:none;" onclick="editRecord()">✏️ 返回修改</button>
             </div>
             <p class="page-desc" id="detail-subtitle">加载中...</p>
         </div>
@@ -48,32 +54,22 @@
         <!-- 详情内容 -->
         <div id="detail-content" style="display:none;">
 
-            <!-- 基本信息卡片 -->
-            <div class="card" id="info-card">
+            <!-- 基本信息卡片（紧凑布局） -->
+            <div class="card" id="info-card" style="margin-bottom:20px;">
                 <h3>📋 基本信息</h3>
-                <div class="info-grid" id="info-grid">
+                <div class="info-grid-compact" id="info-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 24px;">
                     <!-- 动态生成 -->
                 </div>
             </div>
 
             <!-- 精确计算结果区域 -->
             <div id="precise-result-area" style="display:none;">
-                <!-- 材料分类汇总 -->
+                <!-- 材料分类汇总（卡片展示） -->
                 <div class="section">
                     <h3>📦 材料分类汇总</h3>
-                    <div class="table-container">
-                        <table class="data-table" id="result-material-table">
-                            <thead>
-                                <tr>
-                                    <th>材料名称</th>
-                                    <th>面积(m²)</th>
-                                    <th>用料长度(m)</th>
-                                    <th>重量(kg)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="result-material-tbody"></tbody>
-                        </table>
-                    </div>
+                    <div id="result-material-cards" style="display:flex;flex-direction:column;gap:12px;">
+                    <!-- 动态生成 -->
+                </div>
                 </div>
 
                 <!-- 警告信息 -->
@@ -86,7 +82,7 @@
                     <h3>✂️ 裁片明细</h3>
                     <div class="table-container">
                         <table class="data-table" id="result-pieces-table">
-                            <thead>
+                            <thead id="pieces-thead">
                                 <tr>
                                     <th>裁片名称</th>
                                     <th>原始尺寸(cm)</th>
@@ -95,6 +91,9 @@
                                     <th>面积(cm²)</th>
                                     <th>含缩水面积(cm²)</th>
                                     <th>材料</th>
+                                    <th id="th-shoulder" style="display:none;">肩宽(cm)</th>
+                                    <th id="th-bicep" style="display:none;">袖肥(cm)</th>
+                                    <th id="th-cuff" style="display:none;">袖口(cm)</th>
                                 </tr>
                             </thead>
                             <tbody id="result-pieces-tbody"></tbody>
@@ -125,20 +124,6 @@
                 </div>
             </div>
 
-            <!-- 输入参数（可折叠） -->
-            <div class="section">
-                <div class="card" style="cursor:pointer;" onclick="toggleParams()">
-                    <h3 style="display:flex;justify-content:space-between;align-items:center;">
-                        🔧 输入参数
-                        <span id="params-toggle-icon" style="font-size:12px;color:var(--text-secondary);">展开 ▼</span>
-                    </h3>
-                </div>
-                <div id="params-detail" style="display:none;">
-                    <div class="card" style="margin-top:-16px;border-top:none;border-radius:0 0 var(--radius) var(--radius);">
-                        <pre id="params-json" style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-all;"></pre>
-                    </div>
-                </div>
-            </div>
         </div>
     </main>
 
@@ -164,6 +149,10 @@
             windbreaker: '风衣', cotton_padded: '棉服', pants: '裤子',
             skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
         };
+
+        // 当前记录数据（用于导出和报价）
+        let currentRecord = null;
+        let currentRecordType = 'precise';
 
         document.addEventListener('DOMContentLoaded', () => {
             loadDetail();
@@ -192,8 +181,13 @@
         }
 
         function renderDetail(record) {
+            currentRecord = record;
             document.getElementById('loading-state').style.display = 'none';
             document.getElementById('detail-content').style.display = 'block';
+
+            // 显示顶部操作按钮区
+            const topActions = document.getElementById('top-actions');
+            topActions.style.display = 'flex';
 
             const isPrecise = record.type === 'precise';
             const isCurved = record.type === 'curved';
@@ -205,13 +199,15 @@
             document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
             document.getElementById('detail-subtitle').textContent = `记录时间: ${record.timestamp}`;
 
-            // 显示返回修改按钮（仅精确计算和曲线计算支持）
+            // 显示操作按钮
             if ((isPrecise || isCurved) && record.input_data) {
                 document.getElementById('btn-edit').style.display = '';
             }
+            document.getElementById('btn-export').style.display = '';
+            document.getElementById('btn-quotation').style.display = '';
 
-            // 基本信息
-            renderInfoCard(record, isPrecise || isCurved, categoryName);
+            // 基本信息（紧凑布局）
+            renderInfoCardCompact(record, isPrecise || isCurved, categoryName);
 
             // 根据类型渲染结果
             if (isCurved) {
@@ -221,9 +217,83 @@
             } else {
                 renderQuickResult(record);
             }
+        }
 
-            // 输入参数
-            document.getElementById('params-json').textContent = JSON.stringify(record.input_data, null, 2);
+        // 紧凑布局的基本信息渲染
+        function renderInfoCardCompact(record, isPrecise, categoryName) {
+            const grid = document.getElementById('info-grid');
+            const params = record.params || {};
+
+            let html = `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">记录ID</span>
+                    <strong style="font-size:14px;">${record.id}</strong>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">计算类型</span>
+                    <strong style="font-size:14px;">${isPrecise ? (record.type === 'curved' ? '曲线计算' : '精确计算') : '快速估算'}</strong>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">服装品类</span>
+                    <strong style="font-size:14px;">${categoryName}</strong>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">记录时间</span>
+                    <strong style="font-size:14px;">${record.timestamp}</strong>
+                </div>
+            `;
+
+            if (params.fabric_width) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">面料门幅</span>
+                    <strong style="font-size:14px;">${params.fabric_width} cm</strong>
+                </div>`;
+            }
+            if (params.quantity) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">订单数量</span>
+                    <strong style="font-size:14px;">${params.quantity} 件</strong>
+                </div>`;
+            }
+            if (params.fabric_weight_gsm) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">面料克重</span>
+                    <strong style="font-size:14px;">${params.fabric_weight_gsm} g/m²</strong>
+                </div>`;
+            }
+            if (params.shrinkage_rate !== undefined) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">缩水率</span>
+                    <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
+                </div>`;
+            }
+            if (params.wastage_rate !== undefined) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">损耗率</span>
+                    <strong style="font-size:14px;">${params.wastage_rate}%</strong>
+                </div>`;
+            }
+            if (params.garment_length) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">衣长</span>
+                    <strong style="font-size:14px;">${params.garment_length} cm</strong>
+                </div>`;
+            }
+            if (params.chest) {
+                html += `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                    <span style="color:var(--text-secondary);font-size:13px;">胸围</span>
+                    <strong style="font-size:14px;">${params.chest} cm</strong>
+                </div>`;
+            }
+
+            grid.innerHTML = html;
         }
 
         // 返回修改：通过 URL 参数传递记录 ID
@@ -233,43 +303,58 @@
             window.location.href = `${targetPage}?edit=${RECORD_ID}`;
         }
 
-        // 记录当前类型（供 editRecord 使用）
-        let currentRecordType = 'precise';
-
-        function renderInfoCard(record, isPrecise, categoryName) {
-            const grid = document.getElementById('info-grid');
-            let rows = `
-                <div class="quick-detail-row"><span>记录ID</span><strong>${record.id}</strong></div>
-                <div class="quick-detail-row"><span>计算类型</span><strong>${isPrecise ? '精确计算' : '快速估算'}</strong></div>
-                <div class="quick-detail-row"><span>服装品类</span><strong>${categoryName}</strong></div>
-                <div class="quick-detail-row"><span>记录时间</span><strong>${record.timestamp}</strong></div>
-            `;
-
-            if (record.params) {
-                if (record.params.fabric_width) {
-                    rows += `<div class="quick-detail-row"><span>面料门幅</span><strong>${record.params.fabric_width} cm</strong></div>`;
-                }
-                if (record.params.garment_length) {
-                    rows += `<div class="quick-detail-row"><span>衣长</span><strong>${record.params.garment_length} cm</strong></div>`;
-                }
-                if (record.params.chest) {
-                    rows += `<div class="quick-detail-row"><span>胸围</span><strong>${record.params.chest} cm</strong></div>`;
-                }
-                if (record.params.quantity) {
-                    rows += `<div class="quick-detail-row"><span>订单数量</span><strong>${record.params.quantity} 件</strong></div>`;
-                }
-                if (record.params.fabric_weight_gsm) {
-                    rows += `<div class="quick-detail-row"><span>面料克重</span><strong>${record.params.fabric_weight_gsm} g/m²</strong></div>`;
-                }
-                if (record.params.shrinkage_rate !== undefined) {
-                    rows += `<div class="quick-detail-row"><span>缩水率</span><strong>${record.params.shrinkage_rate}%</strong></div>`;
-                }
-                if (record.params.wastage_rate !== undefined) {
-                    rows += `<div class="quick-detail-row"><span>损耗率</span><strong>${record.params.wastage_rate}%</strong></div>`;
-                }
+        // 导出结果
+        function exportDetailResult() {
+            if (!currentRecord || !currentRecord.full_result) {
+                alert('暂无结果可导出');
+                return;
+            }
+            const data = currentRecord.full_result;
+            let text = '=== 面料用量计算结果 ===\n\n';
+            text += `品类: ${data.params.category}\n`;
+            text += `面料门幅: ${data.params.fabric_width}cm\n`;
+            text += `面料克重: ${data.params.fabric_weight_gsm} g/m²\n`;
+            text += `缩水率: ${data.params.shrinkage_rate}%\n`;
+            text += `损耗率: ${data.params.wastage_rate}%\n`;
+            text += `订单数量: ${data.params.quantity}件\n`;
+            text += `面料利用率: ${data.utilization_rate}%\n\n`;
+            text += '--- 计算结果 ---\n';
+            text += `单件用料长度: ${data.per_piece_length_m} 米\n`;
+            text += `总用料长度: ${data.total_length_m} 米\n`;
+            text += `总面积: ${data.total_area_m2} m²\n`;
+            if (data.fabric_weight_kg > 0) {
+                text += `面料总重: ${data.fabric_weight_kg} kg\n`;
+            }
+            text += '\n--- 裁片明细 ---\n';
+            data.pieces_detail.forEach(p => {
+                text += `${p.name}: ${p.original_length}×${p.original_width}cm × ${p.count} = ${p.area_with_shrinkage_cm2}cm²\n`;
+            });
+            text += '\n--- 材料汇总 ---\n';
+            Object.entries(data.material_breakdown || {}).forEach(([key, val]) => {
+                text += `${val.name}: ${val.length_m}米`;
+                if (val.weight_kg > 0) text += ` / ${val.weight_kg}kg`;
+                text += '\n';
+            });
+            if (data.warnings && data.warnings.length > 0) {
+                text += '\n--- 注意事项 ---\n';
+                data.warnings.forEach(w => text += `⚠️ ${w}\n`);
             }
 
-            grid.innerHTML = rows;
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `用量计算_${currentRecord.id}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 跳转到报价
+        function goToQuotationFromDetail() {
+            if (currentRecord && currentRecord.full_result) {
+                sessionStorage.setItem('consumptionData', JSON.stringify(currentRecord.full_result));
+            }
+            window.location.href = '/quotation';
         }
 
         function renderPreciseResult(record) {
@@ -282,16 +367,31 @@
                 return;
             }
 
-            // 材料汇总
-            const matTbody = document.getElementById('result-material-tbody');
+            // 材料汇总（平铺展示）
+            const matCards = document.getElementById('result-material-cards');
             const matBreakdown = fullResult.material_breakdown || {};
-            matTbody.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
-                <tr>
-                    <td>${val.name}</td>
-                    <td>${val.area_m2}</td>
-                    <td>${val.length_m}</td>
-                    <td>${val.weight_kg > 0 ? val.weight_kg : '-'}</td>
-                </tr>
+            matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
+                <div class="card" style="border-left:4px solid #3b82f6;">
+                    <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">面积</div>
+                            <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
+                            <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
+                            <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                            <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
+                            <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
+                        </div>
+                    </div>
+                </div>
             `).join('');
 
             // 警告
@@ -305,7 +405,17 @@
 
             // 裁片明细
             const piecesTbody = document.getElementById('result-pieces-tbody');
-            piecesTbody.innerHTML = fullResult.pieces_detail.map(p => `
+            const pieces = fullResult.pieces_detail || [];
+
+            // 检查是否有曲线参数
+            const hasShoulder = pieces.some(p => p.shoulder_width);
+            const hasBicep = pieces.some(p => p.bicep_width);
+            const hasCuff = pieces.some(p => p.cuff_width);
+            document.getElementById('th-shoulder').style.display = hasShoulder ? '' : 'none';
+            document.getElementById('th-bicep').style.display = hasBicep ? '' : 'none';
+            document.getElementById('th-cuff').style.display = hasCuff ? '' : 'none';
+
+            piecesTbody.innerHTML = pieces.map(p => `
                 <tr>
                     <td>${p.name}</td>
                     <td>${p.original_length} × ${p.original_width}</td>
@@ -314,6 +424,9 @@
                     <td>${p.area_cm2}</td>
                     <td>${p.area_with_shrinkage_cm2}</td>
                     <td>${MATERIAL_NAMES[p.material] || p.material}</td>
+                    <td style="${hasShoulder ? '' : 'display:none'}">${p.shoulder_width || '-'}</td>
+                    <td style="${hasBicep ? '' : 'display:none'}">${p.bicep_width || '-'}</td>
+                    <td style="${hasCuff ? '' : 'display:none'}">${p.cuff_width || '-'}</td>
                 </tr>
             `).join('');
         }
@@ -418,17 +531,6 @@
             detailContent.innerHTML = detailHTML;
         }
 
-        function toggleParams() {
-            const detail = document.getElementById('params-detail');
-            const icon = document.getElementById('params-toggle-icon');
-            if (detail.style.display === 'none') {
-                detail.style.display = 'block';
-                icon.textContent = '收起 ▲';
-            } else {
-                detail.style.display = 'none';
-                icon.textContent = '展开 ▼';
-            }
-        }
     </script>
 </body>
 </html>

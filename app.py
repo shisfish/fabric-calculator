@@ -8,6 +8,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from calculator_engine import FabricCalculator, QuotationEngine
 from curved_engine import CurvedPieceCalculator
 from image_engine import measurement_engine
+from db_manager import db_manager
 import json
 import os
 from datetime import datetime
@@ -23,26 +24,6 @@ curved_calculator = CurvedPieceCalculator()
 DATA_DIR = os.environ.get('FABRIC_DATA_DIR', '/opt/fabric-data')
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(os.path.join(DATA_DIR, 'uploads'), exist_ok=True)
-
-# 历史记录文件
-HISTORY_FILE = os.path.join(DATA_DIR, 'history.json')
-
-
-def load_history():
-    """加载历史记录"""
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return []
-    return []
-
-
-def save_history(history):
-    """保存历史记录"""
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
 
 
 # ============================================================
@@ -131,7 +112,6 @@ def calculate():
         result = calculator.calculate_consumption(data)
 
         # 保存到历史记录
-        history = load_history()
         record = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S"),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -145,11 +125,9 @@ def calculate():
                 "fabric_weight_kg": result.get("fabric_weight_kg"),
             },
             "input_data": data,
+            "full_result": result,
         }
-        history.insert(0, record)
-        if len(history) > 100:
-            history = history[:100]
-        save_history(history)
+        db_manager.save_record(record)
 
         return jsonify({"success": True, "data": result})
 
@@ -168,7 +146,6 @@ def quick_estimate_api():
         result = calculator.quick_estimate(data)
 
         # 保存到历史记录
-        history = load_history()
         record = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S"),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -181,10 +158,7 @@ def quick_estimate_api():
             },
             "input_data": data,
         }
-        history.insert(0, record)
-        if len(history) > 100:
-            history = history[:100]
-        save_history(history)
+        db_manager.save_record(record)
 
         return jsonify({"success": True, "data": result})
 
@@ -214,50 +188,46 @@ def calculate_quotation():
 @app.route('/api/history', methods=['GET'])
 def get_history():
     """获取历史记录"""
-    history = load_history()
+    history = db_manager.load_history(limit=100)
     return jsonify({"success": True, "data": history})
 
 
 @app.route('/api/history/<record_id>', methods=['GET'])
 def get_history_detail(record_id):
     """获取单条历史记录详情（含重新计算的完整结果）"""
-    history = load_history()
-    record = next((h for h in history if h.get("id") == record_id), None)
+    record = db_manager.get_record(record_id)
     if not record:
         return jsonify({"success": False, "message": "记录不存在"}), 404
 
-    # 如果是精确计算，重新调用计算引擎获取完整结果（pieces_detail、material_breakdown等）
-    if record.get("type") == "precise" and record.get("input_data"):
+    # 重新调用计算引擎获取完整结果（pieces_detail、material_breakdown等）
+    if record.get("input_data"):
         try:
-            full_result = calculator.calculate_consumption(record["input_data"])
-            record["full_result"] = full_result
-        except Exception as e:
-            record["full_result"] = None
-            record["calc_error"] = str(e)
-    elif record.get("type") == "quick" and record.get("input_data"):
-        try:
-            full_result = calculator.quick_estimate(record["input_data"])
+            if record["type"] == "curved":
+                full_result = curved_calculator.calculate_consumption_curved(record["input_data"])
+            elif record["type"] == "quick":
+                full_result = calculator.quick_estimate(record["input_data"])
+            else:
+                full_result = calculator.calculate_consumption(record["input_data"])
             record["full_result"] = full_result
         except Exception as e:
             record["full_result"] = None
             record["calc_error"] = str(e)
 
+    # input_data 保留给详情页（返回修改功能需要）
     return jsonify({"success": True, "data": record})
 
 
 @app.route('/api/history/<record_id>', methods=['DELETE'])
 def delete_history(record_id):
     """删除历史记录"""
-    history = load_history()
-    history = [h for h in history if h.get("id") != record_id]
-    save_history(history)
+    db_manager.delete_record(record_id)
     return jsonify({"success": True, "message": "已删除"})
 
 
 @app.route('/api/history/clear', methods=['POST'])
 def clear_history():
     """清空历史记录"""
-    save_history([])
+    db_manager.clear_history()
     return jsonify({"success": True, "message": "已清空"})
 
 
@@ -355,7 +325,6 @@ def calculate_curved():
         result = curved_calculator.calculate_consumption_curved(data)
 
         # 保存到历史记录
-        history = load_history()
         record = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S"),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -370,16 +339,31 @@ def calculate_curved():
                 "curved_pieces_count": result.get("curved_pieces_count", 0),
             },
             "input_data": data,
+            "full_result": result,
         }
-        history.insert(0, record)
-        if len(history) > 100:
-            history = history[:100]
-        save_history(history)
+        db_manager.save_record(record)
 
         return jsonify({"success": True, "data": result})
 
     except Exception as e:
         return jsonify({"success": False, "message": f"曲线计算错误: {str(e)}"}), 500
+
+
+# ============================================================
+# 健康检查 API
+# ============================================================
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """健康检查"""
+    db_health = db_manager.check_health()
+    return jsonify({
+        "success": True,
+        "data": {
+            "status": "healthy",
+            "database": db_health
+        }
+    })
 
 
 # ============================================================
@@ -396,4 +380,10 @@ if __name__ == '__main__':
     print(f"  报价管理: http://localhost:5000/quotation")
     print(f"  历史记录: http://localhost:5000/history")
     print("=" * 60)
+    
+    # 检查数据库状态
+    db_health = db_manager.check_health()
+    print(f"  数据库: {db_health.get('message', '未知')}")
+    print("=" * 60)
+    
     app.run(host='0.0.0.0', port=5000, debug=False)

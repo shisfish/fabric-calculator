@@ -1,67 +1,85 @@
-# 面料用量快速计算系统 - Docker部署脚本
-# 适用于腾讯云服务器（已安装Docker）
+#!/bin/bash
+# ========================================
+# 自动部署脚本：从 GitHub 拉取最新代码并重新发布
+# 用法：./deploy.sh [git_branch]
+# ========================================
 
 set -e
 
-echo "============================================================"
-echo "  面料用量快速计算系统 - Docker部署"
-echo "============================================================"
+# 配置
+GIT_REMOTE="${GIT_REMOTE:-origin}"
+GIT_BRANCH="${1:-main}"
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_FILE="docker-compose.yml"
 
-# 颜色定义
+# 颜色输出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# 检查Docker是否安装
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}错误: 未检测到Docker，请先安装Docker${NC}"
-    echo "安装命令: curl -fsSL https://get.docker.com | sh"
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# 检查 Git
+if ! command -v git &> /dev/null; then
+    log_error "Git 未安装"
     exit 1
 fi
 
-# 检查Docker Compose是否可用
-if ! docker compose version &> /dev/null; then
-    if ! command -v docker-compose &> /dev/null; then
-        echo -e "${YELLOW}提示: 未检测到Docker Compose，将使用docker compose（Docker内置）${NC}"
-    fi
+cd "$REPO_DIR"
+
+# 检查是否为 Git 仓库
+if [ ! -d ".git" ]; then
+    log_error "当前目录不是 Git 仓库"
+    exit 1
 fi
 
-# 确保外部数据目录存在（避免部署时覆盖历史数据）
-mkdir -p /opt/fabric-data/uploads
+# 获取最新代码
+log_info "正在切换到分支: $GIT_BRANCH"
+git checkout "$GIT_BRANCH" 2>/dev/null || git checkout -b "$GIT_BRANCH" 2>/dev/null || true
 
-# 构建并启动
-echo ""
-echo -e "${GREEN}[1/3] 构建 Docker 镜像...${NC}"
-docker compose build --no-cache
+log_info "正在拉取最新代码..."
+git fetch "$GIT_REMOTE"
+LOCAL=$(git rev-parse "@")
+REMOTE=$(git rev-parse "${GIT_REMOTE}/${GIT_BRANCH}")
 
-echo ""
-echo -e "${GREEN}[2/3] 启动容器...${NC}"
-docker compose up -d
+if [ "$LOCAL" = "$REMOTE" ]; then
+    log_warn "代码已是最新，无需更新"
+    exit 0
+fi
+
+log_info "检测到代码更新，正在部署..."
+log_info "本地: $LOCAL"
+log_info "远程: $REMOTE"
+
+# 拉取最新代码
+log_info "执行 git pull ..."
+git pull "$GIT_REMOTE" "$GIT_BRANCH"
+
+# 重新构建并启动
+log_info "重新构建 Docker 镜像..."
+docker compose build fabric-calculator --no-cache
+
+log_info "重新启动服务..."
+docker compose up -d fabric-calculator
 
 # 等待服务启动
-echo ""
-echo -e "${GREEN}[3/3] 等待服务启动...${NC}"
+log_info "等待服务启动..."
 sleep 5
 
 # 检查服务状态
-if docker compose ps | grep -q "running"; then
-    echo ""
-    echo "============================================================"
-    echo -e "  ${GREEN}✅ 部署成功！${NC}"
-    echo "============================================================"
-    echo ""
-    echo "  本机访问: http://localhost:5000"
-    echo "  外网访问: http://<你的服务器公网IP>:5000"
-    echo ""
-    echo "  常用命令:"
-    echo "    查看日志:   docker compose logs -f"
-    echo "    停止服务:   docker compose down"
-    echo "    重启服务:   docker compose restart"
-    echo "    查看状态:   docker compose ps"
-    echo "============================================================"
+if docker compose ps fabric-calculator | grep -q "Up"; then
+    log_info "服务启动成功！"
 else
-    echo ""
-    echo -e "${RED}❌ 部署可能失败，请查看日志:${NC}"
-    echo "  docker compose logs"
+    log_error "服务启动失败，请检查日志:"
+    docker compose logs fabric-calculator
+    exit 1
 fi
+
+# 显示日志
+log_info "最近日志:"
+docker compose logs --tail=20 fabric-calculator
+
+log_info "部署完成！"

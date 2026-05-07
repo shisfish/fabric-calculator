@@ -16,7 +16,7 @@
 | **精确计算** | 逐片录入各分片测量数据，得到较精准的用量 |
 | **📷 AI图片识别** | 上传衣服照片，框选各分片区域，自动计算尺寸并填入表格 |
 | **报价管理** | 结合材料价格和加工费用，自动生成报价单 |
-| **历史记录** | 保存所有计算记录，方便对比和复用 |
+| **历史记录** | 保存所有计算记录，使用MySQL数据库存储 |
 
 ### 支持品类
 
@@ -30,26 +30,46 @@
 
 - Python 3.7 或更高版本
 - pip（Python 包管理器）
+- MySQL 8.0
 
 ### 安装步骤
+
+#### 方式一：本地开发
 
 ```bash
 # 1. 进入项目目录
 cd fabric-calculator
 
 # 2. 安装依赖
-pip install flask --break-system-packages
+pip install -r requirements.txt --break-system-packages
 
-# 3. 启动服务
+# 3. 初始化MySQL数据库（需提前安装MySQL 8.0）
+mysql -u root -p < init.sql
+
+# 4. 配置环境变量（或直接修改代码中的默认值）
+export MYSQL_HOST=localhost
+export MYSQL_PORT=3306
+export MYSQL_USER=fabric
+export MYSQL_PASSWORD=fabric123
+export MYSQL_DATABASE=fabric_calculator
+
+# 5. 启动服务
 python3 app.py
 ```
 
-### 一键启动
+#### 方式二：Docker部署（推荐）
 
 ```bash
-# Linux / macOS
-chmod +x start.sh
-./start.sh
+# 1. 进入项目目录
+cd fabric-calculator
+
+# 2. 启动所有服务（包含MySQL）
+docker compose up -d
+
+# MySQL容器首次启动时会自动执行 init.sql 初始化数据库
+
+# 3. 查看服务状态
+docker compose ps
 ```
 
 ### 访问系统
@@ -63,7 +83,50 @@ chmod +x start.sh
 
 ---
 
-## 三、优化后的工作流程
+## 三、数据存储配置
+
+### 数据库初始化
+
+系统使用 MySQL 数据库存储历史记录。数据库初始化通过 `init.sql` 完成：
+
+- **Docker部署**：MySQL容器首次启动时自动执行 `init.sql`（挂载到 `/docker-entrypoint-initdb.d/`），无需手动操作
+- **手动执行**：如果MySQL容器非首次启动，需手动执行初始化：
+  ```bash
+  docker compose exec mysql mysql -u root -pfabric_root_123 < init.sql
+  ```
+
+### 环境变量配置
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `MYSQL_HOST` | `localhost` | MySQL主机地址 |
+| `MYSQL_PORT` | `3306` | MySQL端口 |
+| `MYSQL_USER` | `fabric` | MySQL用户名 |
+| `MYSQL_PASSWORD` | `fabric123` | MySQL密码 |
+| `MYSQL_DATABASE` | `fabric_calculator` | 数据库名 |
+| `FABRIC_DATA_DIR` | `/opt/fabric-data` | 数据文件存储目录（上传图片等） |
+
+### Docker Compose 配置
+
+使用Docker Compose部署时，MySQL服务已自动配置：
+
+```yaml
+# MySQL 默认配置
+- 数据库: fabric_calculator
+- 用户名: fabric
+- 密码: fabric123
+- 端口: 3306
+- 数据持久化: /opt/fabric-mysql-data
+- 初始化脚本: init.sql（首次启动自动执行）
+```
+
+如需修改MySQL密码，请同时修改：
+1. `docker-compose.yml` 中的 `MYSQL_PASSWORD`
+2. `fabric-calculator` 服务中的 `MYSQL_PASSWORD` 环境变量
+
+---
+
+## 四、优化后的工作流程
 
 ### 原流程 vs 新流程
 
@@ -115,7 +178,7 @@ chmod +x start.sh
 
 ---
 
-## 四、测量方法指南
+## 五、测量方法指南
 
 ### 基本测量原则
 
@@ -145,7 +208,7 @@ chmod +x start.sh
 
 ---
 
-## 五、参数设置参考
+## 六、参数设置参考
 
 ### 面料门幅
 
@@ -178,28 +241,53 @@ chmod +x start.sh
 
 ---
 
-## 六、系统架构
+## 七、系统架构
 
 ```
 fabric-calculator/
 ├── app.py                  # Flask Web服务主程序
 ├── calculator_engine.py    # 核心计算引擎
+├── curved_engine.py        # 曲线裁片计算引擎
+├── image_engine.py         # AI图片识别引擎
+├── db_manager.py           # 数据库管理模块
+├── init.sql                # MySQL数据库初始化脚本
 ├── start.sh                # 一键启动脚本
+├── requirements.txt        # Python依赖
+├── Dockerfile              # Docker镜像构建
+├── docker-compose.yml      # Docker Compose配置
 ├── templates/              # HTML模板
 │   ├── index.html          # 精确计算页面
 │   ├── quick.html          # 快速估算页面
 │   ├── quotation.html      # 报价管理页面
-│   └── history.html        # 历史记录页面
+│   ├── history.html        # 历史记录页面
+│   ├── detail.html         # 历史记录详情
+│   └── curves.html         # 曲线模型页面
 ├── static/                 # 静态资源
 │   ├── css/style.css       # 样式表
 │   └── js/
 │       ├── app.js          # 精确计算逻辑
 │       ├── quick.js        # 快速估算逻辑
 │       ├── quotation.js    # 报价管理逻辑
-│       └── history.js      # 历史记录逻辑
-└── data/                   # 数据存储（仅本地开发用，线上使用 /opt/fabric-data/）
-    └── history.json        # 历史记录文件
+│       ├── history.js      # 历史记录逻辑
+│       ├── curves.js       # 曲线模型逻辑
+│       └── image-tool.js   # AI图片识别逻辑
+└── data/                   # 数据存储（上传图片等）
 ```
+
+### 数据库表结构
+
+**calculation_history** - 计算历史记录表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | VARCHAR(20) | 主键，记录ID（YYYYMMDDHHMMSS格式） |
+| timestamp | DATETIME | 计算时间 |
+| type | VARCHAR(20) | 计算类型：precise/quick/curved |
+| category | VARCHAR(50) | 品类 |
+| params | JSON | 计算参数 |
+| result | JSON | 计算结果 |
+| input_data | JSON | 完整输入数据 |
+| created_at | TIMESTAMP | 记录创建时间 |
 
 ### 计算方法说明
 
@@ -221,7 +309,7 @@ fabric-calculator/
 
 ---
 
-## 七、API 接口文档
+## 八、API 接口文档
 
 系统提供 RESTful API，可与其他系统集成：
 
@@ -233,13 +321,16 @@ fabric-calculator/
 | `/api/calculate` | POST | 精确计算用量 |
 | `/api/quick-estimate` | POST | 快速估算用量 |
 | `/api/quotation` | POST | 计算报价 |
+| `/api/calculate-curved` | POST | 曲线模型计算 |
 | `/api/history` | GET | 获取历史记录 |
+| `/api/history/<id>` | GET | 获取单条记录详情 |
 | `/api/history/<id>` | DELETE | 删除记录 |
 | `/api/history/clear` | POST | 清空记录 |
+| `/api/health` | GET | 健康检查（含数据库状态） |
 
 ---
 
-## 八、常见问题
+## 九、常见问题
 
 **Q: 快速估算的精度够用吗？**
 A: 快速估算适用于前期快速报价，偏差约8%-15%。建议在报价中预留一定余量，正式生产前进行精确计算。
@@ -251,7 +342,27 @@ A: 在损耗率中额外增加5%-8%来覆盖对位损耗。
 A: 在精确计算中，系统会根据裁片面积自动分配充绒量。也可在快速估算中手动输入总充绒量。
 
 **Q: 可以多人同时使用吗？**
-A: 当前版本为单机版，同一台电脑上多人可轮流使用。如需多人同时使用，可部署到内网服务器。
+A: 可以。使用MySQL数据库存储，支持多人同时使用。建议使用Docker部署方式。
 
 **Q: 数据保存在哪里？**
-A: 线上环境历史记录保存在 `/opt/fabric-data/history.json`（项目外部，部署不会覆盖）。本地开发时保存在项目内 `data/history.json`。可通过环境变量 `FABRIC_DATA_DIR` 自定义路径。
+A: 数据保存在MySQL数据库中。Docker部署时，数据持久化在 `/opt/fabric-mysql-data` 目录。
+
+**Q: MySQL连接失败怎么办？**
+A: 请检查以下几点：
+1. MySQL服务是否已启动（`docker compose ps`）
+2. 环境变量配置是否正确
+3. `init.sql` 是否已执行（数据库表是否已创建）。可通过以下命令检查并手动初始化：
+   ```bash
+   docker compose exec mysql mysql -u root -pfabric_root_123 < init.sql
+   ```
+
+---
+
+## 十、更新日志
+
+### v1.1.0 (2025-05-06)
+- 新增MySQL数据库支持
+- 新增数据库健康检查接口 `/api/health`
+- 新增 `init.sql` 数据库自动初始化
+- 更新Docker Compose配置，添加MySQL 8服务
+- 完善部署文档
