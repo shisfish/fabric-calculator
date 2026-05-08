@@ -103,6 +103,7 @@ class DatabaseManager:
         result = self._build_result(row)
         pieces = self._get_pieces(conn, row['id'])
         quick_params = self._get_quick_params(conn, row['id']) if row['type'] == 'quick' else None
+        piece_images, nesting_images = self._get_images(conn, row['id'])
         # 从平铺表重新组装 input_data（用于重新计算）
         input_data = self._build_input_data(conn, row, pieces, quick_params)
 
@@ -116,6 +117,8 @@ class DatabaseManager:
             "pieces": pieces,
             "quick_params": quick_params,
             "input_data": input_data,
+            "piece_images": piece_images,
+            "nesting_images": nesting_images,
         }
 
     # ============================================================
@@ -123,7 +126,7 @@ class DatabaseManager:
     # ============================================================
 
     def save_record(self, record):
-        """保存单条记录（主表 + 裁片 + 快速估算参数）"""
+        """保存单条记录（主表 + 裁片 + 快速估算参数 + 材料汇总 + 图片路径）"""
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
                 # 1. 写主表
@@ -218,6 +221,41 @@ class DatabaseManager:
                         mat_val.get('weight_kg'),
                         mat_val.get('width_utilization'),
                     ))
+
+                # 5. 写图片路径（先删后插）
+                cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record['id'],))
+                piece_images = full_result.get('piece_images', [])
+                nesting_images = full_result.get('nesting_images', [])
+
+                for idx, img_info in enumerate(piece_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'piece',
+                            img_info.get('name', ''),
+                            file_path,
+                            idx,
+                        ))
+
+                for idx, img_info in enumerate(nesting_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'nesting',
+                            img_info.get('material_name', ''),
+                            file_path,
+                            idx,
+                        ))
 
             conn.commit()
 
@@ -386,6 +424,34 @@ class DatabaseManager:
                 'style_complexity': row['style_complexity'] or '',
             }
 
+    def _get_images(self, conn, history_id):
+        """获取图片路径"""
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT image_type, image_name, image_path, image_order
+                FROM history_images
+                WHERE history_id = %s
+                ORDER BY image_type, image_order
+            """, (history_id,))
+            rows = cursor.fetchall()
+
+        piece_images = []
+        nesting_images = []
+        for r in rows:
+            img_info = {
+                "name": r['image_name'],
+                "file_path": r['image_path'],
+            }
+            if r['image_type'] == 'piece':
+                piece_images.append(img_info)
+            elif r['image_type'] == 'nesting':
+                nesting_images.append({
+                    "material": r['image_name'],
+                    "material_name": r['image_name'],
+                    "file_path": r['image_path'],
+                })
+        return piece_images, nesting_images
+
     # ============================================================
     # 辅助方法
     # ============================================================
@@ -438,21 +504,51 @@ class DatabaseManager:
     # ============================================================
 
     def delete_record(self, record_id):
-        """删除单条记录（级联删除子表）"""
+        """删除单条记录（级联删除子表 + 图片文件）"""
+        import os
+        # 先获取图片路径
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
+                cursor.execute("SELECT image_path FROM history_images WHERE history_id = %s", (record_id,))
+                rows = cursor.fetchall()
+                for row in rows:
+                    if row['image_path']:
+                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        full_path = os.path.join(base_dir, row['image_path'])
+                        if os.path.exists(full_path):
+                            try:
+                                os.remove(full_path)
+                            except Exception:
+                                pass
+
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM history_quick_params WHERE history_id = %s", (record_id,))
+                cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM calculation_history WHERE id = %s", (record_id,))
             conn.commit()
             return cursor.rowcount > 0
 
     def clear_history(self):
-        """清空所有历史记录"""
+        """清空所有历史记录（含图片文件）"""
+        import os
+        # 先删除所有图片文件
         with self._get_connection() as conn:
             with conn.cursor() as cursor:
+                cursor.execute("SELECT image_path FROM history_images")
+                rows = cursor.fetchall()
+                for row in rows:
+                    if row['image_path']:
+                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        full_path = os.path.join(base_dir, row['image_path'])
+                        if os.path.exists(full_path):
+                            try:
+                                os.remove(full_path)
+                            except Exception:
+                                pass
+
                 cursor.execute("TRUNCATE TABLE history_pieces")
                 cursor.execute("TRUNCATE TABLE history_quick_params")
+                cursor.execute("TRUNCATE TABLE history_images")
                 cursor.execute("TRUNCATE TABLE calculation_history")
             conn.commit()
 

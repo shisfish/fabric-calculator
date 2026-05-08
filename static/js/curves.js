@@ -525,15 +525,18 @@ function renderPieceImages(images) {
         return;
     }
     section.style.display = 'block';
-    grid.innerHTML = images.map(img => `
+    grid.innerHTML = images.map(img => {
+        const imgSrc = img.file_path ? `/uploads/${img.file_path}` : img.image_base64;
+        return `
         <div class="piece-image-card">
-            <img src="${img.image_base64}" alt="${img.name}" onclick="previewImage(this.src, '${img.name}')" />
+            <img src="${imgSrc}" alt="${img.name}" onclick="previewImage(this.src, '${img.name}')" />
             <div class="piece-image-footer">
                 <span class="piece-name">${img.name}</span>
-                <button class="btn-download" onclick="downloadImage('${img.image_base64}', '${img.name}')">⬇ 下载</button>
+                <button class="btn-download" onclick="downloadImage('${imgSrc}', '${img.name}')">⬇ 下载</button>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // 渲染排料图
@@ -545,15 +548,18 @@ function renderNestingImages(images) {
         return;
     }
     section.style.display = 'block';
-    grid.innerHTML = images.map(img => `
+    grid.innerHTML = images.map(img => {
+        const imgSrc = img.file_path ? `/uploads/${img.file_path}` : img.image_base64;
+        return `
         <div class="nesting-image-card">
             <div class="nesting-image-header">
                 <span class="material-name">${img.material_name}</span>
-                <button class="btn-download" onclick="downloadImage('${img.image_base64}', '${img.material_name}_排料图')">⬇ 下载</button>
+                <button class="btn-download" onclick="downloadImage('${imgSrc}', '${img.material_name}_排料图')">⬇ 下载</button>
             </div>
-            <img src="${img.image_base64}" alt="${img.material_name}排料图" onclick="previewImage(this.src, '${img.material_name}排料图')" />
+            <img src="${imgSrc}" alt="${img.material_name}排料图" onclick="previewImage(this.src, '${img.material_name}排料图')" />
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // 图片预览

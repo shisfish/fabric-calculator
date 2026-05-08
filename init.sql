@@ -144,6 +144,22 @@ CREATE TABLE IF NOT EXISTS history_materials (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计算历史材料汇总表';
 
 -- ========================================
+-- 表: history_images
+-- 描述: 计算历史图片路径表
+-- ========================================
+CREATE TABLE IF NOT EXISTS history_images (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    history_id VARCHAR(20) NOT NULL COMMENT '关联 calculation_history.id',
+    image_type VARCHAR(20) NOT NULL COMMENT '图片类型: piece(裁片图)/nesting(排料图)',
+    image_name VARCHAR(100) NOT NULL COMMENT '图片名称（裁片名称或材料名称）',
+    image_path VARCHAR(255) NOT NULL COMMENT '图片相对路径',
+    image_order INT DEFAULT 0 COMMENT '排序序号',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_history_id (history_id),
+    INDEX idx_image_type (image_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计算历史图片路径表';
+
+-- ========================================
 -- 示例数据
 -- ========================================
 INSERT IGNORE INTO calculation_history (id, timestamp, type, category, category_name, fabric_width, fabric_type, fabric_weight_gsm, shrinkage_rate, wastage_rate, quantity, per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg, main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count) VALUES ('20260501112023', '2026-05-01 11:20:23', 'precise', 'tshirt', 'T恤', '185.0', 'knit', '300.0', '3.0', '7.0', '100', '1.922', '1.8987', '76.0', '0.6095', NULL, NULL, NULL);

@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 裁片图片和排料图生成模块
-使用 Pillow 生成 PNG 图片，返回 base64 编码
+使用 Pillow 生成 PNG 图片，支持保存到文件系统或返回 base64 编码
 """
 
 import math
 import base64
 import io
+import os
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -60,19 +61,37 @@ DEFAULT_COLOR = ("#a0a0a0", "#808080")
 
 
 # ============================================================
+# 图片保存目录
+# ============================================================
+
+def _get_upload_dir():
+    """获取图片上传目录的绝对路径"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    upload_dir = os.path.join(base_dir, "uploads", "calc_images")
+    os.makedirs(upload_dir, exist_ok=True)
+    return upload_dir
+
+
+# ============================================================
 # 裁片图片生成
 # ============================================================
 
-def generate_piece_image(piece, vertices=None):
+def generate_piece_image(piece, vertices=None, save_to_file=False, history_id=None, image_order=0):
     """
     生成单个裁片的图片
 
     参数:
         piece: dict, 裁片信息
         vertices: list, 曲线裁片的顶点列表 [(x,y), ...]，None 表示矩形
+        save_to_file: bool, 是否保存到文件系统
+        history_id: str, 历史记录ID（用于文件命名）
+        image_order: int, 图片排序序号
 
     返回:
-        str: base64 编码的 PNG 图片 (data:image/png;base64,...)
+        dict: {
+            "base64": str, base64 编码的 PNG 图片 (data:image/png;base64,...)
+            "file_path": str, 保存的文件相对路径（如果 save_to_file=True）
+        }
     """
     piece_id = piece.get("id", "")
     piece_name = piece.get("name", "裁片")
@@ -158,7 +177,22 @@ def generate_piece_image(piece, vertices=None):
     img.save(buf, format="PNG")
     buf.seek(0)
     b64 = base64.b64encode(buf.read()).decode("utf-8")
-    return f"data:image/png;base64,{b64}"
+    base64_str = f"data:image/png;base64,{b64}"
+
+    # 保存到文件
+    file_path = None
+    if save_to_file and history_id:
+        upload_dir = _get_upload_dir()
+        safe_name = piece_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
+        filename = f"{history_id}_piece_{image_order:02d}_{safe_name}.png"
+        filepath = os.path.join(upload_dir, filename)
+        img.save(filepath, format="PNG")
+        file_path = f"uploads/calc_images/{filename}"
+
+    return {
+        "base64": base64_str,
+        "file_path": file_path,
+    }
 
 
 def _draw_curved_piece(draw, vertices, area_x, area_y, area_w, area_h, fill_color, stroke_color):
@@ -223,11 +257,67 @@ def _draw_rect_piece(draw, length, width, area_x, area_y, area_w, area_h, fill_c
               fill="#333", font=font_dim, anchor="lm")
 
 
+def _draw_nesting_pieces(draw, pieces, row_x, row_y, row_h, scale, color):
+    """在排料图中绘制裁片轮廓"""
+    current_x = row_x
+    for piece in pieces:
+        piece_name = piece.get("name", "")
+        piece_length = piece.get("length", 0)
+        piece_width = piece.get("width", 0)
+        vertices = piece.get("vertices")
+
+        piece_w_px = int(piece_length * scale)
+        piece_h_px = int(piece_width * scale)
+
+        if piece_w_px < 2 or piece_h_px < 2:
+            current_x += piece_w_px
+            continue
+
+        if vertices and len(vertices) >= 3:
+            # 绘制曲线裁片轮廓
+            # 计算顶点边界
+            min_x = min(v[0] for v in vertices)
+            max_x = max(v[0] for v in vertices)
+            min_y = min(v[1] for v in vertices)
+            max_y = max(v[1] for v in vertices)
+
+            pw = max_x - min_x
+            ph = max_y - min_y
+
+            # 缩放到行高
+            piece_scale = min(piece_w_px / pw, piece_h_px / ph) * 0.9 if pw > 0 and ph > 0 else 1
+
+            offset_x = current_x + (piece_w_px - pw * piece_scale) / 2 - min_x * piece_scale
+            offset_y = row_y + (row_h - ph * piece_scale) / 2 - min_y * piece_scale
+
+            scaled_vertices = [(v[0] * piece_scale + offset_x, v[1] * piece_scale + offset_y) for v in vertices]
+            draw.polygon(scaled_vertices, fill=color, outline="#fff", width=1)
+
+            # 裁片名称
+            if piece_w_px > 30 and piece_h_px > 15:
+                font = _get_font(8)
+                draw.text((current_x + piece_w_px / 2, row_y + row_h / 2),
+                          piece_name[:4], fill="#fff", font=font, anchor="mm")
+        else:
+            # 绘制矩形裁片
+            draw.rectangle([current_x, row_y, current_x + piece_w_px, row_y + piece_h_px],
+                           fill=color, outline="#fff", width=1)
+
+            # 裁片名称
+            if piece_w_px > 30 and piece_h_px > 15:
+                font = _get_font(8)
+                draw.text((current_x + piece_w_px / 2, row_y + piece_h_px / 2),
+                          piece_name[:4], fill="#fff", font=font, anchor="mm")
+
+        current_x += piece_w_px
+
+
 # ============================================================
 # 排料图生成
 # ============================================================
 
-def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm, width_utilization):
+def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm, width_utilization,
+                           save_to_file=False, history_id=None, image_order=0):
     """
     生成排料效果图
 
@@ -237,12 +327,18 @@ def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm
         fabric_width_cm: 面料门幅
         total_length_cm: 总用料长度
         width_utilization: 门幅利用率
+        save_to_file: bool, 是否保存到文件系统
+        history_id: str, 历史记录ID
+        image_order: int, 图片排序序号
 
     返回:
-        str: base64 编码的 PNG 图片
+        dict: {
+            "base64": str, base64 编码的 PNG 图片
+            "file_path": str, 保存的文件相对路径（如果 save_to_file=True）
+        }
     """
     if not rows:
-        return None
+        return {"base64": None, "file_path": None}
 
     # 图片尺寸
     img_width = 800
@@ -306,6 +402,10 @@ def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm
         draw.rectangle([fabric_x, current_y, fabric_x + piece_w, current_y + row_h],
                        fill=color, outline=color, width=1)
 
+        # 绘制裁片轮廓（如果有 pieces 信息）
+        if "pieces" in row and row["pieces"]:
+            _draw_nesting_pieces(draw, row["pieces"], fabric_x, current_y, row_h, scale, color)
+
         # 行号
         draw.text((fabric_x + 4, current_y + row_h // 2), f"行{idx + 1}",
                   fill="#fff", font=font_small, anchor="lm")
@@ -323,4 +423,19 @@ def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm
     img.save(buf, format="PNG")
     buf.seek(0)
     b64 = base64.b64encode(buf.read()).decode("utf-8")
-    return f"data:image/png;base64,{b64}"
+    base64_str = f"data:image/png;base64,{b64}"
+
+    # 保存到文件
+    file_path = None
+    if save_to_file and history_id:
+        upload_dir = _get_upload_dir()
+        safe_name = material_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
+        filename = f"{history_id}_nesting_{image_order:02d}_{safe_name}.png"
+        filepath = os.path.join(upload_dir, filename)
+        img.save(filepath, format="PNG")
+        file_path = f"uploads/calc_images/{filename}"
+
+    return {
+        "base64": base64_str,
+        "file_path": file_path,
+    }

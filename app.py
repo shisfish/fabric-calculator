@@ -25,6 +25,10 @@ DATA_DIR = os.environ.get('FABRIC_DATA_DIR', '/opt/fabric-data')
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(os.path.join(DATA_DIR, 'uploads'), exist_ok=True)
 
+# 项目内 uploads 目录
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 # ============================================================
 # 页面路由
@@ -337,6 +341,25 @@ def image_session(session_id):
 
 
 # ============================================================
+# 辅助函数
+# ============================================================
+
+def _attach_pieces_to_rows(rows, piece_details):
+    """将裁片详情关联到排料行，用于排料图绘制"""
+    if not rows or not piece_details:
+        return
+    idx = 0
+    for row in rows:
+        row_pieces = []
+        count = row.get("pieces_count", 0)
+        for _ in range(count):
+            if idx < len(piece_details):
+                row_pieces.append(piece_details[idx])
+                idx += 1
+        row["pieces"] = row_pieces
+
+
+# ============================================================
 # 曲线衣片计算 API（独立模块，不影响现有接口）
 # ============================================================
 
@@ -350,9 +373,71 @@ def calculate_curved():
 
         result = curved_calculator.calculate_consumption_curved(data)
 
+        # 生成记录ID
+        record_id = datetime.now().strftime("%Y%m%d%H%M%S")
+
+        # 保存图片到文件系统
+        try:
+            from image_generator import generate_piece_image, generate_nesting_image
+            from calculator_engine import simulate_nesting
+
+            piece_image_data = result.get("_piece_image_data", [])
+            material_piece_details = result.get("_material_piece_details", {})
+            effective_fabric_width = float(data.get("fabric_width", 145)) - 3
+
+            # 生成并保存裁片图片
+            piece_images = []
+            for idx, (piece_info, vertices) in enumerate(piece_image_data):
+                img_result = generate_piece_image(piece_info, vertices, save_to_file=True, history_id=record_id, image_order=idx)
+                piece_images.append({
+                    "name": piece_info["name"],
+                    "image_base64": img_result["base64"],
+                    "file_path": img_result["file_path"],
+                    "calc_method": piece_info["calc_method"],
+                })
+            result["piece_images"] = piece_images
+
+            # 生成并保存排料图
+            nesting_images = []
+            for idx, (mat_type, breakdown) in enumerate(result.get("material_breakdown", {}).items()):
+                mat_piece_details_list = material_piece_details.get(mat_type, [])
+                # 转换为排料模拟需要的格式 [(length, width), ...]
+                dims_for_nesting = [(p["length"], p["width"]) for p in mat_piece_details_list]
+                nesting_result = simulate_nesting(dims_for_nesting, effective_fabric_width)
+
+                # 将裁片详情关联到排料行
+                _attach_pieces_to_rows(nesting_result["rows"], mat_piece_details_list)
+
+                img_result = generate_nesting_image(
+                    material_name=breakdown["name"],
+                    rows=nesting_result["rows"],
+                    fabric_width_cm=effective_fabric_width,
+                    total_length_cm=breakdown["length_cm"],
+                    width_utilization=nesting_result["width_utilization"],
+                    save_to_file=True,
+                    history_id=record_id,
+                    image_order=idx,
+                )
+                nesting_images.append({
+                    "material": mat_type,
+                    "material_name": breakdown["name"],
+                    "image_base64": img_result["base64"],
+                    "file_path": img_result["file_path"],
+                })
+            result["nesting_images"] = nesting_images
+
+            # 清理内部数据
+            result.pop("_piece_image_data", None)
+            result.pop("_material_piece_details", None)
+
+        except Exception as e:
+            print(f"保存图片失败: {e}")
+            result["piece_images"] = []
+            result["nesting_images"] = []
+
         # 保存到历史记录
         record = {
-            "id": datetime.now().strftime("%Y%m%d%H%M%S"),
+            "id": record_id,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "type": "curved",
             "category": data.get("category", "custom"),
@@ -390,6 +475,21 @@ def health_check():
             "database": db_health
         }
     })
+
+
+# ============================================================
+# 静态文件服务（上传图片）
+# ============================================================
+
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """提供上传图片的访问"""
+    import os
+    from flask import send_from_directory, abort
+    # 安全检查：防止路径遍历攻击
+    if '..' in filename or filename.startswith('/'):
+        abort(404)
+    return send_from_directory(UPLOAD_DIR, filename)
 
 
 # ============================================================

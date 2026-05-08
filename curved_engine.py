@@ -411,6 +411,7 @@ class CurvedPieceCalculator:
         return {
             "area": round(curved_area, 2),
             "method": "curved",
+            "vertices": vertices,
             "vertices_count": len(vertices),
             "rectangle_area": round(rect_area, 2),
             "difference_cm2": round(rect_area - curved_area, 2),
@@ -512,7 +513,12 @@ class CurvedPieceCalculator:
             effective_width = piece_width + seam_allowance * 2
             for _ in range(piece_count):
                 material_pieces[material].append((effective_length, effective_width))
-                material_piece_details[material].append((piece_name, effective_length, effective_width))
+                material_piece_details[material].append({
+                    "name": piece_name,
+                    "length": effective_length,
+                    "width": effective_width,
+                    "vertices": vertices if method == "curved" else None,
+                })
 
             # 收集裁片信息用于图片生成
             piece_info_for_image = {
@@ -680,44 +686,8 @@ class CurvedPieceCalculator:
             }
         })
 
-        # ===== 生成裁片图片 =====
-        try:
-            from image_generator import generate_piece_image, generate_nesting_image
-            piece_images = []
-            for piece_info, vertices in piece_image_data:
-                img_b64 = generate_piece_image(piece_info, vertices)
-                piece_images.append({
-                    "name": piece_info["name"],
-                    "image_base64": img_b64,
-                    "calc_method": piece_info["calc_method"],
-                })
-            result["piece_images"] = piece_images
-        except Exception as e:
-            result["piece_images"] = []
-            result["image_error"] = str(e)
-
-        # ===== 生成排料图 =====
-        try:
-            from image_generator import generate_nesting_image
-            nesting_images = []
-            for mat_type, breakdown in material_breakdown.items():
-                mat_piece_dims = material_pieces.get(mat_type, [])
-                nesting_result = simulate_nesting(mat_piece_dims, effective_fabric_width)
-                img_b64 = generate_nesting_image(
-                    material_name=breakdown["name"],
-                    rows=nesting_result["rows"],
-                    fabric_width_cm=effective_fabric_width,
-                    total_length_cm=breakdown["length_cm"],
-                    width_utilization=nesting_result["width_utilization"],
-                )
-                if img_b64:
-                    nesting_images.append({
-                        "material": mat_type,
-                        "material_name": breakdown["name"],
-                        "image_base64": img_b64,
-                    })
-            result["nesting_images"] = nesting_images
-        except Exception as e:
-            result["nesting_images"] = []
+        # 返回裁片图片生成所需的数据（由 app.py 负责生成和保存）
+        result["_piece_image_data"] = piece_image_data
+        result["_material_piece_details"] = material_piece_details
 
         return result
