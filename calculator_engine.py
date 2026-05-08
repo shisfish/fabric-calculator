@@ -246,62 +246,135 @@ FABRIC_TYPES = {
 # 简化排料模拟
 # ============================================================
 
-def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
+def simulate_nesting(pieces_with_details, fabric_width_cm, seam_gap_cm=0.5):
     """
-    简化排料模拟 — 计算门幅实际利用率
+    排料模拟 — 精确计算门幅利用率并记录每个裁片的实际位置
 
-    用贪心算法模拟排料，得出门幅实际利用率。
-    这个利用率用于修正面积法的计算结果。
+    使用贪心算法模拟真实排料过程，记录每个裁片的精确位置。
+    排料结果直接用于图片展示，确保计算数据与可视化一致。
 
     参数:
-      pieces_with_dims: [(length_cm, width_cm), ...]
+      pieces_with_details: [{name, length, width, vertices}, ...]
       fabric_width_cm: 有效面料门幅 (cm)
       seam_gap_cm: 裁片间隙 (cm)
 
     返回:
-      {"total_length_cm", "rows", "width_utilization"}
+      {
+        "total_length_cm": 总用料长度,
+        "rows": [
+          {
+            "length_cm": 行高,
+            "used_width_cm": 已用宽度,
+            "pieces": [
+              {name, length, width, vertices, x, y, w, h},
+              ...
+            ]
+          },
+          ...
+        ],
+        "width_utilization": 门幅利用率
+      }
     """
-    if not pieces_with_dims or fabric_width_cm <= 0:
+    if not pieces_with_details or fabric_width_cm <= 0:
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
 
-    sorted_pieces = sorted(pieces_with_dims, key=lambda p: (-p[0], -p[1]))
+    # 按长度降序排列（长的先排，减少浪费）
+    sorted_pieces = sorted(pieces_with_details, key=lambda p: (-p["length"], -p["width"]))
 
     rows = []
-    for length, width in sorted_pieces:
+    total_piece_area = 0
+
+    for piece in sorted_pieces:
+        p_length = piece["length"]
+        p_width = piece["width"]
+        total_piece_area += p_length * p_width
         placed = False
-        # 尝试放入已有排（优先长度匹配的排）
+
+        # 尝试放入已有排（优先高度匹配的排）
         best_row = None
         best_score = -1
         for row in rows:
-            needed = width + (seam_gap_cm if row["pieces_count"] > 0 else 0)
+            # 计算所需宽度（第一个裁片不需要间隙）
+            needed = p_width + (seam_gap_cm if len(row["pieces"]) > 0 else 0)
             remaining = fabric_width_cm - row["used_width_cm"]
+
+            # 如果放不进，跳过
             if needed > remaining:
                 continue
-            length_diff = abs(row["length_cm"] - length)
+
+            # 优先选择高度最接近的排
+            length_diff = abs(row["length_cm"] - p_length)
+            # 同时优先选择剩余空间小的排（填充）
             score = 1000 - length_diff * 10 - remaining
             if score > best_score:
                 best_score = score
                 best_row = row
 
         if best_row:
-            if best_row["pieces_count"] > 0:
-                best_row["used_width_cm"] += seam_gap_cm
-            best_row["used_width_cm"] += width
-            best_row["pieces_count"] += 1
-            if length > best_row["length_cm"]:
-                best_row["length_cm"] = length
+            # 确定x位置
+            piece_x = best_row["used_width_cm"] + (seam_gap_cm if len(best_row["pieces"]) > 0 else 0)
+            # 居中对齐
+            piece_y = (best_row["length_cm"] - p_length) / 2 if best_row["length_cm"] > p_length else 0
+
+            best_row["pieces"].append({
+                "name": piece.get("name", ""),
+                "length": p_length,
+                "width": p_width,
+                "vertices": piece.get("vertices"),
+                "x": piece_x,
+                "y": piece_y,
+                "w": p_width,
+                "h": p_length,
+            })
+            best_row["used_width_cm"] = piece_x + p_width
+            best_row["pieces_count"] = len(best_row["pieces"])
+            # 更新行高（取最大值）
+            if p_length > best_row["length_cm"]:
+                best_row["length_cm"] = p_length
             placed = True
 
         if not placed:
-            if width > fabric_width_cm:
-                rows.append({"length_cm": width, "used_width_cm": length, "pieces_count": 1, "rotated": True})
+            # 新建排
+            if p_width > fabric_width_cm:
+                # 旋转裁片（宽度超过门幅，交换长宽）
+                rows.append({
+                    "length_cm": p_width,
+                    "used_width_cm": p_length,
+                    "pieces_count": 1,
+                    "rotated": True,
+                    "pieces": [{
+                        "name": piece.get("name", ""),
+                        "length": p_width,
+                        "width": p_length,
+                        "vertices": piece.get("vertices"),
+                        "x": 0,
+                        "y": 0,
+                        "w": p_length,
+                        "h": p_width,
+                        "rotated": True,
+                    }]
+                })
             else:
-                rows.append({"length_cm": length, "used_width_cm": width, "pieces_count": 1})
+                rows.append({
+                    "length_cm": p_length,
+                    "used_width_cm": p_width,
+                    "pieces_count": 1,
+                    "pieces": [{
+                        "name": piece.get("name", ""),
+                        "length": p_length,
+                        "width": p_width,
+                        "vertices": piece.get("vertices"),
+                        "x": 0,
+                        "y": 0,
+                        "w": p_width,
+                        "h": p_length,
+                    }]
+                })
 
     total_length = sum(row["length_cm"] for row in rows)
-    total_used_width = sum(row["used_width_cm"] for row in rows)
-    total_available_width = fabric_width_cm * len(rows) if rows else 0
-    width_utilization = total_used_width / total_available_width if total_available_width > 0 else 0
+    total_used_area = sum(row["used_width_cm"] * row["length_cm"] for row in rows)
+    total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
+    width_utilization = total_used_area / total_available_area if total_available_area > 0 else 0
 
     return {
         "total_length_cm": total_length,

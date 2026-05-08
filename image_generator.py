@@ -287,61 +287,6 @@ def _draw_rect_piece(draw, length, width, area_x, area_y, area_w, area_h, fill_c
               fill="#333", font=font_dim, anchor="lm")
 
 
-def _draw_nesting_pieces(draw, pieces, row_x, row_y, row_h, scale, color):
-    """在排料图中绘制裁片轮廓"""
-    current_x = row_x
-    for piece in pieces:
-        piece_name = piece.get("name", "")
-        piece_length = piece.get("length", 0)
-        piece_width = piece.get("width", 0)
-        vertices = piece.get("vertices")
-
-        piece_w_px = int(piece_length * scale)
-        piece_h_px = int(piece_width * scale)
-
-        if piece_w_px < 2 or piece_h_px < 2:
-            current_x += piece_w_px
-            continue
-
-        if vertices and len(vertices) >= 3:
-            # 绘制曲线裁片轮廓
-            # 计算顶点边界
-            min_x = min(v[0] for v in vertices)
-            max_x = max(v[0] for v in vertices)
-            min_y = min(v[1] for v in vertices)
-            max_y = max(v[1] for v in vertices)
-
-            pw = max_x - min_x
-            ph = max_y - min_y
-
-            # 缩放到行高
-            piece_scale = min(piece_w_px / pw, piece_h_px / ph) * 0.9 if pw > 0 and ph > 0 else 1
-
-            offset_x = current_x + (piece_w_px - pw * piece_scale) / 2 - min_x * piece_scale
-            offset_y = row_y + (row_h - ph * piece_scale) / 2 - min_y * piece_scale
-
-            scaled_vertices = [(v[0] * piece_scale + offset_x, v[1] * piece_scale + offset_y) for v in vertices]
-            draw.polygon(scaled_vertices, fill=color, outline="#fff", width=1)
-
-            # 裁片名称
-            if piece_w_px > 30 and piece_h_px > 15:
-                font = _get_font(8)
-                draw.text((current_x + piece_w_px / 2, row_y + row_h / 2),
-                          piece_name[:4], fill="#fff", font=font, anchor="mm")
-        else:
-            # 绘制矩形裁片
-            draw.rectangle([current_x, row_y, current_x + piece_w_px, row_y + piece_h_px],
-                           fill=color, outline="#fff", width=1)
-
-            # 裁片名称
-            if piece_w_px > 30 and piece_h_px > 15:
-                font = _get_font(8)
-                draw.text((current_x + piece_w_px / 2, row_y + piece_h_px / 2),
-                          piece_name[:4], fill="#fff", font=font, anchor="mm")
-
-        current_x += piece_w_px
-
-
 # ============================================================
 # 排料图生成
 # ============================================================
@@ -427,18 +372,57 @@ def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm
         draw.rectangle([fabric_x, current_y, fabric_x + fabric_w, current_y + row_h],
                        fill="#fff", outline="#ddd", width=1)
 
-        # 裁片占位（简化显示：用色块表示）
-        piece_w = int(row["used_width_cm"] * scale)
-        draw.rectangle([fabric_x, current_y, fabric_x + piece_w, current_y + row_h],
-                       fill=color, outline=color, width=1)
+        # 使用排料模拟的精确位置数据绘制裁片
+        row_pieces = row.get("pieces", [])
+        for piece in row_pieces:
+            piece_x = fabric_x + int(piece["x"] * scale)
+            piece_y = current_y + int(piece["y"] * scale)
+            piece_w = int(piece["w"] * scale)
+            piece_h = int(piece["h"] * scale)
+            vertices = piece.get("vertices")
+            piece_name = piece.get("name", "")
 
-        # 绘制裁片轮廓（如果有 pieces 信息）
-        if "pieces" in row and row["pieces"]:
-            _draw_nesting_pieces(draw, row["pieces"], fabric_x, current_y, row_h, scale, color)
+            if vertices and len(vertices) >= 3:
+                # 绘制曲线裁片轮廓（使用排料的精确位置）
+                min_x = min(v[0] for v in vertices)
+                max_x = max(v[0] for v in vertices)
+                min_y = min(v[1] for v in vertices)
+                max_y = max(v[1] for v in vertices)
 
-        # 行号
+                v_w = max_x - min_x
+                v_h = max_y - min_y
+
+                if v_w > 0 and v_h > 0:
+                    v_scale = min(piece_w / v_w, piece_h / v_h) * 0.95
+                    offset_x = piece_x + (piece_w - v_w * v_scale) / 2 - min_x * v_scale
+                    offset_y = piece_y + (piece_h - v_h * v_scale) / 2 - min_y * v_scale
+
+                    scaled_vertices = [(v[0] * v_scale + offset_x, v[1] * v_scale + offset_y) for v in vertices]
+                    draw.polygon(scaled_vertices, fill=color, outline="#fff", width=1)
+
+                    # 裁片名称
+                    if piece_w > 40 and piece_h > 20:
+                        font = _get_font(9)
+                        draw.text((piece_x + piece_w // 2, piece_y + piece_h // 2),
+                                  piece_name[:4], fill="#fff", font=font, anchor="mm")
+            else:
+                # 绘制矩形裁片（使用排料的精确位置）
+                draw.rectangle([piece_x, piece_y, piece_x + piece_w, piece_y + piece_h],
+                               fill=color, outline="#fff", width=1)
+
+                # 裁片名称
+                if piece_w > 40 and piece_h > 20:
+                    font = _get_font(9)
+                    draw.text((piece_x + piece_w // 2, piece_y + piece_h // 2),
+                              piece_name[:4], fill="#fff", font=font, anchor="mm")
+
+        # 行号和尺寸标注
         draw.text((fabric_x + 4, current_y + row_h // 2), f"行{idx + 1}",
-                  fill="#fff", font=font_small, anchor="lm")
+                  fill="#666", font=font_small, anchor="lm")
+        # 行利用率
+        row_util = row["used_width_cm"] / fabric_width_cm * 100
+        draw.text((fabric_x + fabric_w - 4, current_y + row_h // 2),
+                  f"{row_util:.0f}%", fill="#999", font=font_small, anchor="rm")
 
         current_y += row_h
 
