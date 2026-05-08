@@ -401,12 +401,8 @@ def calculate_curved():
             nesting_images = []
             for idx, (mat_type, breakdown) in enumerate(result.get("material_breakdown", {}).items()):
                 mat_piece_details_list = material_piece_details.get(mat_type, [])
-                # 转换为排料模拟需要的格式 [(length, width), ...]
-                dims_for_nesting = [(p["length"], p["width"]) for p in mat_piece_details_list]
-                nesting_result = simulate_nesting(dims_for_nesting, effective_fabric_width)
-
-                # 将裁片详情关联到排料行
-                _attach_pieces_to_rows(nesting_result["rows"], mat_piece_details_list)
+                # 直接使用裁片详情（包含 name, length, width, vertices）
+                nesting_result = simulate_nesting(mat_piece_details_list, effective_fabric_width)
 
                 img_result = generate_nesting_image(
                     material_name=breakdown["name"],
