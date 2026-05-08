@@ -147,34 +147,6 @@ function showLoading(show) {
     }
 }
 
-async function loadCategories(onSuccess) {
-    try {
-        const resp = await fetch('/api/categories');
-        const data = await resp.json();
-        if (data.success && onSuccess) {
-            onSuccess(data.data);
-        }
-    } catch (e) {
-        console.error('加载品类失败:', e);
-    }
-}
-
-function renderCategories(categories, onSelect) {
-    const grid = document.getElementById('category-grid');
-    grid.innerHTML = categories.map(cat => `
-        <div class="category-card" onclick="${onSelect}('${cat.id}')" data-id="${cat.id}">
-            <div class="cat-icon">${CATEGORY_ICONS[cat.id] || '👕'}</div>
-            <div class="cat-name">${cat.name}</div>
-            <div class="cat-desc">${cat.description}</div>
-            <div class="cat-tags">
-                ${cat.has_lining ? '<span class="badge">含里布</span>' : ''}
-                ${cat.has_filling ? '<span class="badge">含填充</span>' : ''}
-                <span class="badge">${cat.piece_count}个裁片</span>
-            </div>
-        </div>
-    `).join('');
-}
-
 // ========================================
 // 页面初始化时自动加载字典
 // ========================================
