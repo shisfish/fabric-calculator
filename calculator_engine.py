@@ -246,7 +246,7 @@ FABRIC_TYPES = {
 # 简化排料模拟
 # ============================================================
 
-def simulate_nesting(pieces_with_details, fabric_width_cm, seam_gap_cm=0.5):
+def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
     """
     排料模拟 — 精确计算门幅利用率并记录每个裁片的实际位置
 
@@ -254,7 +254,9 @@ def simulate_nesting(pieces_with_details, fabric_width_cm, seam_gap_cm=0.5):
     排料结果直接用于图片展示，确保计算数据与可视化一致。
 
     参数:
-      pieces_with_details: [{name, length, width, vertices}, ...]
+      pieces_with_dims: 支持两种格式：
+        - [(length_cm, width_cm), ...] - 兼容旧格式
+        - [{name, length, width, vertices}, ...] - 新格式
       fabric_width_cm: 有效面料门幅 (cm)
       seam_gap_cm: 裁片间隙 (cm)
 
@@ -275,11 +277,26 @@ def simulate_nesting(pieces_with_details, fabric_width_cm, seam_gap_cm=0.5):
         "width_utilization": 门幅利用率
       }
     """
-    if not pieces_with_details or fabric_width_cm <= 0:
+    if not pieces_with_dims or fabric_width_cm <= 0:
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
 
+    # 统一转换为字典格式（兼容旧的元组格式）
+    pieces = []
+    for p in pieces_with_dims:
+        if isinstance(p, tuple):
+            # 旧格式：(length, width)
+            pieces.append({
+                "name": "",
+                "length": p[0],
+                "width": p[1],
+                "vertices": None,
+            })
+        else:
+            # 新格式：字典
+            pieces.append(p)
+
     # 按长度降序排列（长的先排，减少浪费）
-    sorted_pieces = sorted(pieces_with_details, key=lambda p: (-p["length"], -p["width"]))
+    sorted_pieces = sorted(pieces, key=lambda p: (-p["length"], -p["width"]))
 
     rows = []
     total_piece_area = 0
