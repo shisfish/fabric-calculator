@@ -30,18 +30,6 @@ function renderHistory(records) {
         return;
     }
 
-    const CATEGORY_NAMES = {
-        coat: '大衣', down_jacket: '羽绒服', jacket: '夹克',
-        windbreaker: '风衣', cotton_padded: '棉服', pants: '裤子',
-        skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
-    };
-
-    const MATERIAL_NAMES = {
-        main: '主面料', lining: '里布', interlining: '衬布',
-        filling_fabric_single: '胆料(单层)', filling_fabric_double: '胆料(双层)',
-        rib: '罗纹', other: '其他',
-    };
-
     tbody.innerHTML = records.map(record => {
         const typeLabels = { quick: '快速估算', precise: '精确计算', curved: '曲线计算' };
         const typeBadge = record.type === 'quick'
@@ -61,7 +49,6 @@ function renderHistory(records) {
 
         let resultStr = '-';
         if (record.result) {
-            // 优先显示材料用量汇总（长度）
             if (record.result.materials && Object.keys(record.result.materials).length > 0) {
                 resultStr = Object.entries(record.result.materials)
                     .map(([name, usage]) => `${name}：${usage}m`)
@@ -73,11 +60,13 @@ function renderHistory(records) {
             }
         }
 
+        const categoryName = DictManager.getCategoryName(record.category, record.category || '-');
+
         return `
             <tr>
                 <td>${record.timestamp}</td>
                 <td>${typeBadge}</td>
-                <td>${CATEGORY_NAMES[record.category] || record.category || '-'}</td>
+                <td>${categoryName}</td>
                 <td style="font-size:12px;color:#64748b;">${paramsStr || '-'}</td>
                 <td><strong>${resultStr}</strong></td>
                 <td>
@@ -110,7 +99,6 @@ async function clearHistory() {
 }
 
 function viewRecord(id) {
-    // 跳转到详情页面
     window.location.href = `/history/${id}`;
 }
 

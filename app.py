@@ -85,6 +85,32 @@ def get_category(category_id):
     return jsonify({"success": False, "message": "品类不存在"}), 404
 
 
+@app.route('/api/dictionaries', methods=['GET'])
+def get_dictionaries():
+    """获取系统字典（品类、材料、形状名称映射）"""
+    try:
+        dicts = db_manager.load_dictionaries()
+        return jsonify({"success": True, "data": dicts})
+    except Exception as e:
+        # 数据库可能未初始化或未连接，返回默认值
+        default_dicts = {
+            "category": {
+                "coat": "大衣", "down_jacket": "羽绒服", "jacket": "夹克",
+                "windbreaker": "风衣", "cotton_padded": "棉服", "pants": "裤子",
+                "skirt": "裙子", "shirt": "衬衫", "tshirt": "T恤", "custom": "自定义"
+            },
+            "material": {
+                "main": "主面料", "lining": "里布", "interlining": "衬布",
+                "filling_fabric_single": "胆料(单层)", "filling_fabric_double": "胆料(双层)",
+                "rib": "罗纹", "other": "其他"
+            },
+            "shape": {
+                "rectangle": "矩形", "trapezoid": "梯形", "triangle": "三角形", "circle": "圆形"
+            }
+        }
+        return jsonify({"success": True, "data": default_dicts})
+
+
 @app.route('/api/fabric-types', methods=['GET'])
 def get_fabric_types():
     """获取面料类型"""

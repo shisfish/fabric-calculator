@@ -345,6 +345,25 @@ class DatabaseManager:
                 pieces.append(p)
             return pieces
 
+    def load_dictionaries(self):
+        """加载所有字典数据（用于前端缓存）"""
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT dict_type, dict_key, dict_value
+                    FROM sys_dict
+                    ORDER BY sort_order
+                """)
+                rows = cursor.fetchall()
+
+        result = {}
+        for row in rows:
+            dict_type = row['dict_type']
+            if dict_type not in result:
+                result[dict_type] = {}
+            result[dict_type][row['dict_key']] = row['dict_value']
+        return result
+
     def _get_quick_params(self, conn, history_id):
         """获取快速估算参数"""
         with conn.cursor() as cursor:
