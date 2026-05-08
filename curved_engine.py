@@ -127,11 +127,11 @@ def generate_back_body_vertices(length, width, shoulder_width, seam_allowance=1.
     生成后片轮廓顶点
 
     后片形状建模：
-      与前片类似，但左右两侧各有一个袖窿弧线（后片袖窿较浅较平）。
-      弧线从肩线两侧过渡到左右侧边。
+      基本形状为矩形，在顶部左右两侧各有一个内凹弧线（袖窿）。
+      左右两个弧线使顶部形成肩线，与前片形状匹配但弧度更浅更平。
 
     参数: 同前片
-    返回: 顶点列表 [(x, y), ...]
+    返回: 顶点列表 [(x, y), ...]，按顺时针排列
     """
     L = length + seam_allowance * 2
     W = width + seam_allowance * 2
@@ -141,26 +141,23 @@ def generate_back_body_vertices(length, width, shoulder_width, seam_allowance=1.
     armhole_depth = L * 0.17
     armhole_y = L - armhole_depth
 
-    # 左右两侧弧线控制点
-    # 控制点位置由肩宽和宽度差决定
-    cp_x_right = W - (W - half_shoulder) * 0.3
-    cp_y_right = L - armhole_depth * 0.5
-    cp_x_left = (W - half_shoulder) * 0.3
-    cp_y_left = L - armhole_depth * 0.5
+    # 右侧袖窿弧线控制点（向内凹，比前片更平缓）
+    cp_x_right = W - (W - half_shoulder) * 0.35
+    cp_y_right = L - armhole_depth * 0.45
 
-    # 右侧弧线点（从右侧边到肩线）
-    # 起点: (W, armhole_y) — 右侧边袖窿底部
-    # 终点: (half_shoulder, L) — 肩线位置
+    # 左侧袖窿弧线控制点（向内凹，比前片更平缓）
+    cp_x_left = half_shoulder * 0.35
+    cp_y_left = L - armhole_depth * 0.45
+
+    # 右侧弧线点（从右侧袖窿底部向上到右肩）
     right_curve = _quadratic_bezier_points(
         (W, armhole_y),
         (cp_x_right, cp_y_right),
-        (half_shoulder, L),
+        (W - half_shoulder, L),
         num_points=3
     )
 
-    # 左侧弧线点（从肩线到左侧边）
-    # 起点: (half_shoulder, L) — 肩线位置
-    # 终点: (0, armhole_y) — 左侧边袖窿底部
+    # 左侧弧线点（从左肩向下到左侧袖窿底部）
     left_curve = _quadratic_bezier_points(
         (half_shoulder, L),
         (cp_x_left, cp_y_left),
@@ -169,14 +166,15 @@ def generate_back_body_vertices(length, width, shoulder_width, seam_allowance=1.
     )
 
     vertices = [
-        (0, 0),                    # 左下
-        (W, 0),                    # 右下
-        (W, armhole_y),            # 右侧弧线起点（袖窿底部）
+        (0, 0),                    # 1. 左下
+        (W, 0),                    # 2. 右下
+        (W, armhole_y),            # 3. 右侧袖窿底部（向上）
     ]
-    vertices.extend(right_curve)   # 右侧弧线
-    vertices.append((half_shoulder, L))  # 肩线中点
-    vertices.extend(left_curve)    # 左侧弧线
-    vertices.append((0, armhole_y))  # 左侧弧线终点（袖窿底部）
+    vertices.extend(right_curve)   # 4. 右侧弧线（向内向上）
+    vertices.append((W - half_shoulder, L))  # 5. 右肩
+    vertices.append((half_shoulder, L))      # 6. 左肩（肩线）
+    vertices.extend(left_curve)    # 7. 左侧弧线（向内向下）
+    vertices.append((0, armhole_y))            # 8. 左侧袖窿底部
 
     return vertices
 
