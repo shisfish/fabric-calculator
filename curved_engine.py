@@ -305,7 +305,7 @@ class CurvedPieceCalculator:
         seam_allowance = float(piece.get('seam_allowance', 1.5))
 
         if length <= 0 or width <= 0:
-            return {"area": 0, "method": "none"}
+            return {"area": 0, "method": "none", "vertices": None}
 
         # 尝试使用曲线模型
         curved_result = self._try_curved_calculation(piece_id, piece, length, width, seam_allowance)
@@ -333,6 +333,7 @@ class CurvedPieceCalculator:
         return {
             "area": round(area * count, 2),
             "method": shape,
+            "vertices": None,
         }
 
     def _try_curved_calculation(self, piece_id, piece, length, width, seam_allowance):
@@ -468,8 +469,12 @@ class CurvedPieceCalculator:
 
         material_areas = {}
         material_pieces = {}  # 用于排料模拟
+        material_piece_details = {}  # 用于排料图：{material: [(piece_name, length, width), ...]}
         total_area_cm2 = 0
         curved_count = 0
+
+        # 收集裁片顶点和信息用于图片生成
+        piece_image_data = []  # [(piece_info, vertices), ...]
 
         for piece in pieces:
             piece_name = piece.get("name", "未命名裁片")
@@ -486,6 +491,7 @@ class CurvedPieceCalculator:
             calc_result = self.calculate_piece_area_curved(piece)
             area = calc_result["area"]
             method = calc_result["method"]
+            vertices = calc_result.get("vertices")
 
             if method == "curved":
                 curved_count += 1
@@ -498,6 +504,7 @@ class CurvedPieceCalculator:
             if material not in material_areas:
                 material_areas[material] = 0
                 material_pieces[material] = []
+                material_piece_details[material] = []
             material_areas[material] += area_with_shrinkage
 
             # 收集裁片尺寸用于排料模拟
@@ -505,6 +512,24 @@ class CurvedPieceCalculator:
             effective_width = piece_width + seam_allowance * 2
             for _ in range(piece_count):
                 material_pieces[material].append((effective_length, effective_width))
+                material_piece_details[material].append((piece_name, effective_length, effective_width))
+
+            # 收集裁片信息用于图片生成
+            piece_info_for_image = {
+                "id": piece.get("id", ""),
+                "name": piece_name,
+                "count": piece_count,
+                "length": piece_length,
+                "width": piece_width,
+                "seam_allowance": seam_allowance,
+                "calc_method": method,
+                "area_cm2": round(area, 2),
+            }
+            if method == "curved":
+                piece_info_for_image["rectangle_area_cm2"] = calc_result.get("rectangle_area", 0)
+                piece_info_for_image["difference_cm2"] = calc_result.get("difference_cm2", 0)
+                piece_info_for_image["difference_percent"] = calc_result.get("difference_percent", 0)
+            piece_image_data.append((piece_info_for_image, vertices))
 
             # 裁片明细
             effective_length = piece_length + seam_allowance * 2
@@ -654,5 +679,45 @@ class CurvedPieceCalculator:
                 "calculation_method": "曲线模型",
             }
         })
+
+        # ===== 生成裁片图片 =====
+        try:
+            from image_generator import generate_piece_image, generate_nesting_image
+            piece_images = []
+            for piece_info, vertices in piece_image_data:
+                img_b64 = generate_piece_image(piece_info, vertices)
+                piece_images.append({
+                    "name": piece_info["name"],
+                    "image_base64": img_b64,
+                    "calc_method": piece_info["calc_method"],
+                })
+            result["piece_images"] = piece_images
+        except Exception as e:
+            result["piece_images"] = []
+            result["image_error"] = str(e)
+
+        # ===== 生成排料图 =====
+        try:
+            from image_generator import generate_nesting_image
+            nesting_images = []
+            for mat_type, breakdown in material_breakdown.items():
+                mat_piece_dims = material_pieces.get(mat_type, [])
+                nesting_result = simulate_nesting(mat_piece_dims, effective_fabric_width)
+                img_b64 = generate_nesting_image(
+                    material_name=breakdown["name"],
+                    rows=nesting_result["rows"],
+                    fabric_width_cm=effective_fabric_width,
+                    total_length_cm=breakdown["length_cm"],
+                    width_utilization=nesting_result["width_utilization"],
+                )
+                if img_b64:
+                    nesting_images.append({
+                        "material": mat_type,
+                        "material_name": breakdown["name"],
+                        "image_base64": img_b64,
+                    })
+            result["nesting_images"] = nesting_images
+        except Exception as e:
+            result["nesting_images"] = []
 
         return result

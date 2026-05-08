@@ -508,6 +508,71 @@ function renderResult(data) {
         </tr>
         `;
     }).join('');
+
+    // 4. 裁片图片
+    renderPieceImages(data.piece_images || []);
+
+    // 5. 排料图
+    renderNestingImages(data.nesting_images || []);
+}
+
+// 渲染裁片图片
+function renderPieceImages(images) {
+    const section = document.getElementById('piece-images-section');
+    const grid = document.getElementById('piece-images-grid');
+    if (!images || images.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    grid.innerHTML = images.map(img => `
+        <div class="piece-image-card">
+            <img src="${img.image_base64}" alt="${img.name}" onclick="previewImage(this.src, '${img.name}')" />
+            <div class="piece-image-footer">
+                <span class="piece-name">${img.name}</span>
+                <button class="btn-download" onclick="downloadImage('${img.image_base64}', '${img.name}')">⬇ 下载</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 渲染排料图
+function renderNestingImages(images) {
+    const section = document.getElementById('nesting-images-section');
+    const grid = document.getElementById('nesting-images-grid');
+    if (!images || images.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = 'block';
+    grid.innerHTML = images.map(img => `
+        <div class="nesting-image-card">
+            <div class="nesting-image-header">
+                <span class="material-name">${img.material_name}</span>
+                <button class="btn-download" onclick="downloadImage('${img.image_base64}', '${img.material_name}_排料图')">⬇ 下载</button>
+            </div>
+            <img src="${img.image_base64}" alt="${img.material_name}排料图" onclick="previewImage(this.src, '${img.material_name}排料图')" />
+        </div>
+    `).join('');
+}
+
+// 图片预览
+function previewImage(src, title) {
+    const overlay = document.createElement('div');
+    overlay.className = 'image-preview-overlay';
+    overlay.innerHTML = `<img src="${src}" alt="${title}" />`;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+}
+
+// 下载图片
+function downloadImage(base64Data, filename) {
+    const link = document.createElement('a');
+    link.href = base64Data;
+    link.download = `${filename}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 // 导出结果
