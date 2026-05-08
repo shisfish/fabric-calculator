@@ -627,9 +627,10 @@ function fillEditData(data) {
         const isFront = piece.name && piece.name.includes('前片');
         const isBack = piece.name && piece.name.includes('后片');
         const isSleeve = piece.name && piece.name.includes('袖');
+        const pieceId = piece.id || '';
 
         return `
-        <tr>
+        <tr data-piece-id="${pieceId}">
             <td><input type="text" class="inline-input" value="${piece.name || ''}" data-field="name"></td>
             <td><input type="number" class="inline-input inline-input-sm" value="${piece.length || ''}" data-field="length" step="0.5" min="0"></td>
             <td><input type="number" class="inline-input inline-input-sm" value="${piece.width || ''}" data-field="width" step="0.5" min="0"></td>

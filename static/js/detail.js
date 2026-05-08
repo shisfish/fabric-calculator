@@ -252,20 +252,38 @@ function renderPreciseResult(record) {
     document.getElementById('th-bicep').style.display = hasBicep ? '' : 'none';
     document.getElementById('th-cuff').style.display = hasCuff ? '' : 'none';
 
-    piecesTbody.innerHTML = pieces.map(p => `
+    piecesTbody.innerHTML = pieces.map(p => {
+        let methodCell = '';
+        if (p.calc_method === 'curved') {
+            methodCell = `<span class="badge" style="background:#e8f5e9;color:#2e7d32;">曲线</span>`;
+            if (p.difference_cm2 !== undefined) {
+                const diff = p.difference_cm2;
+                const pct = p.difference_percent;
+                if (diff > 0) {
+                    methodCell += `<br><span style="font-size:11px;color:#2e7d32;">省${diff}cm² (${pct}%)</span>`;
+                } else if (diff < 0) {
+                    methodCell += `<br><span style="font-size:11px;color:#e65100;">增${Math.abs(diff)}cm² (${Math.abs(pct)}%)</span>`;
+                }
+            }
+        } else {
+            methodCell = `<span style="color:#999;font-size:12px;">${p.calc_method || '矩形'}</span>`;
+        }
+
+        return `
         <tr>
             <td>${p.name}</td>
             <td>${p.original_length} × ${p.original_width}</td>
             <td>${p.effective_length} × ${p.effective_width}</td>
             <td>${p.count}</td>
+            <td>${methodCell}</td>
             <td>${p.area_cm2}</td>
             <td>${p.area_with_shrinkage_cm2}</td>
             <td>${DictManager.getMaterialName(p.material, p.material)}</td>
             <td style="${hasShoulder ? '' : 'display:none'}">${p.shoulder_width || '-'}</td>
             <td style="${hasBicep ? '' : 'display:none'}">${p.bicep_width || '-'}</td>
             <td style="${hasCuff ? '' : 'display:none'}">${p.cuff_width || '-'}</td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 function renderQuickResult(record) {
