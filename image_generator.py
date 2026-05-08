@@ -72,6 +72,36 @@ def _get_upload_dir():
     return upload_dir
 
 
+def _sanitize_filename(name):
+    """将文件名转为 ASCII 安全格式（中文转拼音或英文映射）"""
+    # 常见材料/裁片名称映射
+    name_map = {
+        "前片": "front_body",
+        "后片": "back_body",
+        "袖子": "sleeve",
+        "领子": "collar",
+        "帽子": "hood",
+        "口袋": "pocket",
+        "腰带": "belt",
+        "袖口": "cuff",
+        "下摆": "hem",
+        "里布": "lining",
+        "衬布": "interlining",
+        "面料": "shell_fabric",
+        "填充": "filling",
+        "主面料": "main_fabric",
+        "里料": "lining_fabric",
+        "其他": "other",
+        "配件": "accessory",
+    }
+    for cn, en in name_map.items():
+        name = name.replace(cn, en)
+    # 移除剩余非 ASCII 字符
+    safe = name.replace("/", "_").replace("\\", "_").replace(" ", "_")
+    safe = "".join(c if c.isascii() and (c.isalnum() or c in "_-.") else "" for c in safe)
+    return safe or "piece"
+
+
 # ============================================================
 # 裁片图片生成
 # ============================================================
@@ -183,11 +213,11 @@ def generate_piece_image(piece, vertices=None, save_to_file=False, history_id=No
     file_path = None
     if save_to_file and history_id:
         upload_dir = _get_upload_dir()
-        safe_name = piece_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
+        safe_name = _sanitize_filename(piece_name)
         filename = f"{history_id}_piece_{image_order:02d}_{safe_name}.png"
         filepath = os.path.join(upload_dir, filename)
         img.save(filepath, format="PNG")
-        file_path = f"uploads/calc_images/{filename}"
+        file_path = f"calc_images/{filename}"
 
     return {
         "base64": base64_str,
@@ -429,11 +459,11 @@ def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm
     file_path = None
     if save_to_file and history_id:
         upload_dir = _get_upload_dir()
-        safe_name = material_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
+        safe_name = _sanitize_filename(material_name)
         filename = f"{history_id}_nesting_{image_order:02d}_{safe_name}.png"
         filepath = os.path.join(upload_dir, filename)
         img.save(filepath, format="PNG")
-        file_path = f"uploads/calc_images/{filename}"
+        file_path = f"calc_images/{filename}"
 
     return {
         "base64": base64_str,
