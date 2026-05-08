@@ -14,16 +14,16 @@ window.DictManager = {
     data: null,
 
     async init() {
-        const cached = localStorage.getItem(this.STORAGE_KEY);
-        if (cached) {
-            try {
+        try {
+            const cached = localStorage.getItem(this.STORAGE_KEY);
+            if (cached) {
                 this.data = JSON.parse(cached);
-                return;
-            } catch (e) {
-                console.warn('字典缓存解析失败，重新加载', e);
             }
+            await this.loadFromServer();
+        } catch (e) {
+            // 静默失败，不影响页面功能
+            this.useDefaults();
         }
-        await this.loadFromServer();
     },
 
     async loadFromServer() {
@@ -35,8 +35,7 @@ window.DictManager = {
                 localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data));
             }
         } catch (e) {
-            console.warn('加载字典失败，使用本地默认值', e);
-            this.useDefaults();
+            // 静默失败
         }
     },
 
@@ -72,22 +71,10 @@ window.DictManager = {
     }
 };
 
-// ========================================
-// 通用工具函数
-// ========================================
-window.showLoading = function(show) {
-    const el = document.getElementById('loading');
-    if (el) {
-        el.style.display = show ? 'block' : 'none';
-    }
-};
-
-// ========================================
-// 立即初始化字典（同步使用默认值，后台异步更新）
-// ========================================
+// 立即初始化字典（同步使用默认值）
 window.DictManager.useDefaults();
 
-// 页面加载完成后异步从服务器更新字典
+// 页面加载完成后异步从服务器更新字典（不影响页面功能）
 document.addEventListener('DOMContentLoaded', () => {
-    window.DictManager.init();
+    setTimeout(() => window.DictManager.init(), 100);
 });
