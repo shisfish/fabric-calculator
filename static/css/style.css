@@ -830,6 +830,73 @@ body {
     background: var(--danger-light);
 }
 
+/* 确认对话框 */
+.confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.confirm-dialog {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 320px;
+    max-width: 420px;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.confirm-dialog .confirm-icon {
+    font-size: 36px;
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.confirm-dialog .confirm-title {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.confirm-dialog .confirm-message {
+    font-size: 14px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+.confirm-dialog .confirm-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.confirm-dialog .confirm-actions .btn {
+    min-width: 80px;
+}
+
 /* 打印样式 */
 @media print {
     .navbar, .btn-group, .toolbar, .header-actions, .loading-overlay {

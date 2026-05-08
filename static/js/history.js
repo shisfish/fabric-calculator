@@ -2,6 +2,48 @@
  * 面料用量快速计算系统 - 历史记录页面
  */
 
+// 确认对话框
+function showConfirm(options) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.innerHTML = `
+            <div class="confirm-dialog">
+                <div class="confirm-icon">${options.icon || '️'}</div>
+                <div class="confirm-title">${options.title || '确认操作'}</div>
+                <div class="confirm-message">${options.message || '确定要执行此操作吗？'}</div>
+                <div class="confirm-actions">
+                    <button class="btn btn-outline" id="confirm-cancel">取消</button>
+                    <button class="btn btn-danger" id="confirm-ok">确定</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const cleanup = () => {
+            overlay.style.animation = 'fadeIn 0.15s ease reverse';
+            setTimeout(() => overlay.remove(), 150);
+        };
+
+        overlay.querySelector('#confirm-cancel').addEventListener('click', () => {
+            cleanup();
+            resolve(false);
+        });
+
+        overlay.querySelector('#confirm-ok').addEventListener('click', () => {
+            cleanup();
+            resolve(true);
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                cleanup();
+                resolve(false);
+            }
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadHistory();
 });
@@ -79,7 +121,12 @@ function renderHistory(records) {
 }
 
 async function deleteRecord(id) {
-    if (!confirm('确定删除此记录？')) return;
+    const confirmed = await showConfirm({
+        icon: '️',
+        title: '删除确认',
+        message: '确定删除此记录？'
+    });
+    if (!confirmed) return;
     try {
         await fetch(`/api/history/${id}`, { method: 'DELETE' });
         loadHistory();
@@ -89,7 +136,12 @@ async function deleteRecord(id) {
 }
 
 async function clearHistory() {
-    if (!confirm('确定清空所有历史记录？此操作不可恢复。')) return;
+    const confirmed = await showConfirm({
+        icon: '️',
+        title: '清空确认',
+        message: '确定清空所有历史记录？此操作不可恢复。'
+    });
+    if (!confirmed) return;
     try {
         await fetch('/api/history/clear', { method: 'POST' });
         loadHistory();
