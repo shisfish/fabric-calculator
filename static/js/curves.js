@@ -220,6 +220,7 @@ function getDefaultMaterial(pieceId, options) {
 function addPiece() {
     const tbody = document.getElementById('pieces-tbody');
     const row = document.createElement('tr');
+    row.dataset.pieceId = '';
     row.innerHTML = `
         <td><input type="text" class="inline-input" placeholder="裁片名称" data-field="name"></td>
         <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="length" step="0.5" min="0"></td>

@@ -344,10 +344,21 @@ class CurvedPieceCalculator:
 
         if piece_id in ('front_body', 'back_body'):
             shoulder_width = piece.get('shoulder_width')
-            if shoulder_width and float(shoulder_width) > 0:
-                shoulder_width = float(shoulder_width)
+            if shoulder_width is not None and shoulder_width != '':
+                try:
+                    shoulder_width = float(shoulder_width)
+                    if shoulder_width > 0:
+                        pass
+                    else:
+                        shoulder_width = None
+                except (ValueError, TypeError):
+                    shoulder_width = None
             else:
+                shoulder_width = None
+            
+            if shoulder_width is None:
                 shoulder_width = width * 0.85
+                
             if piece_id == 'front_body':
                 vertices = generate_front_body_vertices(length, width, shoulder_width, seam_allowance)
             else:
@@ -356,14 +367,33 @@ class CurvedPieceCalculator:
         elif piece_id == 'sleeve':
             bicep_width = piece.get('bicep_width')
             cuff_width = piece.get('cuff_width')
-            if bicep_width and float(bicep_width) > 0:
-                bicep_width = float(bicep_width)
+            
+            if bicep_width is not None and bicep_width != '':
+                try:
+                    bicep_width = float(bicep_width)
+                    if bicep_width <= 0:
+                        bicep_width = None
+                except (ValueError, TypeError):
+                    bicep_width = None
             else:
+                bicep_width = None
+                
+            if bicep_width is None:
                 bicep_width = width
-            if cuff_width and float(cuff_width) > 0:
-                cuff_width = float(cuff_width)
+                
+            if cuff_width is not None and cuff_width != '':
+                try:
+                    cuff_width = float(cuff_width)
+                    if cuff_width <= 0:
+                        cuff_width = None
+                except (ValueError, TypeError):
+                    cuff_width = None
             else:
+                cuff_width = None
+                
+            if cuff_width is None:
                 cuff_width = width * 0.7
+                
             vertices = generate_sleeve_vertices(length, width, bicep_width, cuff_width, seam_allowance)
 
         if vertices is None or len(vertices) < 3:
