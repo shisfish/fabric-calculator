@@ -521,8 +521,8 @@ class DatabaseManager:
                         if os.path.exists(full_path):
                             try:
                                 os.remove(full_path)
-                            except Exception:
-                                pass
+                            except OSError as e:
+                                print(f"[警告] 删除文件失败 {full_path}: {e}")
 
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM history_quick_params WHERE history_id = %s", (record_id,))
@@ -546,8 +546,8 @@ class DatabaseManager:
                         if os.path.exists(full_path):
                             try:
                                 os.remove(full_path)
-                            except Exception:
-                                pass
+                            except OSError as e:
+                                print(f"[警告] 删除文件失败 {full_path}: {e}")
 
                 cursor.execute("TRUNCATE TABLE history_pieces")
                 cursor.execute("TRUNCATE TABLE history_quick_params")
