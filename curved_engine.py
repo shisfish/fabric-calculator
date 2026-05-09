@@ -277,7 +277,7 @@ class CurvedPieceCalculator:
         length = float(piece.get('length', 0))
         width = float(piece.get('width', 0))
         count = int(piece.get('count', 1))
-        shape = piece.get('shape', 'rectangle')
+        shape = piece.get('shape') or 'rectangle'
         seam_allowance = float(piece.get('seam_allowance', 1.5))
 
         if length <= 0 or width <= 0:
@@ -413,7 +413,7 @@ class CurvedPieceCalculator:
 
         # 使用现有引擎获取品类配置
         base_calculator = FabricCalculator()
-        category = base_calculator.categories.get(data.get("category", "custom"), base_calculator.categories["custom"])
+        category = base_calculator.categories.get(data.get("category") or "custom", base_calculator.categories["custom"])
 
         fabric_width = float(data.get("fabric_width", 145))
         fabric_weight_gsm = float(data.get("fabric_weight_gsm", 0))

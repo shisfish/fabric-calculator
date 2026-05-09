@@ -301,7 +301,7 @@ class DatabaseManager:
     def _build_input_data(self, conn, row, pieces, quick_params):
         """从平铺表字段重新组装 input_data，用于重新计算"""
         input_data = {
-            "category": row['category'],
+            "category": row['category'] or 'custom',
             "fabric_width": float(row['fabric_width']) if row['fabric_width'] else 145,
             "fabric_type": row['fabric_type'] or 'woven',
             "fabric_weight_gsm": float(row['fabric_weight_gsm']) if row['fabric_weight_gsm'] else 0,

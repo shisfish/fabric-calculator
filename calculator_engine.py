@@ -521,7 +521,7 @@ class FabricCalculator:
             "warnings": [],
         }
 
-        category = self.categories.get(data.get("category", "custom"), self.categories["custom"])
+        category = self.categories.get(data.get("category") or "custom", self.categories["custom"])
         fabric_width = float(data.get("fabric_width", 145))
         fabric_weight_gsm = float(data.get("fabric_weight_gsm", 0))
         shrinkage_rate = float(data.get("shrinkage_rate", category["default_shrinkage"]))
@@ -555,7 +555,7 @@ class FabricCalculator:
             piece_length = float(piece.get("length", 0))
             piece_width = float(piece.get("width", 0))
             piece_count = int(piece.get("count", 1))
-            shape = piece.get("shape", "rectangle")
+            shape = piece.get("shape") or "rectangle"
             material = piece.get("material", "main")
             seam_allowance = float(piece.get("seam_allowance", 1.5))
 

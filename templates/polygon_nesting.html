@@ -155,7 +155,7 @@
 
             <!-- 排料图 -->
             <div class="section">
-                <h3>📐 排料图</h3>
+                <h3> 排料图</h3>
                 <div class="card" style="padding:16px;">
                     <div class="canvas-container" style="overflow-x:auto;">
                         <canvas id="nesting-canvas" style="border:2px solid #333;background:#fff;"></canvas>
@@ -196,76 +196,38 @@
     <script>
         const CATEGORY_ICONS = {
             coat: "🧥",
-            down_jacket: "",
-            jacket: "🧥",
+            down_jacket: "🧥",
+            jacket: "",
             windbreaker: "🧥",
             cotton_padded: "🧥",
             pants: "👖",
-            skirt: "",
-            shirt: "👔",
+            skirt: "👗",
+            shirt: "",
             tshirt: "👕",
             custom: "✏️",
         };
 
-        let currentCategory = null;
-        let pieceIndex = 0;
+        const SHAPE_OPTIONS = [
+            { value: "rectangle", label: "矩形" },
+            { value: "single_corner", label: "单切角" },
+            { value: "double_corner", label: "双切角" },
+        ];
 
-        const categoryTemplates = {
-            'coat': {
-                name: '大衣',
-                pieces: [
-                    {name: '前片', length: 110, width: 60, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.5},
-                    {name: '后片', length: 110, width: 65, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                    {name: '袖子', length: 65, width: 22, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                    {name: '领子', length: 35, width: 12, count: 1, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                ]
-            },
-            'down_jacket': {
-                name: '羽绒服',
-                pieces: [
-                    {name: '前片', length: 75, width: 55, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.5},
-                    {name: '后片', length: 75, width: 60, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                    {name: '袖子', length: 60, width: 20, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                ]
-            },
-            'jacket': {
-                name: '夹克',
-                pieces: [
-                    {name: '前片', length: 65, width: 50, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.5},
-                    {name: '后片', length: 65, width: 55, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                    {name: '袖子', length: 58, width: 18, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                ]
-            },
-            'pants': {
-                name: '裤子',
-                pieces: [
-                    {name: '前裤片', length: 100, width: 35, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
-                    {name: '后裤片', length: 100, width: 38, count: 2, shape: 'double_corner', material: 'main', seam_allowance: 1.5},
-                    {name: '腰头', length: 12, width: 80, count: 1, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                ]
-            },
-            'shirt': {
-                name: '衬衫',
-                pieces: [
-                    {name: '前片', length: 70, width: 45, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.0},
-                    {name: '后片', length: 70, width: 50, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                    {name: '袖子', length: 55, width: 16, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                    {name: '领子', length: 28, width: 10, count: 1, shape: 'rectangle', material: 'main', seam_allowance: 0.7},
-                ]
-            },
-            'tshirt': {
-                name: 'T恤',
-                pieces: [
-                    {name: '前片', length: 60, width: 48, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                    {name: '后片', length: 62, width: 48, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                    {name: '袖子', length: 22, width: 18, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
-                ]
-            },
-            'custom': {
-                name: '自定义',
-                pieces: []
-            }
+        const MATERIAL_OPTIONS = [
+            { value: "main", label: "主面料" },
+            { value: "lining", label: "里布" },
+            { value: "interlining", label: "衬布" },
+        ];
+
+        const shapeColors = {
+            'rectangle': '#007bff',
+            'single_corner': '#28a745',
+            'double_corner': '#dc3545'
         };
+
+        let currentCategory = null;
+        let categoryDetail = null;
+        let pieceTemplateLoaded = false;
 
         async function loadCategories() {
             try {
@@ -295,190 +257,144 @@
             `).join('');
         }
 
-        function selectCategory(catId) {
+        async function selectCategory(catId) {
             currentCategory = catId;
+            pieceTemplateLoaded = false;
+
             document.querySelectorAll('.category-card').forEach(card => {
                 card.classList.toggle('selected', card.dataset.id === catId);
             });
+
+            try {
+                const resp = await fetch(`/api/categories/${catId}`);
+                const data = await resp.json();
+                if (data.success) {
+                    categoryDetail = data.data;
+                }
+            } catch (e) {
+                console.error('加载品类详情失败:', e);
+            }
+
             setTimeout(() => goStep(2), 300);
         }
 
         function goStep(step) {
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-            
+
             document.getElementById('panel-' + step).classList.add('active');
             document.querySelector(`[data-step="${step}"]`).classList.add('active');
-            
-            if (step === 3) {
-                loadPiecesForCategory();
+
+            if (step === 3 && categoryDetail && !pieceTemplateLoaded) {
+                loadPieceTemplate();
+                pieceTemplateLoaded = true;
                 refreshPreview();
             }
         }
 
-        function loadPiecesForCategory() {
+        function loadPieceTemplate() {
             const tbody = document.getElementById('pieces-tbody');
-            tbody.innerHTML = '';
-            
-            const cat = categoryTemplates[currentCategory];
-            if (!cat || cat.pieces.length === 0) {
-                addDefaultPieces();
+            if (!categoryDetail.pieces || categoryDetail.pieces.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="empty-row">自定义品类，请手动添加裁片</td>
+                    </tr>
+                `;
                 return;
             }
-            
-            cat.pieces.forEach((piece, idx) => {
-                const row = createPieceRow(idx, piece);
-                tbody.appendChild(row);
-            });
-            pieceIndex = cat.pieces.length;
+
+            tbody.innerHTML = categoryDetail.pieces.map((piece, idx) => `
+                <tr data-piece-id="${piece.id}">
+                    <td><input type="text" class="inline-input" value="${piece.name}" data-field="name"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="length" step="0.5" min="0"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="width" step="0.5" min="0"></td>
+                    <td>
+                        <input type="number" class="inline-input inline-input-sm" value="${getDefaultCount(piece.id)}" data-field="count" min="1" step="1">
+                    </td>
+                    <td>
+                        <select class="inline-input" data-field="shape">
+                            ${SHAPE_OPTIONS.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="inline-input" data-field="material">
+                            ${MATERIAL_OPTIONS.map(m => `<option value="${m.value}" ${m.value === 'main' ? 'selected' : ''}>${m.label}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0"></td>
+                    <td>
+                        <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
+                    </td>
+                </tr>
+            `).join('');
         }
 
-        function addDefaultPieces() {
-            const tbody = document.getElementById('pieces-tbody');
-            tbody.innerHTML = `
-                <tr data-index="0">
-                    <td><input type="text" class="piece-name" value="前片"></td>
-                    <td><input type="number" class="piece-length" value="65" step="1" min="1"></td>
-                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
-                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                    <td>
-                        <select class="piece-shape">
-                            <option value="rectangle">矩形</option>
-                            <option value="single_corner" selected>单切角</option>
-                            <option value="double_corner">双切角</option>
-                        </select>
-                    </td>
-                    <td>
-                        <select class="piece-material">
-                            <option value="main" selected>主面料</option>
-                            <option value="lining">里布</option>
-                            <option value="interlining">衬布</option>
-                        </select>
-                    </td>
-                    <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                </tr>
-                <tr data-index="1">
-                    <td><input type="text" class="piece-name" value="后片"></td>
-                    <td><input type="number" class="piece-length" value="65" step="1" min="1"></td>
-                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
-                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                    <td>
-                        <select class="piece-shape">
-                            <option value="rectangle" selected>矩形</option>
-                            <option value="single_corner">单切角</option>
-                            <option value="double_corner">双切角</option>
-                        </select>
-                    </td>
-                    <td>
-                        <select class="piece-material">
-                            <option value="main" selected>主面料</option>
-                            <option value="lining">里布</option>
-                            <option value="interlining">衬布</option>
-                        </select>
-                    </td>
-                    <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                </tr>
-                <tr data-index="2">
-                    <td><input type="text" class="piece-name" value="袖子"></td>
-                    <td><input type="number" class="piece-length" value="60" step="1" min="1"></td>
-                    <td><input type="number" class="piece-width" value="20" step="1" min="1"></td>
-                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                    <td>
-                        <select class="piece-shape">
-                            <option value="rectangle" selected>矩形</option>
-                            <option value="single_corner">单切角</option>
-                            <option value="double_corner">双切角</option>
-                        </select>
-                    </td>
-                    <td>
-                        <select class="piece-material">
-                            <option value="main" selected>主面料</option>
-                            <option value="lining">里布</option>
-                            <option value="interlining">衬布</option>
-                        </select>
-                    </td>
-                    <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                </tr>
-            `;
-            pieceIndex = 3;
-        }
-
-        function createPieceRow(idx, piece) {
-            const row = document.createElement('tr');
-            row.dataset.index = idx;
-            row.innerHTML = `
-                <td><input type="text" class="piece-name" value="${piece.name}"></td>
-                <td><input type="number" class="piece-length" value="${piece.length}" step="1" min="1"></td>
-                <td><input type="number" class="piece-width" value="${piece.width}" step="1" min="1"></td>
-                <td><input type="number" class="piece-count" value="${piece.count}" step="1" min="1"></td>
-                <td>
-                    <select class="piece-shape">
-                        <option value="rectangle" ${piece.shape === 'rectangle' ? 'selected' : ''}>矩形</option>
-                        <option value="single_corner" ${piece.shape === 'single_corner' ? 'selected' : ''}>单切角</option>
-                        <option value="double_corner" ${piece.shape === 'double_corner' ? 'selected' : ''}>双切角</option>
-                    </select>
-                </td>
-                <td>
-                    <select class="piece-material">
-                        <option value="main" ${piece.material === 'main' ? 'selected' : ''}>主面料</option>
-                        <option value="lining" ${piece.material === 'lining' ? 'selected' : ''}>里布</option>
-                        <option value="interlining" ${piece.material === 'interlining' ? 'selected' : ''}>衬布</option>
-                    </select>
-                </td>
-                <td><input type="number" class="piece-seam" value="${piece.seam_allowance}" step="0.1" min="0"></td>
-                <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-            `;
-            return row;
+        function getDefaultCount(pieceId) {
+            const countMap = {
+                'front_body': 2, 'back_body': 1, 'sleeve': 2,
+                'collar': 2, 'hood': 2, 'pocket': 4, 'belt': 1,
+                'cuff': 2, 'lining': 2, 'interlining': 2,
+                'front_panel': 2, 'back_panel': 2, 'waistband': 1,
+                'pocket_bag': 4, 'fly': 1, 'belt_loop': 6,
+                'yoke': 2, 'collar_rib': 1, 'bottom_rib': 1,
+                'shell_fabric': 2, 'filling_fabric_single': 2,
+                'filling_fabric_double': 4, 'down_filling': 1,
+                'cotton_filling': 1, 'other': 1,
+            };
+            return countMap[pieceId] || 1;
         }
 
         function addPiece() {
             const tbody = document.getElementById('pieces-tbody');
+            const emptyRow = tbody.querySelector('.empty-row');
+            if (emptyRow) {
+                tbody.innerHTML = '';
+            }
+
             const row = document.createElement('tr');
-            row.dataset.index = pieceIndex++;
             row.innerHTML = `
-                <td><input type="text" class="piece-name" value="裁片${pieceIndex}"></td>
-                <td><input type="number" class="piece-length" value="50" step="1" min="1"></td>
-                <td><input type="number" class="piece-width" value="40" step="1" min="1"></td>
-                <td><input type="number" class="piece-count" value="1" step="1" min="1"></td>
+                <td><input type="text" class="inline-input" placeholder="裁片名称" data-field="name"></td>
+                <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="length" step="0.5" min="0"></td>
+                <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="width" step="0.5" min="0"></td>
+                <td><input type="number" class="inline-input inline-input-sm" value="1" data-field="count" min="1" step="1"></td>
                 <td>
-                    <select class="piece-shape">
-                        <option value="rectangle" selected>矩形</option>
-                        <option value="single_corner">单切角</option>
-                        <option value="double_corner">双切角</option>
+                    <select class="inline-input" data-field="shape">
+                        ${SHAPE_OPTIONS.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}
                     </select>
                 </td>
                 <td>
-                    <select class="piece-material">
-                        <option value="main" selected>主面料</option>
-                        <option value="lining">里布</option>
-                        <option value="interlining">衬布</option>
+                    <select class="inline-input" data-field="material">
+                        ${MATERIAL_OPTIONS.map(m => `<option value="${m.value}">${m.label}</option>`).join('')}
                     </select>
                 </td>
-                <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
-                <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0"></td>
+                <td>
+                    <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
+                </td>
             `;
             tbody.appendChild(row);
             refreshPreview();
         }
 
         function removePiece(btn) {
-            const row = btn.parentElement.parentElement;
+            const row = btn.closest('tr');
             row.remove();
             refreshPreview();
         }
 
         function resetPieces() {
-            loadPiecesForCategory();
+            pieceTemplateLoaded = false;
+            if (categoryDetail) {
+                loadPieceTemplate();
+                pieceTemplateLoaded = true;
+            }
             refreshPreview();
         }
 
         function generateVertices(width, height, type) {
             const w = width;
             const h = height;
-            
+
             switch(type) {
                 case 'single_corner':
                     return [[0, 0], [w, 0], [w, h], [w * 0.2, h], [0, h * 0.8]];
@@ -489,47 +405,45 @@
             }
         }
 
-        const shapeColors = {
-            'rectangle': '#007bff',
-            'single_corner': '#28a745',
-            'double_corner': '#dc3545'
-        };
-
         function refreshPreview() {
             const canvas = document.getElementById('pieces-preview');
             const ctx = canvas.getContext('2d');
             const scale = 2;
             const padding = 20;
-            
+
             canvas.width = 560;
             canvas.height = 300;
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
+
             let currentX = padding;
             let currentY = padding;
             let maxHeight = 0;
-            
+
             document.querySelectorAll('#pieces-tbody tr').forEach(row => {
-                const length = parseFloat(row.querySelector('.piece-length').value);
-                const width = parseFloat(row.querySelector('.piece-width').value);
-                const shape = row.querySelector('.piece-shape').value;
-                const count = parseInt(row.querySelector('.piece-count').value);
-                
+                if (row.querySelector('.empty-row')) return;
+
+                const length = parseFloat(row.querySelector('[data-field="length"]').value) || 0;
+                const width = parseFloat(row.querySelector('[data-field="width"]').value) || 0;
+                const shape = row.querySelector('[data-field="shape"]').value;
+                const count = parseInt(row.querySelector('[data-field="count"]').value) || 1;
+
+                if (length <= 0 || width <= 0) return;
+
                 const vertices = generateVertices(width, length, shape);
                 const color = shapeColors[shape] || '#6f42c1';
-                
+
                 if (currentX + width * scale > canvas.width - padding) {
                     currentX = padding;
                     currentY += maxHeight + 10;
                     maxHeight = 0;
                 }
-                
+
                 ctx.fillStyle = color;
                 ctx.strokeStyle = '#333';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
-                
+
                 vertices.forEach((v, i) => {
                     const x = currentX + v[0] * scale;
                     const y = currentY + v[1] * scale;
@@ -539,8 +453,8 @@
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
-                
-                const name = row.querySelector('.piece-name').value;
+
+                const name = row.querySelector('[data-field="name"]').value;
                 ctx.fillStyle = '#fff';
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 1;
@@ -550,7 +464,7 @@
                 const cy = currentY + length * scale / 2;
                 ctx.strokeText(`${name}×${count}`, cx, cy);
                 ctx.fillText(`${name}×${count}`, cx, cy);
-                
+
                 currentX += width * scale + 10;
                 maxHeight = Math.max(maxHeight, length * scale);
             });
@@ -560,43 +474,41 @@
             const pieces = [];
             const fabricWidth = parseFloat(document.getElementById('fabric-width').value);
             const quantity = parseInt(document.getElementById('quantity').value);
-            
-            let totalCount = 0;
-            
+
             document.querySelectorAll('#pieces-tbody tr').forEach(row => {
-                const name = row.querySelector('.piece-name').value;
-                const length = parseFloat(row.querySelector('.piece-length').value);
-                const width = parseFloat(row.querySelector('.piece-width').value);
-                const count = parseInt(row.querySelector('.piece-count').value);
-                const shape = row.querySelector('.piece-shape').value;
-                const material = row.querySelector('.piece-material').value;
-                
+                if (row.querySelector('.empty-row')) return;
+
+                const name = row.querySelector('[data-field="name"]').value;
+                const length = parseFloat(row.querySelector('[data-field="length"]').value) || 0;
+                const width = parseFloat(row.querySelector('[data-field="width"]').value) || 0;
+                const count = parseInt(row.querySelector('[data-field="count"]').value) || 1;
+                const shape = row.querySelector('[data-field="shape"]').value;
+                const material = row.querySelector('[data-field="material"]').value;
+
+                if (length <= 0 || width <= 0) return;
+
                 const vertices = generateVertices(width, length, shape);
                 const color = shapeColors[shape] || '#6f42c1';
-                
-                const totalPieceCount = count * quantity;
-                
-                for(let i = 0; i < totalPieceCount; i++) {
-                    pieces.push({
-                        name: totalPieceCount > 1 ? `${name}${i + 1}` : name,
-                        vertices: vertices,
-                        width: width,
-                        height: length,
-                        color: color,
-                        shape: shape,
-                        material: material
-                    });
-                }
-                totalCount += totalPieceCount;
+
+                pieces.push({
+                    name: name,
+                    vertices: vertices,
+                    width: width,
+                    height: length,
+                    count: count * quantity,
+                    color: color,
+                    shape: shape,
+                    material: material
+                });
             });
-            
+
             if (pieces.length === 0) {
-                alert('请至少添加一个裁片');
+                alert('请至少添加一个裁片并填写尺寸');
                 return;
             }
-            
+
             document.getElementById('loading').style.display = 'flex';
-            
+
             const response = await fetch('/api/polygon-nesting', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -605,12 +517,13 @@
                     fabric_width: fabricWidth
                 })
             });
-            
+
             document.getElementById('loading').style.display = 'none';
-            
+
             const result = await response.json();
-            
+
             if(result.success) {
+                const totalCount = pieces.reduce((sum, p) => sum + p.count, 0);
                 displayResult(result.data, fabricWidth, totalCount);
                 goStep(4);
             } else {
@@ -621,14 +534,14 @@
         function displayResult(data, fabricWidth, totalCount) {
             const infoGrid = document.getElementById('result-info-grid');
             infoGrid.innerHTML = `
-                <div><span class="info-label">服装品类</span><span class="info-value">${categoryTemplates[currentCategory]?.name || '自定义'}</span></div>
+                <div><span class="info-label">服装品类</span><span class="info-value">${categoryDetail?.name || '自定义'}</span></div>
                 <div><span class="info-label">订单数量</span><span class="info-value">${document.getElementById('quantity').value} 件</span></div>
                 <div><span class="info-label">面料门幅</span><span class="info-value">${fabricWidth} cm</span></div>
                 <div><span class="info-label">总用料长度</span><span class="info-value">${data.total_length_cm.toFixed(2)} cm</span></div>
                 <div><span class="info-label">门幅利用率</span><span class="info-value">${(data.width_utilization * 100).toFixed(2)}%</span></div>
                 <div><span class="info-label">裁片总数</span><span class="info-value">${totalCount}</span></div>
             `;
-            
+
             drawNesting(data.rows, fabricWidth);
             updatePiecesTable(data.rows);
         }
@@ -636,18 +549,18 @@
         function drawNesting(rows, fabricWidth) {
             const canvas = document.getElementById('nesting-canvas');
             const ctx = canvas.getContext('2d');
-            
+
             const scale = 3;
             const padding = 30;
-            
+
             const totalHeight = rows.reduce((sum, row) => sum + row.length_cm, 0);
-            
+
             canvas.width = fabricWidth * scale + padding * 2;
             canvas.height = totalHeight * scale + padding * 2;
-            
+
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
+
             ctx.strokeStyle = '#eee';
             ctx.lineWidth = 0.5;
             for(let x = 0; x <= fabricWidth; x += 10) {
@@ -662,75 +575,75 @@
                 ctx.lineTo(padding + fabricWidth * scale, padding + y * scale);
                 ctx.stroke();
             }
-            
+
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 2;
             ctx.strokeRect(padding, padding, fabricWidth * scale, totalHeight * scale);
-            
+
             ctx.font = '12px Arial';
             ctx.fillStyle = '#666';
             ctx.textAlign = 'center';
             ctx.fillText(`${fabricWidth}cm`, padding + fabricWidth * scale / 2, padding - 10);
-            
+
             let currentY = padding;
-            
+
             rows.forEach(row => {
                 row.pieces.forEach(piece => {
                     ctx.fillStyle = piece.color || '#007bff';
                     ctx.strokeStyle = '#333';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
-                    
+
                     piece.vertices.forEach((v, i) => {
                         const x = padding + (piece.x + v[0]) * scale;
                         const y = currentY + (piece.y + v[1]) * scale;
                         if(i === 0) ctx.moveTo(x, y);
                         else ctx.lineTo(x, y);
                     });
-                    
+
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
-                    
+
                     ctx.fillStyle = '#fff';
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 1;
                     ctx.font = 'bold 10px Arial';
                     ctx.textAlign = 'center';
-                    
+
                     const cx = padding + piece.x * scale + piece.width * scale / 2;
                     const cy = currentY + piece.y * scale + piece.height * scale / 2;
-                    
+
                     ctx.strokeText(piece.name, cx, cy);
                     ctx.fillText(piece.name, cx, cy);
                 });
-                
+
                 const rowUtil = (row.used_width_cm / fabricWidth * 100).toFixed(0);
                 ctx.fillStyle = '#666';
                 ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'right';
                 ctx.fillText(`${rowUtil}%`, padding + fabricWidth * scale + 15, currentY + row.length_cm * scale / 2);
-                
+
                 currentY += row.length_cm * scale;
             });
-            
+
             ctx.fillStyle = '#333';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`总长度: ${(totalHeight).toFixed(2)}cm | 利用率: ${(data.width_utilization * 100).toFixed(2)}%`, 
+            ctx.fillText(`总长度: ${(totalHeight).toFixed(2)}cm | 利用率: ${(data.width_utilization * 100).toFixed(2)}%`,
                 padding + fabricWidth * scale / 2, canvas.height - 10);
         }
 
         function updatePiecesTable(rows) {
             const tbody = document.getElementById('result-pieces-tbody');
             tbody.innerHTML = '';
-            
+
             const shapeNames = {
                 'rectangle': '矩形',
                 'single_corner': '单切角',
                 'double_corner': '双切角'
             };
-            
+
             rows.forEach(row => {
                 row.pieces.forEach(piece => {
                     const rowEl = document.createElement('tr');
@@ -751,7 +664,7 @@
             const infoGrid = document.getElementById('result-info-grid');
             const data = {
                 category: currentCategory,
-                category_name: categoryTemplates[currentCategory]?.name,
+                category_name: categoryDetail?.name,
                 quantity: document.getElementById('quantity').value,
                 fabric_width: document.getElementById('fabric-width').value,
                 result: {
@@ -760,7 +673,7 @@
                     pieces_count: document.querySelector('#result-info-grid .info-value:nth-child(6)')?.textContent
                 }
             };
-            
+
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');

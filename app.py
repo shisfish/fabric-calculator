@@ -241,8 +241,9 @@ def get_history_detail(record_id):
                 full_result = calculator.calculate_consumption(record["input_data"])
             record["full_result"] = full_result
         except Exception as e:
+            import traceback
             record["full_result"] = None
-            record["calc_error"] = str(e)
+            record["calc_error"] = f"无法重新计算完整结果: {str(e)}\n详细信息: {traceback.format_exc()}"
 
     # input_data 保留给详情页（返回修改功能需要）
     return jsonify({"success": True, "data": record})

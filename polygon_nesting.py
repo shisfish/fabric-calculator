@@ -185,13 +185,20 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
         vertices = piece.get("vertices", [])
         area = polygon_area(vertices)
         w, h = polygon_width_height(vertices)
-        processed_pieces.append({
-            "name": piece.get("name", ""),
-            "vertices": vertices,
-            "area": area,
-            "width": w,
-            "height": h,
-        })
+        count = piece.get("count", 1)
+        
+        # 根据数量展开裁片
+        for i in range(count):
+            processed_pieces.append({
+                "name": piece.get("name", ""),
+                "vertices": vertices,
+                "area": area,
+                "width": w,
+                "height": h,
+                "color": piece.get("color", "#007bff"),
+                "shape": piece.get("shape", "rectangle"),
+                "material": piece.get("material", "main"),
+            })
     
     # 按面积降序排序
     processed_pieces.sort(key=lambda p: -p["area"])
