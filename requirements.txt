@@ -4,3 +4,4 @@ numpy>=1.20
 pymysql>=1.0
 cryptography>=3.0
 Pillow>=9.0
+rectpack>=0.2

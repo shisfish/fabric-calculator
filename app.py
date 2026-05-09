@@ -7,6 +7,7 @@ Fabric Consumption Quick Calculator
 from flask import Flask, render_template, request, jsonify, send_file
 from calculator_engine import FabricCalculator, QuotationEngine
 from curved_engine import CurvedPieceCalculator
+from polygon_nesting import polygon_nesting
 from image_engine import measurement_engine
 from db_manager import db_manager
 import json
@@ -471,6 +472,42 @@ def health_check():
             "database": db_health
         }
     })
+
+
+# ============================================================
+# 多边形排料模块
+# ============================================================
+
+@app.route('/polygon-nesting')
+def polygon_nesting_page():
+    """多边形排料页面"""
+    return render_template('polygon_nesting.html')
+
+@app.route('/api/polygon-nesting', methods=['POST'])
+def api_polygon_nesting():
+    """多边形排料API"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+        
+        pieces = data.get("pieces", [])
+        fabric_width = float(data.get("fabric_width", 140))
+        
+        # 执行多边形排料
+        result = polygon_nesting(pieces, fabric_width)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "total_length_cm": result["total_length_cm"],
+                "width_utilization": result["width_utilization"],
+                "rows": result["rows"],
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({"success": False, "message": f"多边形排料错误: {str(e)}"}), 500
 
 
 # ============================================================

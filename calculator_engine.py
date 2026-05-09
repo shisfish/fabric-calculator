@@ -8,6 +8,9 @@ import math
 import json
 import os
 
+# rectpack 矩形排料库
+from rectpack import newPacker, MaxRectsBssf, GuillotineBssf, SkylineBl
+
 # ============================================================
 # 品类配置数据
 # ============================================================
@@ -248,9 +251,9 @@ FABRIC_TYPES = {
 
 def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
     """
-    排料模拟 — 精确计算门幅利用率并记录每个裁片的实际位置
+    排料模拟 — 使用 rectpack 库进行精确矩形排料
 
-    使用贪心算法模拟真实排料过程，记录每个裁片的精确位置。
+    使用 MaxRects 算法实现高效排料，支持旋转和多种排序策略。
     排料结果直接用于图片展示，确保计算数据与可视化一致。
 
     参数:
@@ -295,101 +298,87 @@ def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
             # 新格式：字典
             pieces.append(p)
 
-    # 按长度降序排列（长的先排，减少浪费）
-    sorted_pieces = sorted(pieces, key=lambda p: (-p["length"], -p["width"]))
+    # 使用 rectpack 的 MaxRectsBssf 算法（最佳短边优先）
+    packer = newPacker(
+        pack_algo=MaxRectsBssf,
+        rotation=True,
+        sort_algo="area",
+        bin_algo="best_fit",
+    )
 
+    # 添加面料卷（无限长度，固定宽度）
+    max_length = sum(p["length"] * p["width"] for p in pieces) / fabric_width_cm * 2
+    packer.add_bin(fabric_width_cm, max_length, count=1)
+
+    # 添加所有裁片（记录索引以便后续关联）
+    for idx, piece in enumerate(pieces):
+        packer.add_rect(
+            piece["width"],  # rectpack 使用 (width, height)
+            piece["length"],
+            idx  # 用于关联原始数据
+        )
+
+    # 执行排料
+    packer.pack()
+
+    # 转换结果格式
     rows = []
-    total_piece_area = 0
+    piece_idx_map = {p[5]: p for p in pieces}  # 按索引映射
 
-    for piece in sorted_pieces:
-        p_length = piece["length"]
-        p_width = piece["width"]
-        total_piece_area += p_length * p_width
-        placed = False
+    for bin in packer:
+        for rect in bin:
+            # rect: (x, y, width, height, rid, bid, *extra)
+            x, y, w, h, rid, bid = rect[:6]
+            original_piece = pieces[rid] if rid < len(pieces) else None
 
-        # 尝试放入已有排（优先高度匹配的排）
-        best_row = None
-        best_score = -1
-        for row in rows:
-            # 计算所需宽度（第一个裁片不需要间隙）
-            needed = p_width + (seam_gap_cm if len(row["pieces"]) > 0 else 0)
-            remaining = fabric_width_cm - row["used_width_cm"]
+            # 检查是否需要新建行
+            row_found = False
+            for row in rows:
+                # 判断是否在同一行（垂直位置相近）
+                row_top = row.get("_start_y", 0)
+                row_bottom = row_top + row["length_cm"]
+                if y >= row_top - seam_gap_cm and y <= row_bottom + seam_gap_cm:
+                    # 更新行信息
+                    row["used_width_cm"] = max(row["used_width_cm"], x + w)
+                    row["length_cm"] = max(row["length_cm"], h)
+                    row["pieces"].append({
+                        "name": original_piece.get("name", "") if original_piece else "",
+                        "length": h,
+                        "width": w,
+                        "vertices": original_piece.get("vertices") if original_piece else None,
+                        "x": x,
+                        "y": y - row_top,
+                        "w": w,
+                        "h": h,
+                        "rotated": (w == original_piece.get("length", 0)) if original_piece else False,
+                    })
+                    row["pieces_count"] = len(row["pieces"])
+                    row_found = True
+                    break
 
-            # 如果放不进，跳过
-            if needed > remaining:
-                continue
-
-            # 优先选择高度最接近的排
-            length_diff = abs(row["length_cm"] - p_length)
-            # 同时优先选择剩余空间小的排（填充）
-            score = 1000 - length_diff * 10 - remaining
-            if score > best_score:
-                best_score = score
-                best_row = row
-
-        if best_row:
-            # 确定x位置
-            piece_x = best_row["used_width_cm"] + (seam_gap_cm if len(best_row["pieces"]) > 0 else 0)
-            # 居中对齐
-            piece_y = (best_row["length_cm"] - p_length) / 2 if best_row["length_cm"] > p_length else 0
-
-            best_row["pieces"].append({
-                "name": piece.get("name", ""),
-                "length": p_length,
-                "width": p_width,
-                "vertices": piece.get("vertices"),
-                "x": piece_x,
-                "y": piece_y,
-                "w": p_width,
-                "h": p_length,
-            })
-            best_row["used_width_cm"] = piece_x + p_width
-            best_row["pieces_count"] = len(best_row["pieces"])
-            # 更新行高（取最大值）
-            if p_length > best_row["length_cm"]:
-                best_row["length_cm"] = p_length
-            placed = True
-
-        if not placed:
-            # 新建排
-            if p_width > fabric_width_cm:
-                # 旋转裁片（宽度超过门幅，交换长宽）
+            if not row_found:
+                # 新建行
                 rows.append({
-                    "length_cm": p_width,
-                    "used_width_cm": p_length,
+                    "length_cm": h,
+                    "used_width_cm": x + w,
                     "pieces_count": 1,
-                    "rotated": True,
+                    "_start_y": y,
                     "pieces": [{
-                        "name": piece.get("name", ""),
-                        "length": p_width,
-                        "width": p_length,
-                        "vertices": piece.get("vertices"),
-                        "x": 0,
+                        "name": original_piece.get("name", "") if original_piece else "",
+                        "length": h,
+                        "width": w,
+                        "vertices": original_piece.get("vertices") if original_piece else None,
+                        "x": x,
                         "y": 0,
-                        "w": p_length,
-                        "h": p_width,
-                        "rotated": True,
-                    }]
-                })
-            else:
-                rows.append({
-                    "length_cm": p_length,
-                    "used_width_cm": p_width,
-                    "pieces_count": 1,
-                    "pieces": [{
-                        "name": piece.get("name", ""),
-                        "length": p_length,
-                        "width": p_width,
-                        "vertices": piece.get("vertices"),
-                        "x": 0,
-                        "y": 0,
-                        "w": p_width,
-                        "h": p_length,
+                        "w": w,
+                        "h": h,
+                        "rotated": (w == original_piece.get("length", 0)) if original_piece else False,
                     }]
                 })
 
+    # 计算总长度和利用率
     total_length = sum(row["length_cm"] for row in rows)
-    total_used_area = sum(row["used_width_cm"] * row["length_cm"] for row in rows)
+    total_used_area = sum(p["width"] * p["length"] for p in pieces)
     total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
     width_utilization = total_used_area / total_available_area if total_available_area > 0 else 0
 
