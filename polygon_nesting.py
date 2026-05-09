@@ -195,20 +195,20 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     placed_indices = set()  # 记录已放置的裁片索引
     
     def fill_row_gaps(row):
-        """填充行内的空隙"""
+        """填充行内的空隙 - 优先放入能放入的最大的裁片"""
         available_width = fabric_width_cm - row["used_width_cm"] - seam_gap_cm
         row_height = row["height"]
         
         iteration = 0
         while available_width >= seam_gap_cm * 2:
             iteration += 1
-            if iteration > 20:  # 防止无限循环
+            if iteration > 20:
                 print(f"[排料警告] 填充循环超过20次，强制退出")
                 break
             
             best_piece_idx = None
             best_orient = None
-            best_fit_score = -1
+            best_area = -1  # 优先选择面积最大的
             
             for idx, piece in enumerate(all_pieces):
                 if idx in placed_indices:
@@ -223,33 +223,12 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     if orient_w + seam_gap_cm > available_width:
                         continue
                     
-                    # 计算适配分数：优先选择小裁片，以便能放置多个
-                    # 基础分数：宽度利用率（越高越好）
-                    width_utilization = orient_w / available_width
-                    score = width_utilization * 0.5
-                    
-                    # 面积奖励：优先选择面积小的裁片（可以放更多个）
+                    # 计算裁片面积
                     piece_area = orient_w * orient_h
-                    max_area = fabric_width_cm * row_height
-                    area_ratio = 1 - (piece_area / max_area) if max_area > 0 else 0
-                    score += area_ratio * 0.3
                     
-                    # 宽度适配奖励：如果能放多个，给予奖励
-                    can_fit_count = int(available_width / (orient_w + seam_gap_cm))
-                    if can_fit_count >= 2:
-                        score += 0.2
-                    elif can_fit_count >= 1:
-                        score += 0.1
-                    
-                    # 高度适配奖励
-                    height_ratio = orient_h / row_height if row_height > 0 else 0
-                    if height_ratio > 0.8:
-                        score += 0.1
-                    elif height_ratio > 0.5:
-                        score += 0.05
-                    
-                    if score > best_fit_score:
-                        best_fit_score = score
+                    # 优先选择面积最大的（能放入的前提下）
+                    if piece_area > best_area:
+                        best_area = piece_area
                         best_piece_idx = idx
                         best_orient = (orient_w, orient_h, rotated)
             
@@ -260,7 +239,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             piece = all_pieces[best_piece_idx]
             orient_w, orient_h, rotated = best_orient
             
-            print(f"[排料调试] 填充: {piece['name']} ({orient_w:.1f}x{orient_h:.1f}), 分数={best_fit_score:.2f}")
+            print(f"[排料调试] 填充: {piece['name']} ({orient_w:.1f}x{orient_h:.1f}), 面积={best_area:.1f}cm²")
             
             start_x = row["used_width_cm"] + seam_gap_cm
             row["pieces"].append({

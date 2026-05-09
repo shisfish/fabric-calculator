@@ -856,7 +856,83 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadCategories();
+            
+            // 检查是否有编辑参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const editId = urlParams.get('edit');
+            if (editId) {
+                loadEditRecord(editId);
+            }
         });
+        
+        async function loadEditRecord(recordId) {
+            try {
+                const resp = await fetch(`/api/history/${recordId}`);
+                const result = await resp.json();
+                if (!result.success || !result.data || !result.data.input_data) {
+                    alert('无法加载历史记录数据');
+                    return;
+                }
+                const data = result.data.input_data;
+                fillEditData(data);
+            } catch (e) {
+                console.error('加载历史记录失败:', e);
+                alert('加载历史记录失败');
+            }
+        }
+        
+        function fillEditData(data) {
+            const category = data.category || 'custom';
+            currentCategory = category;
+            pieceTemplateLoaded = true;
+            
+            // 1. 品类选中状态
+            document.querySelectorAll('.category-card').forEach(card => {
+                card.classList.toggle('selected', card.dataset.id === category);
+            });
+            
+            // 2. 填充面料参数
+            if (data.fabric_width) document.getElementById('fabric-width').value = data.fabric_width;
+            if (data.fabric_weight_gsm) document.getElementById('fabric-weight').value = data.fabric_weight_gsm;
+            if (data.fabric_type) document.getElementById('fabric-type').value = data.fabric_type;
+            if (data.shrinkage_rate !== undefined) document.getElementById('shrinkage-rate').value = data.shrinkage_rate;
+            if (data.wastage_rate !== undefined) document.getElementById('wastage-rate').value = data.wastage_rate;
+            if (data.quantity) document.getElementById('quantity').value = data.quantity;
+            
+            // 3. 渲染裁片表格
+            const tbody = document.getElementById('pieces-tbody');
+            const pieces = data.pieces || [];
+            tbody.innerHTML = pieces.map(piece => `
+                <tr>
+                    <td><input type="text" class="inline-input" value="${piece.name || ''}" data-field="name" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.length || ''}" data-field="length" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.width || ''}" data-field="width" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.shoulder_width || ''}" data-field="shoulder_width" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.sleeve_cap_width || ''}" data-field="sleeve_cap_width" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.cuff_width || ''}" data-field="cuff_width" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.count || 1}" data-field="count" min="1" step="1" oninput="refreshPreview()"></td>
+                    <td>
+                        <select class="inline-input" data-field="shape" onchange="refreshPreview()">
+                            ${SHAPE_OPTIONS.map(s => `<option value="${s.value}" ${s.value === (piece.shape || 'rectangle') ? 'selected' : ''}>${s.label}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="inline-input" data-field="material" onchange="refreshPreview()">
+                            ${MATERIAL_OPTIONS.map(m => `<option value="${m.value}" ${m.value === (piece.material || 'main') ? 'selected' : ''}>${m.label}</option>`).join('')}
+                        </select>
+                    </td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="${piece.seam_allowance || 1.5}" data-field="seam_allowance" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td>
+                        <button class="btn-delete" onclick="removePiece(this)" title="删除"></button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            refreshPreview();
+            
+            // 4. 跳转到步骤3
+            goToStep(3);
+        }
     </script>
 </body>
 </html>

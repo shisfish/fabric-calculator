@@ -50,7 +50,7 @@ function renderDetail(record) {
     document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
     document.getElementById('detail-subtitle').textContent = `记录时间: ${record.timestamp}`;
 
-    if ((isPrecise || isCurved) && record.input_data) {
+    if ((isPrecise || isCurved || isPolygon) && record.input_data) {
         document.getElementById('btn-edit').style.display = '';
     }
     document.getElementById('btn-export').style.display = '';
@@ -145,7 +145,14 @@ function renderInfoCardCompact(record, isPrecise, categoryName) {
 
 function editRecord() {
     const type = currentRecordType;
-    const targetPage = type === 'curved' ? '/curves' : '/';
+    let targetPage = '/';
+    
+    if (type === 'curved') {
+        targetPage = '/curves';
+    } else if (type === 'polygon') {
+        targetPage = '/polygon-nesting';
+    }
+    
     window.location.href = `${targetPage}?edit=${RECORD_ID}`;
 }
 
