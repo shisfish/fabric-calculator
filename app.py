@@ -496,21 +496,140 @@ def api_polygon_nesting():
         
         pieces = data.get("pieces", [])
         fabric_width = float(data.get("fabric_width", 140))
+        shrinkage_rate = float(data.get("shrinkage_rate", 3))
+        wastage_rate = float(data.get("wastage_rate", 8))
+        fabric_weight_gsm = float(data.get("fabric_weight_gsm", 0))
+        quantity = int(data.get("quantity", 1))
         
         print(f"[API] 收到排料请求: {len(pieces)}种裁片, 门幅{fabric_width}cm")
         
         # 执行多边形排料
-        result = polygon_nesting(pieces, fabric_width)
+        nesting_result = polygon_nesting(pieces, fabric_width)
+        
+        # 构建裁片明细
+        pieces_detail = []
+        material_areas = {}
+        material_pieces = {}
+        
+        for piece in pieces:
+            w = piece.get("width", 0)
+            h = piece.get("height", 0)
+            count = piece.get("count", 1)
+            material = piece.get("material", "main")
+            seam_allowance = piece.get("seam_allowance", 1.5)
+            shoulder_width = piece.get("shoulder_width", 0)
+            sleeve_cap_width = piece.get("sleeve_cap_width", 0)
+            cuff_width = piece.get("cuff_width", 0)
+            
+            if w <= 0 or h <= 0:
+                continue
+            
+            effective_w = w + seam_allowance * 2
+            effective_h = h + seam_allowance * 2
+            area = w * h
+            area_with_shrinkage = area * (1 + shrinkage_rate / 100)
+            
+            piece_detail = {
+                "name": piece.get("name", ""),
+                "original_length": round(w, 2),
+                "original_width": round(h, 2),
+                "effective_length": round(effective_h, 2),
+                "effective_width": round(effective_w, 2),
+                "count": count,
+                "area_cm2": round(area, 2),
+                "area_with_shrinkage_cm2": round(area_with_shrinkage, 2),
+                "material": material,
+            }
+            if shoulder_width > 0:
+                piece_detail["shoulder_width"] = shoulder_width
+            if sleeve_cap_width > 0:
+                piece_detail["sleeve_cap_width"] = sleeve_cap_width
+            if cuff_width > 0:
+                piece_detail["cuff_width"] = cuff_width
+            
+            pieces_detail.append(piece_detail)
+            
+            # 按材料类型汇总
+            total_area = area_with_shrinkage * count
+            if material not in material_areas:
+                material_areas[material] = 0
+                material_pieces[material] = []
+            material_areas[material] += total_area
+            for _ in range(count):
+                material_pieces[material].append({
+                    "name": piece.get("name", ""),
+                    "length": effective_h,
+                    "width": effective_w,
+                })
+        
+        # 构建材料分类汇总
+        material_names = {
+            "main": "主面料",
+            "lining": "里布",
+            "interlining": "衬布",
+        }
+        
+        effective_fabric_width = fabric_width - 3
+        material_breakdown = {}
+        
+        for mat_type, area in material_areas.items():
+            from calculator_engine import simulate_nesting
+            mat_piece_dims = material_pieces.get(mat_type, [])
+            mat_nesting_result = simulate_nesting(mat_piece_dims, effective_fabric_width)
+            
+            base_length_cm = area / effective_fabric_width if effective_fabric_width > 0 else 0
+            nesting_util = mat_nesting_result["width_utilization"]
+            if nesting_util > 0:
+                adjusted_length_cm = base_length_cm / nesting_util
+            else:
+                adjusted_length_cm = base_length_cm
+            
+            mat_length_cm = adjusted_length_cm * (1 + wastage_rate / 100)
+            mat_length_m = mat_length_cm / 100
+            
+            material_breakdown[mat_type] = {
+                "name": material_names.get(mat_type, mat_type),
+                "area_cm2": round(area, 2),
+                "area_m2": round(area / 10000, 4),
+                "length_cm": round(mat_length_cm, 2),
+                "length_m": round(mat_length_m, 3),
+                "weight_g": round(area / 10000 * fabric_weight_gsm, 2) if fabric_weight_gsm > 0 else 0,
+                "weight_kg": round(area / 10000 * fabric_weight_gsm / 1000, 4) if fabric_weight_gsm > 0 else 0,
+                "width_utilization": mat_nesting_result["width_utilization"],
+            }
+        
+        # 警告信息
+        warnings = []
+        if fabric_width < 100:
+            warnings.append("面料门幅较窄（<100cm），可能导致用料增加")
+        if wastage_rate > 15:
+            warnings.append("损耗率设置较高（>15%），请确认是否合理")
+        if wastage_rate < 3:
+            warnings.append("损耗率设置较低（<3%），建议不低于5%")
+        if shrinkage_rate > 5:
+            warnings.append("缩水率设置较高（>5%），建议对面料进行预缩处理")
+        if quantity < 50:
+            warnings.append(f"订单数量较少（{quantity}件），小批量生产损耗可能偏高，建议在标准损耗基础上增加3%-6%")
         
         elapsed = time.time() - start_time
-        print(f"[API] 排料完成: 总长度{result['total_length_cm']:.2f}cm, 耗时{elapsed:.3f}秒")
+        print(f"[API] 排料完成: 总长度{nesting_result['total_length_cm']:.2f}cm, 耗时{elapsed:.3f}秒")
         
         return jsonify({
             "success": True,
             "data": {
-                "total_length_cm": result["total_length_cm"],
-                "width_utilization": result["width_utilization"],
-                "rows": result["rows"],
+                "params": {
+                    "fabric_width": fabric_width,
+                    "shrinkage_rate": shrinkage_rate,
+                    "wastage_rate": wastage_rate,
+                    "fabric_weight_gsm": fabric_weight_gsm,
+                    "quantity": quantity,
+                },
+                "total_length_cm": nesting_result["total_length_cm"],
+                "width_utilization": nesting_result["width_utilization"],
+                "rows": nesting_result["rows"],
+                "material_breakdown": material_breakdown,
+                "pieces_detail": pieces_detail,
+                "warnings": warnings,
             }
         })
     

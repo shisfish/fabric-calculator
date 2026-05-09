@@ -25,6 +25,8 @@ async function quickEstimate() {
         style_complexity: document.querySelector('input[name="complexity"]:checked')?.value || 'medium',
         fabric_width: parseFloat(document.getElementById('q-fabric-width').value) || 145,
         fabric_weight_gsm: parseFloat(document.getElementById('q-fabric-weight').value) || 0,
+        shrinkage_rate: parseFloat(document.getElementById('q-shrinkage-rate').value) || 3,
+        wastage_rate: parseFloat(document.getElementById('q-wastage-rate').value) || 8,
         quantity: parseInt(document.getElementById('q-quantity').value) || 1,
     };
 
@@ -58,103 +60,92 @@ async function quickEstimate() {
     }
 }
 
+const CATEGORY_NAMES = {
+    coat: "大衣",
+    down_jacket: "羽绒服",
+    jacket: "夹克",
+    windbreaker: "风衣",
+    cotton_padded: "棉服",
+    pants: "裤子",
+    skirt: "裙子",
+    shirt: "衬衫",
+    tshirt: "T恤",
+};
+
 function renderQuickResult(data) {
-    // 概览
-    const summaryCard = document.getElementById('quick-result-card');
-    const summary = document.getElementById('quick-result-summary');
-    summaryCard.style.display = 'block';
+    // 基本信息
+    const infoCard = document.getElementById('quick-result-info-card');
+    const infoGrid = document.getElementById('quick-result-info-grid');
+    infoCard.style.display = 'block';
 
-    summary.innerHTML = `
-        <div class="result-summary">
-            <div class="main-label">单件主面料用量</div>
-            <div class="main-value">${data.main_fabric.per_piece_length_m} 米</div>
-            <div class="sub-values">
-                <div class="sub-item">
-                    <div class="sub-label">总用料长度</div>
-                    <div class="sub-value">${data.main_fabric.total_length_m} 米</div>
+    const params = data.params || {};
+    infoGrid.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">服装品类</span>
+            <strong style="font-size:14px;">${CATEGORY_NAMES[params.category] || params.category || '-'}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">面料门幅</span>
+            <strong style="font-size:14px;">${params.fabric_width} cm</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">订单数量</span>
+            <strong style="font-size:14px;">${params.quantity} 件</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">缩水率</span>
+            <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">损耗率</span>
+            <strong style="font-size:14px;">${params.wastage_rate}%</strong>
+        </div>
+        ${params.fabric_weight_gsm ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">面料克重</span>
+            <strong style="font-size:14px;">${params.fabric_weight_gsm} g/m²</strong>
+        </div>
+        ` : ''}
+    `;
+
+    // 材料分类汇总
+    const matCards = document.getElementById('quick-result-material-cards');
+    const matContent = document.getElementById('quick-material-cards-content');
+    matCards.style.display = 'block';
+
+    const matBreakdown = data.material_breakdown || {};
+    matContent.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
+        <div class="card" style="border-left:4px solid #3b82f6;margin:0;">
+            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
+                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
                 </div>
-                <div class="sub-item">
-                    <div class="sub-label">面料利用率</div>
-                    <div class="sub-value">${data.utilization_rate}%</div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
+                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
                 </div>
-                <div class="sub-item">
-                    <div class="sub-label">损耗率</div>
-                    <div class="sub-value">${data.wastage_rate}%</div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
+                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
                 </div>
-                <div class="sub-item">
-                    <div class="sub-label">缩水率</div>
-                    <div class="sub-value">${data.shrinkage_rate}%</div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
+                    <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
                 </div>
             </div>
         </div>
-    `;
+    `).join('');
 
-    // 明细
-    const detailCard = document.getElementById('quick-detail-card');
-    const detailContent = document.getElementById('quick-detail-content');
-    detailCard.style.display = 'block';
-
-    let detailHTML = `
-        <div class="quick-detail-section">
-            <h4>🧵 主面料</h4>
-            <div class="quick-detail-row">
-                <span>单件用量</span>
-                <strong>${data.main_fabric.per_piece_length_m} 米</strong>
-            </div>
-            <div class="quick-detail-row">
-                <span>总用量 (${data.params.quantity}件)</span>
-                <strong>${data.main_fabric.total_length_m} 米</strong>
-            </div>
-            ${data.main_fabric.total_weight_kg > 0 ? `
-            <div class="quick-detail-row">
-                <span>面料总重</span>
-                <strong>${data.main_fabric.total_weight_kg} kg</strong>
-            </div>
-            ` : ''}
-        </div>
-    `;
-
-    if (data.lining) {
-        detailHTML += `
-            <div class="quick-detail-section">
-                <h4>🪡 里布</h4>
-                <div class="quick-detail-row">
-                    <span>单件用量</span>
-                    <strong>${data.lining.per_piece_length_m} 米</strong>
-                </div>
-                <div class="quick-detail-row">
-                    <span>总用量 (${data.params.quantity}件)</span>
-                    <strong>${data.lining.total_length_m} 米</strong>
-                </div>
-            </div>
-        `;
-    }
-
-    if (data.filling_fabric) {
-        detailHTML += `
-            <div class="quick-detail-section">
-                <h4>🧶 胆料（双层）</h4>
-                <div class="quick-detail-row">
-                    <span>单件用量</span>
-                    <strong>${data.filling_fabric.per_piece_length_m} 米</strong>
-                </div>
-                <div class="quick-detail-row">
-                    <span>总用量 (${data.params.quantity}件)</span>
-                    <strong>${data.filling_fabric.total_length_m} 米</strong>
-                </div>
-            </div>
-        `;
-    }
-
+    // 警告信息
+    const warningsEl = document.getElementById('quick-result-warnings');
     if (data.warnings && data.warnings.length > 0) {
-        detailHTML += `<div class="warnings">`;
-        data.warnings.forEach(w => {
-            detailHTML += `<div class="warning-item">⚠️ ${w}</div>`;
-        });
-        detailHTML += `</div>`;
+        warningsEl.style.display = 'block';
+        warningsEl.innerHTML = data.warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
+    } else {
+        warningsEl.style.display = 'none';
     }
-
-    detailContent.innerHTML = detailHTML;
 }
 
 function showLoading(show) {

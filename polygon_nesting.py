@@ -175,6 +175,9 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
             "count": count,
             "color": piece.get("color", "#007bff"),
             "shape": piece.get("shape", "rectangle"),
+            "shoulder_width": piece.get("shoulder_width", 0),
+            "sleeve_cap_width": piece.get("sleeve_cap_width", 0),
+            "cuff_width": piece.get("cuff_width", 0),
         })
     
     if not processed_pieces:
@@ -216,6 +219,9 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
                         "height": piece_template["height"],
                         "color": piece_template["color"],
                         "shape": piece_template["shape"],
+                        "shoulder_width": piece_template["shoulder_width"],
+                        "sleeve_cap_width": piece_template["sleeve_cap_width"],
+                        "cuff_width": piece_template["cuff_width"],
                     })
                 
                 row["used_width_cm"] = start_x + fit_count * (piece_template["width"] + seam_gap_cm) - seam_gap_cm
@@ -239,6 +245,9 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
                         "height": piece_template["height"],
                         "color": piece_template["color"],
                         "shape": piece_template["shape"],
+                        "shoulder_width": piece_template["shoulder_width"],
+                        "sleeve_cap_width": piece_template["sleeve_cap_width"],
+                        "cuff_width": piece_template["cuff_width"],
                     })
                 
                 rows.append({

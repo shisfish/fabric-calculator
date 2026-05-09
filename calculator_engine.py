@@ -322,7 +322,6 @@ def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
 
     # 转换结果格式
     rows = []
-    piece_idx_map = {p[5]: p for p in pieces}  # 按索引映射
 
     for bin in packer:
         for rect in bin:
@@ -797,6 +796,8 @@ class FabricCalculator:
         has_hood = data.get("has_hood", False)
         has_lining = data.get("has_lining", True)
         style_complexity = data.get("style_complexity", "medium")
+        shrinkage_rate = float(data.get("shrinkage_rate", 3))
+        wastage_rate = float(data.get("wastage_rate", 8))
 
         # ===== 输入校验 =====
         if garment_length < 10 or garment_length > 300:
@@ -841,12 +842,7 @@ class FabricCalculator:
         total_area_with_seam = total_area * (1 + seam_allowance * 2 / min(garment_length, 1))
 
         # 加缩水和损耗
-        shrinkage = cat_config["default_shrinkage"]
-        wastage = cat_config["default_wastage"]
-        if quantity < 50:
-            wastage += 4
-
-        total_area_final = total_area_with_seam * (1 + shrinkage / 100) * (1 + wastage / 100) * complexity_factor
+        total_area_final = total_area_with_seam * (1 + shrinkage_rate / 100) * (1 + wastage_rate / 100) * complexity_factor
 
         # 计算用料长度
         effective_width = fabric_width - 3
@@ -869,16 +865,66 @@ class FabricCalculator:
         if category == "down_jacket":
             filling_fabric_length_m = per_piece_length_m * 1.4
 
+        # 构建材料分类汇总
+        material_breakdown = {
+            "main": {
+                "name": "主面料",
+                "area_cm2": round(total_area_final, 2),
+                "area_m2": round(total_area_final / 10000, 4),
+                "length_cm": round(fabric_length_cm, 2),
+                "length_m": round(per_piece_length_m, 3),
+                "weight_g": round(total_area_final / 10000 * fabric_weight_gsm, 2) if fabric_weight_gsm > 0 else 0,
+                "weight_kg": round(fabric_weight_kg, 4),
+                "width_utilization": utilization,
+            }
+        }
+
+        if has_lining:
+            lining_area = total_area_final * 0.75
+            lining_length_cm = fabric_length_cm * 0.75
+            material_breakdown["lining"] = {
+                "name": "里布",
+                "area_cm2": round(lining_area, 2),
+                "area_m2": round(lining_area / 10000, 4),
+                "length_cm": round(lining_length_cm, 2),
+                "length_m": round(lining_length_m, 3),
+                "weight_g": 0,
+                "weight_kg": 0,
+                "width_utilization": utilization,
+            }
+
+        if category == "down_jacket":
+            filling_area = total_area_final * 1.4
+            filling_length_cm = fabric_length_cm * 1.4
+            material_breakdown["filling_fabric"] = {
+                "name": "胆料（双层）",
+                "area_cm2": round(filling_area, 2),
+                "area_m2": round(filling_area / 10000, 4),
+                "length_cm": round(filling_length_cm, 2),
+                "length_m": round(filling_fabric_length_m, 3),
+                "weight_g": 0,
+                "weight_kg": 0,
+                "width_utilization": utilization,
+            }
+
+        # 警告信息
         warnings = []
         if quantity < 50:
             warnings.append(f"小批量生产（{quantity}件），建议损耗率增加3%-6%")
         if style_complexity == "complex":
             warnings.append("复杂款式，建议实际打板后复核用量")
+        if fabric_width < 100:
+            warnings.append("面料门幅较窄（<100cm），可能导致用料增加")
+        if wastage_rate > 15:
+            warnings.append("损耗率设置较高（>15%），请确认是否合理")
+        if shrinkage_rate > 5:
+            warnings.append("缩水率设置较高（>5%），建议对面料进行预缩处理")
 
         return {
             "method": "快速估算（经验公式法）",
             "category": cat_config["name"],
             "params": {
+                "category": category,
                 "garment_length": garment_length,
                 "chest": chest,
                 "shoulder": shoulder,
@@ -888,27 +934,12 @@ class FabricCalculator:
                 "style_complexity": style_complexity,
                 "fabric_width": fabric_width,
                 "fabric_weight_gsm": fabric_weight_gsm,
+                "shrinkage_rate": shrinkage_rate,
+                "wastage_rate": wastage_rate,
                 "quantity": quantity,
             },
-            "main_fabric": {
-                "name": "主面料",
-                "per_piece_length_m": round(per_piece_length_m, 3),
-                "total_length_m": round(per_piece_length_m * quantity, 2),
-                "total_weight_kg": round(fabric_weight_kg, 3),
-            },
-            "lining": {
-                "name": "里布",
-                "per_piece_length_m": round(lining_length_m, 3),
-                "total_length_m": round(lining_length_m * quantity, 2),
-            } if has_lining else None,
-            "filling_fabric": {
-                "name": "胆料（双层）",
-                "per_piece_length_m": round(filling_fabric_length_m, 3),
-                "total_length_m": round(filling_fabric_length_m * quantity, 2),
-            } if category == "down_jacket" else None,
-            "utilization_rate": round(utilization * 100, 1),
-            "shrinkage_rate": shrinkage,
-            "wastage_rate": wastage,
+            "material_breakdown": material_breakdown,
+            "pieces_detail": [],
             "warnings": warnings,
         }
 
