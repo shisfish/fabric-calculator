@@ -143,14 +143,14 @@ def polygon_width_height(points):
 # 多边形排料算法
 # ============================================================
 
-def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
+def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     """
     多边形排料算法 - 简化高效版本
     
     策略：
     1. 按裁片类型分组，批量放置
     2. 简单行式排料，快速计算
-    3. 不存储顶点数据，前端自行生成
+    3. 自动尝试旋转90度，选择最优方向
     """
     import time
     start_time = time.time()
@@ -167,7 +167,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
         
         if w <= 0 or h <= 0:
             continue
-            
+        
         processed_pieces.append({
             "name": piece.get("name", ""),
             "width": w,
@@ -193,71 +193,120 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
         total_area += piece_template["width"] * piece_template["height"] * piece_template["count"]
         remaining = piece_template["count"]
         
+        # 准备两种方向：原始和旋转90度
+        # 优先选择能放入门幅的方向
+        orientations = []
+        
+        # 检查原始方向是否能放入门幅
+        orig_fits = piece_template["width"] + seam_gap_cm * 2 <= fabric_width_cm
+        # 检查旋转方向是否能放入门幅
+        rot_fits = piece_template["height"] + seam_gap_cm * 2 <= fabric_width_cm
+        
+        if orig_fits:
+            orientations.append({
+                "width": piece_template["width"],
+                "height": piece_template["height"],
+                "rotated": False,
+            })
+        
+        if rotation and abs(piece_template["width"] - piece_template["height"]) > 0.01 and rot_fits:
+            orientations.append({
+                "width": piece_template["height"],
+                "height": piece_template["width"],
+                "rotated": True,
+            })
+        
+        # 如果两个方向都放不下，添加原始方向（会触发警告）
+        if not orientations:
+            orientations.append({
+                "width": piece_template["width"],
+                "height": piece_template["height"],
+                "rotated": False,
+            })
+        
         while remaining > 0:
             placed = False
             
-            # 尝试放入已有行
-            for row in rows:
-                if piece_template["height"] > row["height"] + 0.01:
-                    continue
+            # 尝试每种方向
+            for orient in orientations:
+                if placed:
+                    break
                 
-                # 计算能放几个
-                available_width = fabric_width_cm - row["used_width_cm"] - seam_gap_cm
-                if available_width < piece_template["width"] + seam_gap_cm:
-                    continue
+                # 尝试放入已有行
+                for row in rows:
+                    if orient["height"] > row["height"] + 0.01:
+                        continue
+                    
+                    # 计算能放几个
+                    available_width = fabric_width_cm - row["used_width_cm"] - seam_gap_cm
+                    if available_width < orient["width"] + seam_gap_cm:
+                        continue
+                    
+                    can_fit = int(available_width / (orient["width"] + seam_gap_cm))
+                    fit_count = min(can_fit, remaining)
+                    
+                    start_x = row["used_width_cm"] + seam_gap_cm
+                    for i in range(fit_count):
+                        row["pieces"].append({
+                            "name": piece_template["name"],
+                            "x": start_x + i * (orient["width"] + seam_gap_cm),
+                            "y": 0,
+                            "width": orient["width"],
+                            "height": orient["height"],
+                            "color": piece_template["color"],
+                            "shape": piece_template["shape"],
+                            "shoulder_width": piece_template["shoulder_width"],
+                            "sleeve_cap_width": piece_template["sleeve_cap_width"],
+                            "cuff_width": piece_template["cuff_width"],
+                            "rotated": orient["rotated"],
+                        })
+                    
+                    row["used_width_cm"] = start_x + fit_count * (orient["width"] + seam_gap_cm) - seam_gap_cm
+                    row["pieces_count"] += fit_count
+                    remaining -= fit_count
+                    placed = True
+                    break
                 
-                can_fit = int(available_width / (piece_template["width"] + seam_gap_cm))
-                fit_count = min(can_fit, remaining)
-                
-                start_x = row["used_width_cm"] + seam_gap_cm
-                for i in range(fit_count):
-                    row["pieces"].append({
-                        "name": piece_template["name"],
-                        "x": start_x + i * (piece_template["width"] + seam_gap_cm),
-                        "y": 0,
-                        "width": piece_template["width"],
-                        "height": piece_template["height"],
-                        "color": piece_template["color"],
-                        "shape": piece_template["shape"],
-                        "shoulder_width": piece_template["shoulder_width"],
-                        "sleeve_cap_width": piece_template["sleeve_cap_width"],
-                        "cuff_width": piece_template["cuff_width"],
+                # 如果还没放置，尝试新建行
+                if not placed:
+                    can_fit = int((fabric_width_cm - seam_gap_cm * 2) / (orient["width"] + seam_gap_cm))
+                    fit_count = min(can_fit, remaining) if can_fit > 0 else 1
+                    
+                    # 检查是否能放入门幅
+                    if orient["width"] + seam_gap_cm * 2 > fabric_width_cm:
+                        continue  # 这个方向放不下，尝试下一个方向
+                    
+                    row_pieces = []
+                    for i in range(fit_count):
+                        row_pieces.append({
+                            "name": piece_template["name"],
+                            "x": seam_gap_cm + i * (orient["width"] + seam_gap_cm),
+                            "y": 0,
+                            "width": orient["width"],
+                            "height": orient["height"],
+                            "color": piece_template["color"],
+                            "shape": piece_template["shape"],
+                            "shoulder_width": piece_template["shoulder_width"],
+                            "sleeve_cap_width": piece_template["sleeve_cap_width"],
+                            "cuff_width": piece_template["cuff_width"],
+                            "rotated": orient["rotated"],
+                        })
+                    
+                    rows.append({
+                        "height": orient["height"],
+                        "length_cm": orient["height"],
+                        "used_width_cm": seam_gap_cm + fit_count * (orient["width"] + seam_gap_cm) - seam_gap_cm,
+                        "pieces_count": fit_count,
+                        "pieces": row_pieces,
                     })
-                
-                row["used_width_cm"] = start_x + fit_count * (piece_template["width"] + seam_gap_cm) - seam_gap_cm
-                row["pieces_count"] += fit_count
-                remaining -= fit_count
-                placed = True
-                break
+                    remaining -= fit_count
+                    placed = True
+                    break
             
-            # 新建行
+            # 如果所有方向都试过了还是放不下
             if not placed:
-                can_fit = int((fabric_width_cm - seam_gap_cm * 2) / (piece_template["width"] + seam_gap_cm))
-                fit_count = min(can_fit, remaining) if can_fit > 0 else 1
-                
-                row_pieces = []
-                for i in range(fit_count):
-                    row_pieces.append({
-                        "name": piece_template["name"],
-                        "x": seam_gap_cm + i * (piece_template["width"] + seam_gap_cm),
-                        "y": 0,
-                        "width": piece_template["width"],
-                        "height": piece_template["height"],
-                        "color": piece_template["color"],
-                        "shape": piece_template["shape"],
-                        "shoulder_width": piece_template["shoulder_width"],
-                        "sleeve_cap_width": piece_template["sleeve_cap_width"],
-                        "cuff_width": piece_template["cuff_width"],
-                    })
-                
-                rows.append({
-                    "height": piece_template["height"],
-                    "length_cm": piece_template["height"],
-                    "used_width_cm": seam_gap_cm + fit_count * (piece_template["width"] + seam_gap_cm) - seam_gap_cm,
-                    "pieces_count": fit_count,
-                    "pieces": row_pieces,
-                })
-                remaining -= fit_count
+                print(f"[排料警告] 裁片 {piece_template['name']} ({piece_template['width']}x{piece_template['height']}) 无法放入门幅 {fabric_width_cm}cm")
+                break
     
     total_length = sum(row["length_cm"] for row in rows)
     total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
