@@ -105,11 +105,56 @@
                     </div>
                     <div class="column">
                         <div class="card" id="quick-detail-card">
-                            <h3>📐 材料用量明细</h3>
+                            <h3> 材料用量明细</h3>
                             <div id="quick-detail-content">
                                 <!-- 动态生成 -->
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 多边形排料结果区域 -->
+            <div id="polygon-result-area" style="display:none;">
+                <!-- 材料分类汇总（卡片展示） -->
+                <div class="section">
+                    <h3>📦 材料分类汇总</h3>
+                    <div id="polygon-material-cards" style="display:flex;flex-direction:column;gap:12px;">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 警告信息 -->
+                <div class="warnings" id="polygon-warnings" style="display:none;">
+                    <!-- 动态生成 -->
+                </div>
+
+                <!-- 排料图 -->
+                <div class="section">
+                    <h3>📐 排料图</h3>
+                    <div id="polygon-nesting-images" style="display:flex;flex-direction:column;gap:16px;">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 裁片明细 -->
+                <div class="section">
+                    <h3>✂️ 裁片明细</h3>
+                    <div class="table-container">
+                        <table class="data-table" id="polygon-pieces-table">
+                            <thead>
+                                <tr>
+                                    <th>裁片名称</th>
+                                    <th>原始尺寸(cm)</th>
+                                    <th>含缝份(cm)</th>
+                                    <th>数量</th>
+                                    <th>面积(cm²)</th>
+                                    <th>含缩水面积(cm²)</th>
+                                    <th>材料</th>
+                                </tr>
+                            </thead>
+                            <tbody id="polygon-pieces-tbody"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>

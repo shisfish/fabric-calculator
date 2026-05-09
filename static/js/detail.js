@@ -42,8 +42,9 @@ function renderDetail(record) {
 
     const isPrecise = record.type === 'precise';
     const isCurved = record.type === 'curved';
+    const isPolygon = record.type === 'polygon';
     currentRecordType = record.type || 'precise';
-    const typeLabel = isCurved ? '曲线计算' : (isPrecise ? '精确计算' : '快速估算');
+    const typeLabel = isCurved ? '曲线计算' : (isPrecise ? '精确计算' : (isPolygon ? '多边形排料' : '快速估算'));
     const categoryName = DictManager.getCategoryName(record.category, record.category);
 
     document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
@@ -55,10 +56,12 @@ function renderDetail(record) {
     document.getElementById('btn-export').style.display = '';
     document.getElementById('btn-quotation').style.display = '';
 
-    renderInfoCardCompact(record, isPrecise || isCurved, categoryName);
+    renderInfoCardCompact(record, isPrecise || isCurved || isPolygon, categoryName);
 
     if (isCurved || isPrecise) {
         renderPreciseResult(record);
+    } else if (isPolygon) {
+        renderPolygonResult(record);
     } else {
         renderQuickResult(record);
     }
@@ -348,4 +351,86 @@ function renderQuickResult(record) {
         </div>
     `;
     area.innerHTML = resultHtml;
+}
+
+function renderPolygonResult(record) {
+    const area = document.getElementById('polygon-result-area');
+    area.style.display = 'block';
+
+    const fullResult = record.full_result;
+    if (!fullResult) {
+        area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
+        return;
+    }
+
+    // 材料分类汇总
+    const matCards = document.getElementById('polygon-material-cards');
+    const matBreakdown = fullResult.material_breakdown || {};
+    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
+        <div class="card" style="border-left:4px solid #3b82f6;">
+            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
+                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
+                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
+                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
+                    <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    // 警告信息
+    const warningsEl = document.getElementById('polygon-warnings');
+    if (fullResult.warnings && fullResult.warnings.length > 0) {
+        warningsEl.style.display = 'block';
+        warningsEl.innerHTML = fullResult.warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
+    } else {
+        warningsEl.style.display = 'none';
+    }
+
+    // 排料图
+    const nestingImagesEl = document.getElementById('polygon-nesting-images');
+    const nestingImages = fullResult.nesting_images || [];
+    if (nestingImages.length > 0) {
+        nestingImagesEl.innerHTML = nestingImages.map(img => `
+            <div class="card" style="padding:16px;">
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.material_name} 排料图</div>
+                <img src="${img.file_path}" alt="${img.material_name}排料图" style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;">
+            </div>
+        `).join('');
+    } else {
+        nestingImagesEl.innerHTML = '<p style="color:var(--text-secondary);">暂无排料图</p>';
+    }
+
+    // 裁片明细
+    const piecesTbody = document.getElementById('polygon-pieces-tbody');
+    const pieces = fullResult.pieces_detail || [];
+    const materialNames = {
+        'main': '主面料',
+        'lining': '里布',
+        'interlining': '衬布',
+    };
+
+    piecesTbody.innerHTML = pieces.map(p => `
+        <tr>
+            <td>${p.name}</td>
+            <td>${p.original_length} × ${p.original_width}</td>
+            <td>${p.effective_length} × ${p.effective_width}</td>
+            <td>${p.count}</td>
+            <td>${p.area_cm2}</td>
+            <td>${p.area_with_shrinkage_cm2}</td>
+            <td>${DictManager.getMaterialName(p.material, p.material)}</td>
+        </tr>
+    `).join('');
 }

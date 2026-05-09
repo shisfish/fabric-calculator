@@ -614,6 +614,77 @@ def api_polygon_nesting():
         elapsed = time.time() - start_time
         print(f"[API] 排料完成: 总长度{nesting_result['total_length_cm']:.2f}cm, 耗时{elapsed:.3f}秒")
         
+        # 生成记录ID
+        record_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        
+        # 生成排料图并保存到历史记录
+        try:
+            from image_generator import generate_nesting_image
+            
+            nesting_images = []
+            for idx, (mat_type, breakdown) in enumerate(material_breakdown.items()):
+                mat_piece_details_list = material_pieces.get(mat_type, [])
+                mat_nesting_result = simulate_nesting(mat_piece_details_list, effective_fabric_width)
+                
+                img_result = generate_nesting_image(
+                    material_name=breakdown["name"],
+                    rows=mat_nesting_result["rows"],
+                    fabric_width_cm=effective_fabric_width,
+                    total_length_cm=breakdown["length_cm"],
+                    width_utilization=mat_nesting_result["width_utilization"],
+                    save_to_file=True,
+                    history_id=record_id,
+                    image_order=idx,
+                )
+                nesting_images.append({
+                    "material": mat_type,
+                    "material_name": breakdown["name"],
+                    "image_base64": img_result["base64"],
+                    "file_path": img_result["file_path"],
+                })
+        except Exception as e:
+            print(f"保存排料图失败: {e}")
+            nesting_images = []
+        
+        # 保存到历史记录
+        record = {
+            "id": record_id,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type": "polygon",
+            "category": "custom",
+            "params": {
+                "fabric_width": fabric_width,
+                "shrinkage_rate": shrinkage_rate,
+                "wastage_rate": wastage_rate,
+                "fabric_weight_gsm": fabric_weight_gsm,
+                "quantity": quantity,
+            },
+            "result": {
+                "per_piece_length_m": round(nesting_result["total_length_cm"] / 100, 3),
+                "total_area_m2": round(sum(m["area_m2"] for m in material_breakdown.values()), 4),
+                "utilization_rate": round(nesting_result["width_utilization"] * 100, 1),
+                "fabric_weight_kg": round(sum(m["weight_kg"] for m in material_breakdown.values()), 4),
+            },
+            "input_data": data,
+            "full_result": {
+                "params": {
+                    "fabric_width": fabric_width,
+                    "shrinkage_rate": shrinkage_rate,
+                    "wastage_rate": wastage_rate,
+                    "fabric_weight_gsm": fabric_weight_gsm,
+                    "quantity": quantity,
+                },
+                "total_length_cm": nesting_result["total_length_cm"],
+                "width_utilization": nesting_result["width_utilization"],
+                "rows": nesting_result["rows"],
+                "material_breakdown": material_breakdown,
+                "pieces_detail": pieces_detail,
+                "warnings": warnings,
+                "nesting_images": nesting_images,
+            },
+        }
+        db_manager.save_record(record)
+        
         return jsonify({
             "success": True,
             "data": {
@@ -630,6 +701,7 @@ def api_polygon_nesting():
                 "material_breakdown": material_breakdown,
                 "pieces_detail": pieces_detail,
                 "warnings": warnings,
+                "nesting_images": nesting_images,
             }
         })
     

@@ -162,6 +162,9 @@ class DatabaseManager:
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record['id'],))
                 pieces = record.get('input_data', {}).get('pieces', [])
                 for p in pieces:
+                    # 兼容多边形排料：pieces 中可能是 width/height 格式
+                    length_val = p.get('length') or p.get('height')
+                    width_val = p.get('width')
                     cursor.execute("""
                         INSERT INTO history_pieces
                         (history_id, piece_name, original_length, original_width,
@@ -171,8 +174,8 @@ class DatabaseManager:
                     """, (
                         record['id'],
                         p.get('name', ''),
-                        p.get('length'),
-                        p.get('width'),
+                        length_val,
+                        width_val,
                         p.get('count', 1),
                         p.get('shape', ''),
                         p.get('material', ''),

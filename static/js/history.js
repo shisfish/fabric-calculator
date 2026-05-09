@@ -73,11 +73,13 @@ function renderHistory(records) {
     }
 
     tbody.innerHTML = records.map(record => {
-        const typeLabels = { quick: '快速估算', precise: '精确计算', curved: '曲线计算' };
+        const typeLabels = { quick: '快速估算', precise: '精确计算', curved: '曲线计算', polygon: '多边形排料' };
         const typeBadge = record.type === 'quick'
             ? '<span class="badge" style="background:#fef3c7;color:#d97706;">快速估算</span>'
             : record.type === 'curved'
             ? '<span class="badge" style="background:#ede9fe;color:#7c3aed;">曲线计算</span>'
+            : record.type === 'polygon'
+            ? '<span class="badge" style="background:#dbeafe;color:#2563eb;">多边形排料</span>'
             : '<span class="badge">精确计算</span>';
 
         let paramsStr = '';
