@@ -305,23 +305,23 @@
 
             tbody.innerHTML = categoryDetail.pieces.map((piece, idx) => `
                 <tr data-piece-id="${piece.id}">
-                    <td><input type="text" class="inline-input" value="${piece.name}" data-field="name"></td>
-                    <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="length" step="0.5" min="0"></td>
-                    <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="width" step="0.5" min="0"></td>
+                    <td><input type="text" class="inline-input" value="${piece.name}" data-field="name" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="length" step="0.5" min="0" oninput="refreshPreview()"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="width" step="0.5" min="0" oninput="refreshPreview()"></td>
                     <td>
-                        <input type="number" class="inline-input inline-input-sm" value="${getDefaultCount(piece.id)}" data-field="count" min="1" step="1">
+                        <input type="number" class="inline-input inline-input-sm" value="${getDefaultCount(piece.id)}" data-field="count" min="1" step="1" oninput="refreshPreview()">
                     </td>
                     <td>
-                        <select class="inline-input" data-field="shape">
+                        <select class="inline-input" data-field="shape" onchange="refreshPreview()">
                             ${SHAPE_OPTIONS.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}
                         </select>
                     </td>
                     <td>
-                        <select class="inline-input" data-field="material">
+                        <select class="inline-input" data-field="material" onchange="refreshPreview()">
                             ${MATERIAL_OPTIONS.map(m => `<option value="${m.value}" ${m.value === 'main' ? 'selected' : ''}>${m.label}</option>`).join('')}
                         </select>
                     </td>
-                    <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0"></td>
+                    <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0" oninput="refreshPreview()"></td>
                     <td>
                         <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
                     </td>
@@ -353,21 +353,21 @@
 
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td><input type="text" class="inline-input" placeholder="裁片名称" data-field="name"></td>
-                <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="length" step="0.5" min="0"></td>
-                <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="width" step="0.5" min="0"></td>
-                <td><input type="number" class="inline-input inline-input-sm" value="1" data-field="count" min="1" step="1"></td>
+                <td><input type="text" class="inline-input" placeholder="裁片名称" data-field="name" oninput="refreshPreview()"></td>
+                <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="length" step="0.5" min="0" oninput="refreshPreview()"></td>
+                <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="width" step="0.5" min="0" oninput="refreshPreview()"></td>
+                <td><input type="number" class="inline-input inline-input-sm" value="1" data-field="count" min="1" step="1" oninput="refreshPreview()"></td>
                 <td>
-                    <select class="inline-input" data-field="shape">
+                    <select class="inline-input" data-field="shape" onchange="refreshPreview()">
                         ${SHAPE_OPTIONS.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}
                     </select>
                 </td>
                 <td>
-                    <select class="inline-input" data-field="material">
+                    <select class="inline-input" data-field="material" onchange="refreshPreview()">
                         ${MATERIAL_OPTIONS.map(m => `<option value="${m.value}">${m.label}</option>`).join('')}
                     </select>
                 </td>
-                <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0"></td>
+                <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0" oninput="refreshPreview()"></td>
                 <td>
                     <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
                 </td>
@@ -542,11 +542,11 @@
                 <div><span class="info-label">裁片总数</span><span class="info-value">${totalCount}</span></div>
             `;
 
-            drawNesting(data.rows, fabricWidth);
+            drawNesting(data.rows, fabricWidth, data.width_utilization);
             updatePiecesTable(data.rows);
         }
 
-        function drawNesting(rows, fabricWidth) {
+        function drawNesting(rows, fabricWidth, widthUtilization) {
             const canvas = document.getElementById('nesting-canvas');
             const ctx = canvas.getContext('2d');
 
@@ -630,7 +630,7 @@
             ctx.fillStyle = '#333';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`总长度: ${(totalHeight).toFixed(2)}cm | 利用率: ${(data.width_utilization * 100).toFixed(2)}%`,
+            ctx.fillText(`总长度: ${(totalHeight).toFixed(2)}cm | 利用率: ${(widthUtilization * 100).toFixed(2)}%`,
                 padding + fabricWidth * scale / 2, canvas.height - 10);
         }
 
