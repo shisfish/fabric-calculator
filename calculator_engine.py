@@ -8,8 +8,8 @@ import math
 import json
 import os
 
-# rectpack 矩形排料库
-from rectpack import newPacker, MaxRectsBssf, GuillotineBssf, SkylineBl
+# rectpack 矩形排料库（仅导入实际使用的模块）
+from rectpack import newPacker, MaxRectsBssf
 
 # ============================================================
 # 品类配置数据
