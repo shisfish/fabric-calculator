@@ -15,56 +15,89 @@
         <div class="steps">
             <div class="step active" data-step="1">
                 <div class="step-number">1</div>
-                <div class="step-text">设置参数</div>
+                <div class="step-text">选择品类</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="2">
                 <div class="step-number">2</div>
-                <div class="step-text">录入裁片</div>
+                <div class="step-text">设置参数</div>
             </div>
             <div class="step-line"></div>
             <div class="step" data-step="3">
                 <div class="step-number">3</div>
+                <div class="step-text">录入裁片</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="4">
+                <div class="step-number">4</div>
                 <div class="step-text">查看结果</div>
             </div>
         </div>
 
-        <!-- Step 1: 设置参数 -->
+        <!-- Step 1: 选择品类 -->
         <div class="panel active" id="panel-1">
-            <h2>设置面料参数</h2>
-            <p class="panel-desc">配置面料门幅和其他计算参数</p>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>面料门幅 (cm)</label>
-                    <input type="number" id="fabric-width" value="140" step="1" min="60" max="300">
-                    <span class="form-hint">常见门幅：140/145/148/150cm</span>
-                </div>
-                <div class="form-group">
-                    <label>裁片间隙 (cm)</label>
-                    <input type="number" id="seam-gap" value="0.5" step="0.1" min="0" max="5">
-                    <span class="form-hint">裁片之间的最小间距</span>
-                </div>
-                <div class="form-group">
-                    <label>是否允许旋转</label>
-                    <select id="allow-rotation">
-                        <option value="true">允许（利用率更高）</option>
-                        <option value="false">不允许</option>
-                    </select>
-                </div>
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-primary" onclick="goStep(2)">下一步：录入裁片</button>
+            <h2>选择服装品类</h2>
+            <p class="panel-desc">请选择要计算的服装类型，系统将自动加载对应的裁片模板</p>
+            <div class="category-grid" id="category-grid">
+                <!-- 动态加载 -->
             </div>
         </div>
 
-        <!-- Step 2: 录入裁片 -->
+        <!-- Step 2: 设置参数 -->
         <div class="panel" id="panel-2">
+            <h2>设置面料与工艺参数</h2>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>面料门幅 (cm)</label>
+                    <input type="number" id="fabric-width" value="145" step="1" min="60" max="300">
+                    <span class="form-hint">常见门幅：140/145/148/150cm</span>
+                </div>
+                <div class="form-group">
+                    <label>面料克重 (g/m²)</label>
+                    <input type="number" id="fabric-weight" value="300" step="10" min="0">
+                    <span class="form-hint">留空则不计算重量</span>
+                </div>
+                <div class="form-group">
+                    <label>面料类型</label>
+                    <select id="fabric-type">
+                        <option value="woven">梭织面料</option>
+                        <option value="knit">针织面料</option>
+                        <option value="down_shell">羽绒服面料</option>
+                        <option value="lining">里布</option>
+                        <option value="interlining">衬布/粘合衬</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>缩水率 (%)</label>
+                    <input type="number" id="shrinkage-rate" value="3" step="0.5" min="0" max="20">
+                    <span class="form-hint">棉布3-5%，化纤1-3%，毛呢2-4%</span>
+                </div>
+                <div class="form-group">
+                    <label>损耗率 (%)</label>
+                    <input type="number" id="wastage-rate" value="8" step="0.5" min="0" max="30">
+                    <span class="form-hint">梭织5-6%，针织6-8%，复杂款8-12%</span>
+                </div>
+                <div class="form-group">
+                    <label>订单数量 (件)</label>
+                    <input type="number" id="quantity" value="100" step="1" min="1">
+                    <span class="form-hint">小批量(<50件)建议增加损耗</span>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>
+                <button class="btn btn-primary" onclick="goStep(3)">下一步：录入裁片</button>
+            </div>
+        </div>
+
+        <!-- Step 3: 录入裁片 -->
+        <div class="panel" id="panel-3">
             <h2>录入裁片数据</h2>
-            <p class="panel-desc">添加多边形裁片，支持矩形、单切角、双切角等形状</p>
+            <p class="panel-desc">手动填写各分片测量数据，支持多边形裁片（矩形、单切角、双切角）。</p>
 
             <div class="toolbar">
                 <button class="btn btn-sm btn-outline" onclick="addPiece()">+ 添加裁片</button>
                 <button class="btn btn-sm btn-outline" onclick="resetPieces()">重置</button>
+                <span class="toolbar-hint">💡 提示：长度和宽度为裁片平铺后的最大尺寸（含缝份请额外加1-2cm）</span>
             </div>
 
             <div class="table-container">
@@ -72,46 +105,17 @@
                     <thead>
                         <tr>
                             <th>裁片名称</th>
+                            <th>长度(cm)</th>
                             <th>宽度(cm)</th>
-                            <th>高度(cm)</th>
                             <th>数量</th>
-                            <th>形状类型</th>
-                            <th>颜色</th>
+                            <th>形状</th>
+                            <th>材料类型</th>
+                            <th>缝份(cm)</th>
                             <th>操作</th>
                         </tr>
                     </thead>
                     <tbody id="pieces-tbody">
-                        <!-- 默认裁片 -->
-                        <tr data-index="0">
-                            <td><input type="text" class="piece-name" value="前片"></td>
-                            <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
-                            <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
-                            <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                            <td>
-                                <select class="piece-type">
-                                    <option value="rectangle">矩形</option>
-                                    <option value="single_corner" selected>单切角</option>
-                                    <option value="double_corner">双切角</option>
-                                </select>
-                            </td>
-                            <td><input type="color" class="piece-color" value="#007bff" style="width:60px;"></td>
-                            <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                        </tr>
-                        <tr data-index="1">
-                            <td><input type="text" class="piece-name" value="后片"></td>
-                            <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
-                            <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
-                            <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                            <td>
-                                <select class="piece-type">
-                                    <option value="rectangle" selected>矩形</option>
-                                    <option value="single_corner">单切角</option>
-                                    <option value="double_corner">双切角</option>
-                                </select>
-                            </td>
-                            <td><input type="color" class="piece-color" value="#28a745" style="width:60px;"></td>
-                            <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                        </tr>
+                        <!-- 动态加载 -->
                     </tbody>
                 </table>
             </div>
@@ -127,28 +131,25 @@
             </div>
 
             <div class="btn-group">
-                <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>
-                <button class="btn btn-primary btn-large" onclick="calculateNesting()">📐 开始排料</button>
+                <button class="btn btn-secondary" onclick="goStep(2)">上一步</button>
+                <button class="btn btn-primary btn-large" onclick="calculateNesting()">📐 计算用量</button>
             </div>
         </div>
 
-        <!-- Step 3: 排料结果 -->
-        <div class="panel" id="panel-3">
+        <!-- Step 4: 计算结果 -->
+        <div class="panel" id="panel-4">
             <div class="result-actions-bar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
-                <button class="btn btn-secondary" onclick="goStep(2)">✏️ 返回修改</button>
+                <button class="btn btn-secondary" onclick="goStep(3)">✏️ 返回修改</button>
                 <button class="btn btn-outline" onclick="exportResult()">📥 导出结果</button>
             </div>
 
-            <h2>排料结果</h2>
+            <h2>计算结果</h2>
 
             <!-- 基本信息卡片 -->
             <div class="card" id="result-info-card" style="margin-bottom:20px;">
-                <h3>📋 排料统计</h3>
+                <h3>📋 基本信息</h3>
                 <div class="info-grid-compact" id="result-info-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 24px;">
-                    <div><span class="info-label">总用料长度</span><span class="info-value" id="total-length">-</span></div>
-                    <div><span class="info-label">面料门幅</span><span class="info-value" id="fabric-width-result">-</span></div>
-                    <div><span class="info-label">门幅利用率</span><span class="info-value" id="utilization">-</span></div>
-                    <div><span class="info-label">裁片总数</span><span class="info-value" id="pieces-count">-</span></div>
+                    <!-- 动态生成 -->
                 </div>
             </div>
 
@@ -174,6 +175,7 @@
                                 <th>数量</th>
                                 <th>位置(X,Y)</th>
                                 <th>面积(cm²)</th>
+                                <th>形状</th>
                             </tr>
                         </thead>
                         <tbody id="result-pieces-tbody">
@@ -187,51 +189,255 @@
     <!-- 加载提示 -->
     <div class="loading-overlay" id="loading" style="display:none;">
         <div class="loading-spinner"></div>
-        <div class="loading-text">排料计算中...</div>
+        <div class="loading-text">计算中...</div>
     </div>
 
     <script src="/static/js/common.js"></script>
     <script>
-        let pieceIndex = 2;
+        // 当前品类数据
+        let currentCategory = null;
+        let pieceIndex = 0;
+
+        // 品类配置（简化版）
+        const categoryTemplates = {
+            'coat': {
+                name: '大衣',
+                pieces: [
+                    {name: '前片', length: 110, width: 60, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.5},
+                    {name: '后片', length: 110, width: 65, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                    {name: '袖子', length: 65, width: 22, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                    {name: '领子', length: 35, width: 12, count: 1, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                ]
+            },
+            'down_jacket': {
+                name: '羽绒服',
+                pieces: [
+                    {name: '前片', length: 75, width: 55, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.5},
+                    {name: '后片', length: 75, width: 60, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                    {name: '袖子', length: 60, width: 20, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                ]
+            },
+            'jacket': {
+                name: '夹克',
+                pieces: [
+                    {name: '前片', length: 65, width: 50, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.5},
+                    {name: '后片', length: 65, width: 55, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                    {name: '袖子', length: 58, width: 18, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                ]
+            },
+            'pants': {
+                name: '裤子',
+                pieces: [
+                    {name: '前裤片', length: 100, width: 35, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.5},
+                    {name: '后裤片', length: 100, width: 38, count: 2, shape: 'double_corner', material: 'main', seam_allowance: 1.5},
+                    {name: '腰头', length: 12, width: 80, count: 1, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                ]
+            },
+            'shirt': {
+                name: '衬衫',
+                pieces: [
+                    {name: '前片', length: 70, width: 45, count: 2, shape: 'single_corner', material: 'main', seam_allowance: 1.0},
+                    {name: '后片', length: 70, width: 50, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                    {name: '袖子', length: 55, width: 16, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                    {name: '领子', length: 28, width: 10, count: 1, shape: 'rectangle', material: 'main', seam_allowance: 0.7},
+                ]
+            },
+            'tshirt': {
+                name: 'T恤',
+                pieces: [
+                    {name: '前片', length: 60, width: 48, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                    {name: '后片', length: 62, width: 48, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                    {name: '袖子', length: 22, width: 18, count: 2, shape: 'rectangle', material: 'main', seam_allowance: 1.0},
+                ]
+            },
+            'custom': {
+                name: '自定义',
+                pieces: []
+            }
+        };
+
+        function initCategories() {
+            const grid = document.getElementById('category-grid');
+            Object.keys(categoryTemplates).forEach(key => {
+                const cat = categoryTemplates[key];
+                const card = document.createElement('div');
+                card.className = 'category-card';
+                card.dataset.category = key;
+                card.innerHTML = `
+                    <div class="category-icon">👔</div>
+                    <div class="category-name">${cat.name}</div>
+                    <div class="category-piece-count">${cat.pieces.length}个裁片</div>
+                `;
+                card.onclick = () => selectCategory(key);
+                grid.appendChild(card);
+            });
+        }
+
+        function selectCategory(category) {
+            currentCategory = category;
+            document.querySelectorAll('.category-card').forEach(c => c.classList.remove('selected'));
+            document.querySelector(`[data-category="${category}"]`).classList.add('selected');
+            goStep(2);
+        }
 
         function goStep(step) {
-            // 隐藏所有面板
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
             
-            // 显示目标面板和步骤
             document.getElementById('panel-' + step).classList.add('active');
             document.querySelector(`[data-step="${step}"]`).classList.add('active');
             
-            // 如果是步骤2，刷新预览
-            if (step === 2) {
+            if (step === 3) {
+                loadPiecesForCategory();
                 refreshPreview();
             }
         }
 
+        function loadPiecesForCategory() {
+            const tbody = document.getElementById('pieces-tbody');
+            tbody.innerHTML = '';
+            
+            const cat = categoryTemplates[currentCategory];
+            if (!cat || cat.pieces.length === 0) {
+                // 默认裁片
+                addDefaultPieces();
+                return;
+            }
+            
+            cat.pieces.forEach((piece, idx) => {
+                const row = createPieceRow(idx, piece);
+                tbody.appendChild(row);
+            });
+            pieceIndex = cat.pieces.length;
+        }
+
+        function addDefaultPieces() {
+            const tbody = document.getElementById('pieces-tbody');
+            tbody.innerHTML = `
+                <tr data-index="0">
+                    <td><input type="text" class="piece-name" value="前片"></td>
+                    <td><input type="number" class="piece-length" value="65" step="1" min="1"></td>
+                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
+                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                    <td>
+                        <select class="piece-shape">
+                            <option value="rectangle">矩形</option>
+                            <option value="single_corner" selected>单切角</option>
+                            <option value="double_corner">双切角</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="piece-material">
+                            <option value="main" selected>主面料</option>
+                            <option value="lining">里布</option>
+                            <option value="interlining">衬布</option>
+                        </select>
+                    </td>
+                    <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
+                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                </tr>
+                <tr data-index="1">
+                    <td><input type="text" class="piece-name" value="后片"></td>
+                    <td><input type="number" class="piece-length" value="65" step="1" min="1"></td>
+                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
+                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                    <td>
+                        <select class="piece-shape">
+                            <option value="rectangle" selected>矩形</option>
+                            <option value="single_corner">单切角</option>
+                            <option value="double_corner">双切角</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="piece-material">
+                            <option value="main" selected>主面料</option>
+                            <option value="lining">里布</option>
+                            <option value="interlining">衬布</option>
+                        </select>
+                    </td>
+                    <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
+                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                </tr>
+                <tr data-index="2">
+                    <td><input type="text" class="piece-name" value="袖子"></td>
+                    <td><input type="number" class="piece-length" value="60" step="1" min="1"></td>
+                    <td><input type="number" class="piece-width" value="20" step="1" min="1"></td>
+                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                    <td>
+                        <select class="piece-shape">
+                            <option value="rectangle" selected>矩形</option>
+                            <option value="single_corner">单切角</option>
+                            <option value="double_corner">双切角</option>
+                        </select>
+                    </td>
+                    <td>
+                        <select class="piece-material">
+                            <option value="main" selected>主面料</option>
+                            <option value="lining">里布</option>
+                            <option value="interlining">衬布</option>
+                        </select>
+                    </td>
+                    <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
+                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                </tr>
+            `;
+            pieceIndex = 3;
+        }
+
+        function createPieceRow(idx, piece) {
+            const row = document.createElement('tr');
+            row.dataset.index = idx;
+            row.innerHTML = `
+                <td><input type="text" class="piece-name" value="${piece.name}"></td>
+                <td><input type="number" class="piece-length" value="${piece.length}" step="1" min="1"></td>
+                <td><input type="number" class="piece-width" value="${piece.width}" step="1" min="1"></td>
+                <td><input type="number" class="piece-count" value="${piece.count}" step="1" min="1"></td>
+                <td>
+                    <select class="piece-shape">
+                        <option value="rectangle" ${piece.shape === 'rectangle' ? 'selected' : ''}>矩形</option>
+                        <option value="single_corner" ${piece.shape === 'single_corner' ? 'selected' : ''}>单切角</option>
+                        <option value="double_corner" ${piece.shape === 'double_corner' ? 'selected' : ''}>双切角</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="piece-material">
+                        <option value="main" ${piece.material === 'main' ? 'selected' : ''}>主面料</option>
+                        <option value="lining" ${piece.material === 'lining' ? 'selected' : ''}>里布</option>
+                        <option value="interlining" ${piece.material === 'interlining' ? 'selected' : ''}>衬布</option>
+                    </select>
+                </td>
+                <td><input type="number" class="piece-seam" value="${piece.seam_allowance}" step="0.1" min="0"></td>
+                <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+            `;
+            return row;
+        }
+
         function addPiece() {
             const tbody = document.getElementById('pieces-tbody');
-            const colors = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1'];
-            const color = colors[pieceIndex % colors.length];
-            
             const row = document.createElement('tr');
             row.dataset.index = pieceIndex++;
             row.innerHTML = `
                 <td><input type="text" class="piece-name" value="裁片${pieceIndex}"></td>
+                <td><input type="number" class="piece-length" value="50" step="1" min="1"></td>
                 <td><input type="number" class="piece-width" value="40" step="1" min="1"></td>
-                <td><input type="number" class="piece-height" value="50" step="1" min="1"></td>
                 <td><input type="number" class="piece-count" value="1" step="1" min="1"></td>
                 <td>
-                    <select class="piece-type">
+                    <select class="piece-shape">
                         <option value="rectangle" selected>矩形</option>
                         <option value="single_corner">单切角</option>
                         <option value="double_corner">双切角</option>
                     </select>
                 </td>
-                <td><input type="color" class="piece-color" value="${color}" style="width:60px;"></td>
+                <td>
+                    <select class="piece-material">
+                        <option value="main" selected>主面料</option>
+                        <option value="lining">里布</option>
+                        <option value="interlining">衬布</option>
+                    </select>
+                </td>
+                <td><input type="number" class="piece-seam" value="1.5" step="0.1" min="0"></td>
                 <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
             `;
-            
             tbody.appendChild(row);
             refreshPreview();
         }
@@ -243,40 +449,7 @@
         }
 
         function resetPieces() {
-            const tbody = document.getElementById('pieces-tbody');
-            tbody.innerHTML = `
-                <tr data-index="0">
-                    <td><input type="text" class="piece-name" value="前片"></td>
-                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
-                    <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
-                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                    <td>
-                        <select class="piece-type">
-                            <option value="rectangle">矩形</option>
-                            <option value="single_corner" selected>单切角</option>
-                            <option value="double_corner">双切角</option>
-                        </select>
-                    </td>
-                    <td><input type="color" class="piece-color" value="#007bff" style="width:60px;"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                </tr>
-                <tr data-index="1">
-                    <td><input type="text" class="piece-name" value="后片"></td>
-                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
-                    <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
-                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
-                    <td>
-                        <select class="piece-type">
-                            <option value="rectangle" selected>矩形</option>
-                            <option value="single_corner">单切角</option>
-                            <option value="double_corner">双切角</option>
-                        </select>
-                    </td>
-                    <td><input type="color" class="piece-color" value="#28a745" style="width:60px;"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
-                </tr>
-            `;
-            pieceIndex = 2;
+            loadPiecesForCategory();
             refreshPreview();
         }
 
@@ -286,17 +459,19 @@
             
             switch(type) {
                 case 'single_corner':
-                    return [
-                        [0, 0], [w, 0], [w, h], [w * 0.2, h], [0, h * 0.8]
-                    ];
+                    return [[0, 0], [w, 0], [w, h], [w * 0.2, h], [0, h * 0.8]];
                 case 'double_corner':
-                    return [
-                        [0, 0], [w, 0], [w, h * 0.8], [w * 0.8, h], [w * 0.2, h], [0, h * 0.8]
-                    ];
+                    return [[0, 0], [w, 0], [w, h * 0.8], [w * 0.8, h], [w * 0.2, h], [0, h * 0.8]];
                 default:
                     return [[0, 0], [w, 0], [w, h], [0, h]];
             }
         }
+
+        const shapeColors = {
+            'rectangle': '#007bff',
+            'single_corner': '#28a745',
+            'double_corner': '#dc3545'
+        };
 
         function refreshPreview() {
             const canvas = document.getElementById('pieces-preview');
@@ -304,7 +479,7 @@
             const scale = 2;
             const padding = 20;
             
-            canvas.width = 500;
+            canvas.width = 560;
             canvas.height = 300;
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -314,13 +489,13 @@
             let maxHeight = 0;
             
             document.querySelectorAll('#pieces-tbody tr').forEach(row => {
+                const length = parseFloat(row.querySelector('.piece-length').value);
                 const width = parseFloat(row.querySelector('.piece-width').value);
-                const height = parseFloat(row.querySelector('.piece-height').value);
-                const type = row.querySelector('.piece-type').value;
-                const color = row.querySelector('.piece-color').value;
+                const shape = row.querySelector('.piece-shape').value;
                 const count = parseInt(row.querySelector('.piece-count').value);
                 
-                const vertices = generateVertices(width, height, type);
+                const vertices = generateVertices(width, length, shape);
+                const color = shapeColors[shape] || '#6f42c1';
                 
                 if (currentX + width * scale > canvas.width - padding) {
                     currentX = padding;
@@ -347,45 +522,51 @@
                 ctx.fillStyle = '#fff';
                 ctx.strokeStyle = '#000';
                 ctx.lineWidth = 1;
-                ctx.font = 'bold 12px Arial';
+                ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'center';
                 const cx = currentX + width * scale / 2;
-                const cy = currentY + height * scale / 2;
+                const cy = currentY + length * scale / 2;
                 ctx.strokeText(`${name}×${count}`, cx, cy);
                 ctx.fillText(`${name}×${count}`, cx, cy);
                 
                 currentX += width * scale + 10;
-                maxHeight = Math.max(maxHeight, height * scale);
+                maxHeight = Math.max(maxHeight, length * scale);
             });
         }
 
         async function calculateNesting() {
             const pieces = [];
             const fabricWidth = parseFloat(document.getElementById('fabric-width').value);
-            const seamGap = parseFloat(document.getElementById('seam-gap').value);
+            const quantity = parseInt(document.getElementById('quantity').value);
             
             let totalCount = 0;
             
             document.querySelectorAll('#pieces-tbody tr').forEach(row => {
                 const name = row.querySelector('.piece-name').value;
+                const length = parseFloat(row.querySelector('.piece-length').value);
                 const width = parseFloat(row.querySelector('.piece-width').value);
-                const height = parseFloat(row.querySelector('.piece-height').value);
                 const count = parseInt(row.querySelector('.piece-count').value);
-                const type = row.querySelector('.piece-type').value;
-                const color = row.querySelector('.piece-color').value;
+                const shape = row.querySelector('.piece-shape').value;
+                const material = row.querySelector('.piece-material').value;
                 
-                const vertices = generateVertices(width, height, type);
+                const vertices = generateVertices(width, length, shape);
+                const color = shapeColors[shape] || '#6f42c1';
                 
-                for(let i = 0; i < count; i++) {
+                // 乘以订单数量
+                const totalPieceCount = count * quantity;
+                
+                for(let i = 0; i < totalPieceCount; i++) {
                     pieces.push({
-                        name: count > 1 ? `${name}${i + 1}` : name,
+                        name: totalPieceCount > 1 ? `${name}${i + 1}` : name,
                         vertices: vertices,
                         width: width,
-                        height: height,
-                        color: color
+                        height: length,
+                        color: color,
+                        shape: shape,
+                        material: material
                     });
                 }
-                totalCount += count;
+                totalCount += totalPieceCount;
             });
             
             if (pieces.length === 0) {
@@ -393,7 +574,6 @@
                 return;
             }
             
-            // 显示加载
             document.getElementById('loading').style.display = 'flex';
             
             const response = await fetch('/api/polygon-nesting', {
@@ -401,29 +581,33 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     pieces: pieces,
-                    fabric_width: fabricWidth,
-                    seam_gap: seamGap
+                    fabric_width: fabricWidth
                 })
             });
             
-            // 隐藏加载
             document.getElementById('loading').style.display = 'none';
             
             const result = await response.json();
             
             if(result.success) {
                 displayResult(result.data, fabricWidth, totalCount);
-                goStep(3);
+                goStep(4);
             } else {
                 alert('排料失败: ' + result.message);
             }
         }
 
         function displayResult(data, fabricWidth, totalCount) {
-            document.getElementById('total-length').textContent = `${data.total_length_cm.toFixed(2)} cm`;
-            document.getElementById('fabric-width-result').textContent = `${fabricWidth} cm`;
-            document.getElementById('utilization').textContent = `${(data.width_utilization * 100).toFixed(2)}%`;
-            document.getElementById('pieces-count').textContent = totalCount;
+            // 更新基本信息
+            const infoGrid = document.getElementById('result-info-grid');
+            infoGrid.innerHTML = `
+                <div><span class="info-label">服装品类</span><span class="info-value">${categoryTemplates[currentCategory]?.name || '自定义'}</span></div>
+                <div><span class="info-label">订单数量</span><span class="info-value">${document.getElementById('quantity').value} 件</span></div>
+                <div><span class="info-label">面料门幅</span><span class="info-value">${fabricWidth} cm</span></div>
+                <div><span class="info-label">总用料长度</span><span class="info-value">${data.total_length_cm.toFixed(2)} cm</span></div>
+                <div><span class="info-label">门幅利用率</span><span class="info-value">${(data.width_utilization * 100).toFixed(2)}%</span></div>
+                <div><span class="info-label">裁片总数</span><span class="info-value">${totalCount}</span></div>
+            `;
             
             drawNesting(data.rows, fabricWidth);
             updatePiecesTable(data.rows);
@@ -444,7 +628,6 @@
             ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // 绘制网格
             ctx.strokeStyle = '#eee';
             ctx.lineWidth = 0.5;
             for(let x = 0; x <= fabricWidth; x += 10) {
@@ -460,12 +643,10 @@
                 ctx.stroke();
             }
             
-            // 绘制面料边界
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 2;
             ctx.strokeRect(padding, padding, fabricWidth * scale, totalHeight * scale);
             
-            // 绘制门幅标注
             ctx.font = '12px Arial';
             ctx.fillStyle = '#666';
             ctx.textAlign = 'center';
@@ -473,7 +654,7 @@
             
             let currentY = padding;
             
-            rows.forEach((row, rowIdx) => {
+            rows.forEach(row => {
                 row.pieces.forEach(piece => {
                     ctx.fillStyle = piece.color || '#007bff';
                     ctx.strokeStyle = '#333';
@@ -494,7 +675,7 @@
                     ctx.fillStyle = '#fff';
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 1;
-                    ctx.font = 'bold 12px Arial';
+                    ctx.font = 'bold 10px Arial';
                     ctx.textAlign = 'center';
                     
                     const cx = padding + piece.x * scale + piece.width * scale / 2;
@@ -504,17 +685,15 @@
                     ctx.fillText(piece.name, cx, cy);
                 });
                 
-                // 行利用率标注
                 const rowUtil = (row.used_width_cm / fabricWidth * 100).toFixed(0);
                 ctx.fillStyle = '#666';
-                ctx.font = 'bold 12px Arial';
+                ctx.font = 'bold 11px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillText(`${rowUtil}%`, padding + fabricWidth * scale + 10, currentY + row.length_cm * scale / 2);
+                ctx.fillText(`${rowUtil}%`, padding + fabricWidth * scale + 15, currentY + row.length_cm * scale / 2);
                 
                 currentY += row.length_cm * scale;
             });
             
-            // 底部标注
             ctx.fillStyle = '#333';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
@@ -526,6 +705,12 @@
             const tbody = document.getElementById('result-pieces-tbody');
             tbody.innerHTML = '';
             
+            const shapeNames = {
+                'rectangle': '矩形',
+                'single_corner': '单切角',
+                'double_corner': '双切角'
+            };
+            
             rows.forEach(row => {
                 row.pieces.forEach(piece => {
                     const rowEl = document.createElement('tr');
@@ -535,6 +720,7 @@
                         <td>1</td>
                         <td>(${piece.x.toFixed(1)}, ${piece.y.toFixed(1)})</td>
                         <td>${(piece.width * piece.height).toFixed(1)}</td>
+                        <td>${shapeNames[piece.shape] || '未知'}</td>
                     `;
                     tbody.appendChild(rowEl);
                 });
@@ -542,23 +728,29 @@
         }
 
         function exportResult() {
+            const infoGrid = document.getElementById('result-info-grid');
             const data = {
-                total_length: document.getElementById('total-length').textContent,
-                utilization: document.getElementById('utilization').textContent,
-                fabric_width: document.getElementById('fabric-width-result').textContent
+                category: currentCategory,
+                category_name: categoryTemplates[currentCategory]?.name,
+                quantity: document.getElementById('quantity').value,
+                fabric_width: document.getElementById('fabric-width').value,
+                result: {
+                    total_length: document.querySelector('#result-info-grid .info-value:nth-child(4)')?.textContent,
+                    utilization: document.querySelector('#result-info-grid .info-value:nth-child(5)')?.textContent,
+                    pieces_count: document.querySelector('#result-info-grid .info-value:nth-child(6)')?.textContent
+                }
             };
             
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `nesting_result_${Date.now()}.json`;
+            a.download = `polygon_nesting_${Date.now()}.json`;
             a.click();
         }
 
-        // 初始化预览
         document.addEventListener('DOMContentLoaded', () => {
-            refreshPreview();
+            initCategories();
         });
     </script>
 </body>
