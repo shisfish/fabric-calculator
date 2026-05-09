@@ -159,7 +159,14 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     import time
     start_time = time.time()
     
+    print(f"[排料算法] ========== 开始排料 ==========")
+    print(f"[排料算法] 门幅宽度: {fabric_width_cm}cm")
+    print(f"[排料算法] 缝份间隙: {seam_gap_cm}cm")
+    print(f"[排料算法] 允许旋转: {rotation}")
+    print(f"[排料算法] 输入裁片组数: {len(pieces)}")
+    
     if not pieces or fabric_width_cm <= 0:
+        print(f"[排料算法] 输入参数无效，返回空结果")
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
     
     # 预处理裁片，展开为单个裁片列表
@@ -183,12 +190,16 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 "sleeve_cap_width": piece.get("sleeve_cap_width", 0),
                 "cuff_width": piece.get("cuff_width", 0),
             })
-    
+
     if not all_pieces:
+        print(f"[排料算法] 有效裁片为空，返回空结果")
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
     
     # 按面积降序排序（大裁片先放，小裁片后放用于填充缝隙）
     all_pieces.sort(key=lambda p: -(p["width"] * p["height"]))
+    
+    print(f"[排料算法] 展开后裁片总数: {len(all_pieces)}")
+    print(f"[排料算法] 裁片面积总和: {sum(p['width'] * p['height'] for p in all_pieces):.2f}cm²")
     
     rows = []
     total_area = sum(p["width"] * p["height"] for p in all_pieces)
@@ -199,6 +210,8 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         available_width = fabric_width_cm - row["used_width_cm"] - seam_gap_cm
         row_height = row["height"]
         
+        print(f"[排料调试] 开始填充行空隙 - 行高={row_height:.1f}cm, 初始剩余宽度={available_width:.1f}cm")
+        
         iteration = 0
         while available_width >= seam_gap_cm * 2:
             iteration += 1
@@ -208,7 +221,9 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             
             best_piece_idx = None
             best_orient = None
-            best_area = -1  # 优先选择面积最大的
+            best_area = -1  # 优先选择面积最大的 - 每次循环都重置
+            
+            print(f"[排料调试] 填充迭代 #{iteration}, 可用宽度={available_width:.1f}cm")
             
             for idx, piece in enumerate(all_pieces):
                 if idx in placed_indices:
@@ -269,6 +284,9 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             continue
         
         placed = False
+        piece_area = piece["width"] * piece["height"]
+        
+        print(f"[排料调试] 处理裁片 #{idx}: {piece['name']} ({piece['width']}x{piece['height']}), 面积={piece_area:.2f}cm²")
         
         # 准备两种方向：原始和旋转90度
         orientations = []
@@ -297,6 +315,8 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 "rotated": False,
             })
         
+        print(f"[排料调试] 可用方向: {len(orientations)} 种")
+        
         # 尝试每种方向
         for orient in orientations:
             if placed:
@@ -305,6 +325,8 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             # 最佳匹配策略：找到最适合的行
             best_row = None
             best_score = -1
+            
+            print(f"[排料调试] 尝试方向: {orient['width']}x{orient['height']}(旋转={orient['rotated']})")
             
             for row in rows:
                 if orient["height"] > row["height"] + 0.01:
@@ -345,6 +367,8 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 placed_indices.add(idx)
                 placed = True
                 
+                print(f"[排料调试] 放入现有行, 行高度={best_row['height']:.1f}cm, 起始X={start_x:.1f}cm")
+                
                 # 实时填充：放置后立即尝试填充该行剩余空间
                 fill_row_gaps(best_row)
                 break
@@ -378,12 +402,18 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 placed_indices.add(idx)
                 placed = True
                 
+                print(f"[排料调试] 新建行, 行高度={orient['height']:.1f}cm, 当前总行数={len(rows)}")
+                
                 # 实时填充：新建行后立即尝试填充剩余空间
                 fill_row_gaps(rows[-1])
                 break
         
         if not placed:
             print(f"[排料警告] 裁片 {piece['name']} ({piece['width']}x{piece['height']}) 无法放入门幅 {fabric_width_cm}cm")
+    
+    # 按行高度降序排序，优化垂直空间利用（高行优先，便于后续填充）
+    rows.sort(key=lambda r: -r["height"])
+    print(f"[排料算法] 行排序完成，按高度降序排列")
     
     total_length = sum(row["length_cm"] for row in rows)
     total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
@@ -404,29 +434,31 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
 
 def test_polygon_nesting():
     """测试多边形排料"""
-    # 创建测试裁片：简单的矩形和不规则形状
+    # 创建测试裁片：模拟实际服装裁片
     pieces = [
-        {
-            "name": "前片",
-            "vertices": [(0, 0), (50, 0), (50, 65), (10, 65), (0, 55)],  # 带切角的矩形
-        },
-        {
-            "name": "后片",
-            "vertices": [(0, 0), (50, 0), (50, 65), (0, 65)],  # 矩形
-        },
-        {
-            "name": "袖子",
-            "vertices": [(0, 0), (20, 0), (20, 60), (0, 60)],  # 矩形
-        },
+        {"name": "后片", "width": 50, "height": 80, "count": 1, "color": "#dc3545"},
+        {"name": "前片", "width": 50, "height": 70, "count": 2, "color": "#28a745"},
+        {"name": "袖子", "width": 20, "height": 60, "count": 2, "color": "#dc3545"},
+        {"name": "口袋", "width": 15, "height": 15, "count": 4, "color": "#007bff"},
+        {"name": "领口罗纹", "width": 30, "height": 10, "count": 1, "color": "#007bff"},
+        {"name": "其他配件", "width": 12, "height": 12, "count": 6, "color": "#6c757d"},
     ]
     
-    result = polygon_nesting(pieces, 140)
-    print(f"总长度: {result['total_length_cm']:.2f} cm")
+    print("\n" + "="*60)
+    print("测试多边形排料算法")
+    print("="*60 + "\n")
+    
+    result = polygon_nesting(pieces, 80)
+    print(f"\n总长度: {result['total_length_cm']:.2f} cm")
     print(f"利用率: {result['width_utilization']*100:.2f}%")
+    print(f"总行数: {len(result['rows'])}")
+    
+    print("\n详细排料结果:")
     for i, row in enumerate(result["rows"]):
-        print(f"行 {i+1}: 高={row['length_cm']:.2f}cm, 宽={row['used_width_cm']:.2f}cm")
+        print(f"\n行 {i+1}: 高={row['length_cm']:.2f}cm, 已用宽度={row['used_width_cm']:.2f}cm, 裁片数={row['pieces_count']}")
         for piece in row["pieces"]:
-            print(f"  - {piece['name']}: ({piece['x']:.2f}, {piece['y']:.2f})")
+            rotated_str = "(旋转)" if piece.get("rotated", False) else ""
+            print(f"  - {piece['name']}{rotated_str}: ({piece['x']:.2f}, {piece['y']:.2f}) {piece['width']}x{piece['height']}")
 
 if __name__ == "__main__":
     test_polygon_nesting()
