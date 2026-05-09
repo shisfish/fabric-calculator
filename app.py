@@ -487,6 +487,8 @@ def polygon_nesting_page():
 @app.route('/api/polygon-nesting', methods=['POST'])
 def api_polygon_nesting():
     """多边形排料API"""
+    import time
+    start_time = time.time()
     try:
         data = request.get_json()
         if not data:
@@ -495,8 +497,13 @@ def api_polygon_nesting():
         pieces = data.get("pieces", [])
         fabric_width = float(data.get("fabric_width", 140))
         
+        print(f"[API] 收到排料请求: {len(pieces)}种裁片, 门幅{fabric_width}cm")
+        
         # 执行多边形排料
         result = polygon_nesting(pieces, fabric_width)
+        
+        elapsed = time.time() - start_time
+        print(f"[API] 排料完成: 总长度{result['total_length_cm']:.2f}cm, 耗时{elapsed:.3f}秒")
         
         return jsonify({
             "success": True,
@@ -508,6 +515,10 @@ def api_polygon_nesting():
         })
     
     except Exception as e:
+        import traceback
+        elapsed = time.time() - start_time
+        print(f"[API] 排料失败: {str(e)}, 耗时{elapsed:.3f}秒")
+        print(traceback.format_exc())
         return jsonify({"success": False, "message": f"多边形排料错误: {str(e)}"}), 500
 
 

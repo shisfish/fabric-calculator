@@ -145,134 +145,117 @@ def polygon_width_height(points):
 
 def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=False):
     """
-    多边形排料算法
+    多边形排料算法 - 简化高效版本
     
-    参数:
-      pieces: 裁片列表，每个裁片包含:
-        {
-          "name": 裁片名称,
-          "vertices": [(x, y), ...] 多边形顶点列表,
-          "length": 长度（可选，用于排序）,
-          "width": 宽度（可选，用于排序）
-        }
-      fabric_width_cm: 面料门幅 (cm)
-      seam_gap_cm: 裁片间隙 (cm)
-      rotation: 是否允许旋转
-    
-    返回:
-      {
-        "total_length_cm": 总用料长度,
-        "rows": [
-          {
-            "length_cm": 行高,
-            "used_width_cm": 已用宽度,
-            "pieces": [
-              {name, vertices, x, y, width, height, rotated},
-              ...
-            ]
-          },
-          ...
-        ],
-        "width_utilization": 门幅利用率
-      }
+    策略：
+    1. 按裁片类型分组，批量放置
+    2. 简单行式排料，快速计算
+    3. 不存储顶点数据，前端自行生成
     """
+    import time
+    start_time = time.time()
+    
     if not pieces or fabric_width_cm <= 0:
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
     
-    # 预处理裁片：计算面积，按面积降序排序
+    # 预处理裁片
     processed_pieces = []
     for piece in pieces:
-        vertices = piece.get("vertices", [])
-        area = polygon_area(vertices)
-        w, h = polygon_width_height(vertices)
+        w = piece.get("width", 0)
+        h = piece.get("height", 0)
         count = piece.get("count", 1)
         
-        # 根据数量展开裁片
-        for i in range(count):
-            processed_pieces.append({
-                "name": piece.get("name", ""),
-                "vertices": vertices,
-                "area": area,
-                "width": w,
-                "height": h,
-                "color": piece.get("color", "#007bff"),
-                "shape": piece.get("shape", "rectangle"),
-                "material": piece.get("material", "main"),
-            })
+        if w <= 0 or h <= 0:
+            continue
+            
+        processed_pieces.append({
+            "name": piece.get("name", ""),
+            "width": w,
+            "height": h,
+            "count": count,
+            "color": piece.get("color", "#007bff"),
+            "shape": piece.get("shape", "rectangle"),
+        })
     
-    # 按面积降序排序
-    processed_pieces.sort(key=lambda p: -p["area"])
+    if not processed_pieces:
+        return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
+    
+    # 按高度降序排序
+    processed_pieces.sort(key=lambda p: -p["height"])
     
     rows = []
-    total_area = sum(p["area"] for p in processed_pieces)
+    total_area = 0
     
-    for piece in processed_pieces:
-        placed = False
+    for piece_template in processed_pieces:
+        total_area += piece_template["width"] * piece_template["height"] * piece_template["count"]
+        remaining = piece_template["count"]
         
-        # 尝试放入已有行
-        for row in rows:
-            # 按行内现有位置尝试放置
-            current_x = seam_gap_cm if row["pieces"] else 0
+        while remaining > 0:
+            placed = False
             
-            while True:
-                # 检查宽度是否足够
-                if current_x + piece["width"] + seam_gap_cm > fabric_width_cm:
-                    break
+            # 尝试放入已有行
+            for row in rows:
+                if piece_template["height"] > row["height"] + 0.01:
+                    continue
                 
-                # 创建候选放置位置的多边形（平移后的顶点）
-                candidate_poly = translate_points(piece["vertices"], current_x, 0)
+                # 计算能放几个
+                available_width = fabric_width_cm - row["used_width_cm"] - seam_gap_cm
+                if available_width < piece_template["width"] + seam_gap_cm:
+                    continue
                 
-                # 检查与行内已有裁片的碰撞
-                collision = False
-                for existing in row["pieces"]:
-                    existing_poly = translate_points(existing["vertices"], existing["x"], existing["y"])
-                    if sat_collision(candidate_poly, existing_poly):
-                        collision = True
-                        break
+                can_fit = int(available_width / (piece_template["width"] + seam_gap_cm))
+                fit_count = min(can_fit, remaining)
                 
-                if not collision:
-                    # 放置成功
+                start_x = row["used_width_cm"] + seam_gap_cm
+                for i in range(fit_count):
                     row["pieces"].append({
-                        "name": piece["name"],
-                        "vertices": piece["vertices"],
-                        "x": current_x,
-                        "y": 0,  # 暂时放在底部
-                        "width": piece["width"],
-                        "height": piece["height"],
-                        "rotated": False,
+                        "name": piece_template["name"],
+                        "x": start_x + i * (piece_template["width"] + seam_gap_cm),
+                        "y": 0,
+                        "width": piece_template["width"],
+                        "height": piece_template["height"],
+                        "color": piece_template["color"],
+                        "shape": piece_template["shape"],
                     })
-                    row["used_width_cm"] = max(row["used_width_cm"], current_x + piece["width"])
-                    row["length_cm"] = max(row["length_cm"], piece["height"])
-                    row["pieces_count"] = len(row["pieces"])
-                    placed = True
-                    break
                 
-                # 尝试下一个位置
-                current_x += piece["width"] / 10  # 步进
-                
-            if placed:
+                row["used_width_cm"] = start_x + fit_count * (piece_template["width"] + seam_gap_cm) - seam_gap_cm
+                row["pieces_count"] += fit_count
+                remaining -= fit_count
+                placed = True
                 break
-        
-        if not placed:
+            
             # 新建行
-            rows.append({
-                "length_cm": piece["height"],
-                "used_width_cm": piece["width"],
-                "pieces_count": 1,
-                "pieces": [{
-                    "name": piece["name"],
-                    "vertices": piece["vertices"],
-                    "x": 0,
-                    "y": 0,
-                    "width": piece["width"],
-                    "height": piece["height"],
-                    "rotated": False,
-                }]
-            })
+            if not placed:
+                can_fit = int((fabric_width_cm - seam_gap_cm * 2) / (piece_template["width"] + seam_gap_cm))
+                fit_count = min(can_fit, remaining) if can_fit > 0 else 1
+                
+                row_pieces = []
+                for i in range(fit_count):
+                    row_pieces.append({
+                        "name": piece_template["name"],
+                        "x": seam_gap_cm + i * (piece_template["width"] + seam_gap_cm),
+                        "y": 0,
+                        "width": piece_template["width"],
+                        "height": piece_template["height"],
+                        "color": piece_template["color"],
+                        "shape": piece_template["shape"],
+                    })
+                
+                rows.append({
+                    "height": piece_template["height"],
+                    "length_cm": piece_template["height"],
+                    "used_width_cm": seam_gap_cm + fit_count * (piece_template["width"] + seam_gap_cm) - seam_gap_cm,
+                    "pieces_count": fit_count,
+                    "pieces": row_pieces,
+                })
+                remaining -= fit_count
     
     total_length = sum(row["length_cm"] for row in rows)
     total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
     width_utilization = total_area / total_available_area if total_available_area > 0 else 0
+    
+    elapsed = time.time() - start_time
+    print(f"[排料算法] 耗时: {elapsed:.3f}秒, 裁片类型: {len(processed_pieces)}, 总行数: {len(rows)}")
     
     return {
         "total_length_cm": total_length,

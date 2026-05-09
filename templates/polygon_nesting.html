@@ -473,7 +473,6 @@
         async function calculateNesting() {
             const pieces = [];
             const fabricWidth = parseFloat(document.getElementById('fabric-width').value);
-            const quantity = parseInt(document.getElementById('quantity').value);
 
             document.querySelectorAll('#pieces-tbody tr').forEach(row => {
                 if (row.querySelector('.empty-row')) return;
@@ -495,7 +494,7 @@
                     vertices: vertices,
                     width: width,
                     height: length,
-                    count: count * quantity,
+                    count: count,
                     color: color,
                     shape: shape,
                     material: material
@@ -509,25 +508,41 @@
 
             document.getElementById('loading').style.display = 'flex';
 
-            const response = await fetch('/api/polygon-nesting', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    pieces: pieces,
-                    fabric_width: fabricWidth
-                })
-            });
+            // 添加超时处理
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
 
-            document.getElementById('loading').style.display = 'none';
+            try {
+                const response = await fetch('/api/polygon-nesting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pieces: pieces,
+                        fabric_width: fabricWidth
+                    }),
+                    signal: controller.signal
+                });
 
-            const result = await response.json();
+                clearTimeout(timeoutId);
+                document.getElementById('loading').style.display = 'none';
 
-            if(result.success) {
-                const totalCount = pieces.reduce((sum, p) => sum + p.count, 0);
-                displayResult(result.data, fabricWidth, totalCount);
-                goStep(4);
-            } else {
-                alert('排料失败: ' + result.message);
+                const result = await response.json();
+
+                if(result.success) {
+                    const totalCount = pieces.reduce((sum, p) => sum + p.count, 0);
+                    displayResult(result.data, fabricWidth, totalCount);
+                    goStep(4);
+                } else {
+                    alert('排料失败: ' + result.message);
+                }
+            } catch (error) {
+                clearTimeout(timeoutId);
+                document.getElementById('loading').style.display = 'none';
+                if (error.name === 'AbortError') {
+                    alert('计算超时，请减少订单数量或稍后重试');
+                } else {
+                    alert('计算出错: ' + error.message);
+                }
             }
         }
 
@@ -589,12 +604,14 @@
 
             rows.forEach(row => {
                 row.pieces.forEach(piece => {
+                    const vertices = generateVertices(piece.width, piece.height, piece.shape || 'rectangle');
+                    
                     ctx.fillStyle = piece.color || '#007bff';
                     ctx.strokeStyle = '#333';
                     ctx.lineWidth = 1;
                     ctx.beginPath();
 
-                    piece.vertices.forEach((v, i) => {
+                    vertices.forEach((v, i) => {
                         const x = padding + (piece.x + v[0]) * scale;
                         const y = currentY + (piece.y + v[1]) * scale;
                         if(i === 0) ctx.moveTo(x, y);
