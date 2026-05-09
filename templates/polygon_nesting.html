@@ -194,11 +194,22 @@
 
     <script src="/static/js/common.js"></script>
     <script>
-        // 当前品类数据
+        const CATEGORY_ICONS = {
+            coat: "🧥",
+            down_jacket: "",
+            jacket: "🧥",
+            windbreaker: "🧥",
+            cotton_padded: "🧥",
+            pants: "👖",
+            skirt: "",
+            shirt: "👔",
+            tshirt: "👕",
+            custom: "✏️",
+        };
+
         let currentCategory = null;
         let pieceIndex = 0;
 
-        // 品类配置（简化版）
         const categoryTemplates = {
             'coat': {
                 name: '大衣',
@@ -256,28 +267,40 @@
             }
         };
 
-        function initCategories() {
-            const grid = document.getElementById('category-grid');
-            Object.keys(categoryTemplates).forEach(key => {
-                const cat = categoryTemplates[key];
-                const card = document.createElement('div');
-                card.className = 'category-card';
-                card.dataset.category = key;
-                card.innerHTML = `
-                    <div class="category-icon">👔</div>
-                    <div class="category-name">${cat.name}</div>
-                    <div class="category-piece-count">${cat.pieces.length}个裁片</div>
-                `;
-                card.onclick = () => selectCategory(key);
-                grid.appendChild(card);
-            });
+        async function loadCategories() {
+            try {
+                const resp = await fetch('/api/categories');
+                const data = await resp.json();
+                if (data.success) {
+                    renderCategories(data.data);
+                }
+            } catch (e) {
+                console.error('加载品类失败:', e);
+            }
         }
 
-        function selectCategory(category) {
-            currentCategory = category;
-            document.querySelectorAll('.category-card').forEach(c => c.classList.remove('selected'));
-            document.querySelector(`[data-category="${category}"]`).classList.add('selected');
-            goStep(2);
+        function renderCategories(categories) {
+            const grid = document.getElementById('category-grid');
+            grid.innerHTML = categories.map(cat => `
+                <div class="category-card" onclick="selectCategory('${cat.id}')" data-id="${cat.id}">
+                    <div class="cat-icon">${CATEGORY_ICONS[cat.id] || '👕'}</div>
+                    <div class="cat-name">${cat.name}</div>
+                    <div class="cat-desc">${cat.description}</div>
+                    <div class="cat-tags">
+                        ${cat.has_lining ? '<span class="badge">含里布</span>' : ''}
+                        ${cat.has_filling ? '<span class="badge">含填充</span>' : ''}
+                        <span class="badge">${cat.piece_count}个裁片</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function selectCategory(catId) {
+            currentCategory = catId;
+            document.querySelectorAll('.category-card').forEach(card => {
+                card.classList.toggle('selected', card.dataset.id === catId);
+            });
+            setTimeout(() => goStep(2), 300);
         }
 
         function goStep(step) {
@@ -299,7 +322,6 @@
             
             const cat = categoryTemplates[currentCategory];
             if (!cat || cat.pieces.length === 0) {
-                // 默认裁片
                 addDefaultPieces();
                 return;
             }
@@ -552,7 +574,6 @@
                 const vertices = generateVertices(width, length, shape);
                 const color = shapeColors[shape] || '#6f42c1';
                 
-                // 乘以订单数量
                 const totalPieceCount = count * quantity;
                 
                 for(let i = 0; i < totalPieceCount; i++) {
@@ -598,7 +619,6 @@
         }
 
         function displayResult(data, fabricWidth, totalCount) {
-            // 更新基本信息
             const infoGrid = document.getElementById('result-info-grid');
             infoGrid.innerHTML = `
                 <div><span class="info-label">服装品类</span><span class="info-value">${categoryTemplates[currentCategory]?.name || '自定义'}</span></div>
@@ -750,7 +770,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            initCategories();
+            loadCategories();
         });
     </script>
 </body>
