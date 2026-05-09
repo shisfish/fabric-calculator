@@ -5,373 +5,436 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>多边形排料 - 面料用量计算系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .polygon-canvas {
-            border: 1px solid #ddd;
-            background: #f8f9fa;
-            margin: 10px 0;
-        }
-        .piece-item {
-            background: white;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
-        }
-        .piece-item .form-row {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-        .piece-item .form-group {
-            flex: 1;
-        }
-        .piece-item label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .piece-item input {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        .color-picker {
-            width: 50px;
-            height: 34px;
-            border: none;
-            cursor: pointer;
-        }
-        .add-piece-btn {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
-        .add-piece-btn:hover {
-            background: #0056b3;
-        }
-        .remove-piece-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-        .remove-piece-btn:hover {
-            background: #c82333;
-        }
-        .result-section {
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-        .result-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #ddd;
-        }
-        .nesting-canvas {
-            border: 2px solid #333;
-            background: #fff;
-            margin-top: 15px;
-        }
-        .canvas-container {
-            overflow-x: auto;
-            max-width: 100%;
-        }
-    </style>
 </head>
 <body>
     {% set active_page = 'polygon_nesting' %}
     {% include 'includes/navbar.html' %}
-    
-    <div class="container">
-        <h2>多边形排料</h2>
-        <p class="description">支持任意多边形裁片的精确排料，使用分离轴定理进行碰撞检测</p>
-        
-        <div class="row">
-            <div class="col-md-6">
-                <h3>裁片设置</h3>
-                
-                <div id="pieces-container">
-                    <!-- 示例裁片 -->
-                    <div class="piece-item" data-index="0">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>裁片名称</label>
-                                <input type="text" class="piece-name" value="前片">
-                            </div>
-                            <div class="form-group">
-                                <label>颜色</label>
-                                <input type="color" class="piece-color" value="#007bff" class="color-picker">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>宽度 (cm)</label>
-                                <input type="number" class="piece-width" value="50" step="1">
-                            </div>
-                            <div class="form-group">
-                                <label>高度 (cm)</label>
-                                <input type="number" class="piece-height" value="65" step="1">
-                            </div>
-                            <div class="form-group">
-                                <label>数量</label>
-                                <input type="number" class="piece-count" value="2" min="1">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>切角类型</label>
+
+    <main class="container">
+        <!-- 步骤指示器 -->
+        <div class="steps">
+            <div class="step active" data-step="1">
+                <div class="step-number">1</div>
+                <div class="step-text">设置参数</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="2">
+                <div class="step-number">2</div>
+                <div class="step-text">录入裁片</div>
+            </div>
+            <div class="step-line"></div>
+            <div class="step" data-step="3">
+                <div class="step-number">3</div>
+                <div class="step-text">查看结果</div>
+            </div>
+        </div>
+
+        <!-- Step 1: 设置参数 -->
+        <div class="panel active" id="panel-1">
+            <h2>设置面料参数</h2>
+            <p class="panel-desc">配置面料门幅和其他计算参数</p>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>面料门幅 (cm)</label>
+                    <input type="number" id="fabric-width" value="140" step="1" min="60" max="300">
+                    <span class="form-hint">常见门幅：140/145/148/150cm</span>
+                </div>
+                <div class="form-group">
+                    <label>裁片间隙 (cm)</label>
+                    <input type="number" id="seam-gap" value="0.5" step="0.1" min="0" max="5">
+                    <span class="form-hint">裁片之间的最小间距</span>
+                </div>
+                <div class="form-group">
+                    <label>是否允许旋转</label>
+                    <select id="allow-rotation">
+                        <option value="true">允许（利用率更高）</option>
+                        <option value="false">不允许</option>
+                    </select>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="goStep(2)">下一步：录入裁片</button>
+            </div>
+        </div>
+
+        <!-- Step 2: 录入裁片 -->
+        <div class="panel" id="panel-2">
+            <h2>录入裁片数据</h2>
+            <p class="panel-desc">添加多边形裁片，支持矩形、单切角、双切角等形状</p>
+
+            <div class="toolbar">
+                <button class="btn btn-sm btn-outline" onclick="addPiece()">+ 添加裁片</button>
+                <button class="btn btn-sm btn-outline" onclick="resetPieces()">重置</button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table" id="pieces-table">
+                    <thead>
+                        <tr>
+                            <th>裁片名称</th>
+                            <th>宽度(cm)</th>
+                            <th>高度(cm)</th>
+                            <th>数量</th>
+                            <th>形状类型</th>
+                            <th>颜色</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pieces-tbody">
+                        <!-- 默认裁片 -->
+                        <tr data-index="0">
+                            <td><input type="text" class="piece-name" value="前片"></td>
+                            <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
+                            <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
+                            <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                            <td>
                                 <select class="piece-type">
                                     <option value="rectangle">矩形</option>
                                     <option value="single_corner" selected>单切角</option>
                                     <option value="double_corner">双切角</option>
                                 </select>
-                            </div>
-                        </div>
-                        <button class="remove-piece-btn">删除</button>
-                    </div>
-                    
-                    <div class="piece-item" data-index="1">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>裁片名称</label>
-                                <input type="text" class="piece-name" value="后片">
-                            </div>
-                            <div class="form-group">
-                                <label>颜色</label>
-                                <input type="color" class="piece-color" value="#28a745" class="color-picker">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>宽度 (cm)</label>
-                                <input type="number" class="piece-width" value="50" step="1">
-                            </div>
-                            <div class="form-group">
-                                <label>高度 (cm)</label>
-                                <input type="number" class="piece-height" value="65" step="1">
-                            </div>
-                            <div class="form-group">
-                                <label>数量</label>
-                                <input type="number" class="piece-count" value="2" min="1">
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>切角类型</label>
+                            </td>
+                            <td><input type="color" class="piece-color" value="#007bff" style="width:60px;"></td>
+                            <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                        </tr>
+                        <tr data-index="1">
+                            <td><input type="text" class="piece-name" value="后片"></td>
+                            <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
+                            <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
+                            <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                            <td>
                                 <select class="piece-type">
                                     <option value="rectangle" selected>矩形</option>
                                     <option value="single_corner">单切角</option>
                                     <option value="double_corner">双切角</option>
                                 </select>
-                            </div>
-                        </div>
-                        <button class="remove-piece-btn">删除</button>
-                    </div>
-                </div>
-                
-                <button class="add-piece-btn" onclick="addPiece()">添加裁片</button>
-                
-                <div class="form-group" style="margin-top: 15px;">
-                    <label>面料门幅 (cm)</label>
-                    <input type="number" id="fabric-width" value="140" step="1">
-                </div>
-                
-                <button class="btn btn-primary" onclick="calculateNesting()" style="margin-top: 15px;">
-                    开始排料
-                </button>
+                            </td>
+                            <td><input type="color" class="piece-color" value="#28a745" style="width:60px;"></td>
+                            <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
-            
-            <div class="col-md-6">
-                <div class="result-section">
-                    <h3>排料结果</h3>
-                    <div id="result-summary">
-                        <div class="result-row">
-                            <span>总用料长度:</span>
-                            <span id="total-length">-</span>
-                        </div>
-                        <div class="result-row">
-                            <span>门幅利用率:</span>
-                            <span id="utilization">-</span>
-                        </div>
+
+            <!-- 裁片预览 -->
+            <div class="section" style="margin-top:20px;">
+                <h3>裁片预览</h3>
+                <div class="card" style="padding:16px;">
+                    <div class="canvas-container" style="max-width:600px;margin:0 auto;">
+                        <canvas id="pieces-preview" style="border:1px solid #ddd;background:#fff;width:100%;"></canvas>
                     </div>
-                    <div class="canvas-container">
-                        <canvas id="nesting-canvas" class="nesting-canvas"></canvas>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>
+                <button class="btn btn-primary btn-large" onclick="calculateNesting()">📐 开始排料</button>
+            </div>
+        </div>
+
+        <!-- Step 3: 排料结果 -->
+        <div class="panel" id="panel-3">
+            <div class="result-actions-bar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
+                <button class="btn btn-secondary" onclick="goStep(2)">✏️ 返回修改</button>
+                <button class="btn btn-outline" onclick="exportResult()">📥 导出结果</button>
+            </div>
+
+            <h2>排料结果</h2>
+
+            <!-- 基本信息卡片 -->
+            <div class="card" id="result-info-card" style="margin-bottom:20px;">
+                <h3>📋 排料统计</h3>
+                <div class="info-grid-compact" id="result-info-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 24px;">
+                    <div><span class="info-label">总用料长度</span><span class="info-value" id="total-length">-</span></div>
+                    <div><span class="info-label">面料门幅</span><span class="info-value" id="fabric-width-result">-</span></div>
+                    <div><span class="info-label">门幅利用率</span><span class="info-value" id="utilization">-</span></div>
+                    <div><span class="info-label">裁片总数</span><span class="info-value" id="pieces-count">-</span></div>
+                </div>
+            </div>
+
+            <!-- 排料图 -->
+            <div class="section">
+                <h3>📐 排料图</h3>
+                <div class="card" style="padding:16px;">
+                    <div class="canvas-container" style="overflow-x:auto;">
+                        <canvas id="nesting-canvas" style="border:2px solid #333;background:#fff;"></canvas>
                     </div>
+                </div>
+            </div>
+
+            <!-- 裁片明细 -->
+            <div class="section">
+                <h3>✂️ 裁片明细</h3>
+                <div class="table-container">
+                    <table class="data-table" id="result-pieces-table">
+                        <thead>
+                            <tr>
+                                <th>裁片名称</th>
+                                <th>尺寸(cm)</th>
+                                <th>数量</th>
+                                <th>位置(X,Y)</th>
+                                <th>面积(cm²)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-pieces-tbody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
+    </main>
+
+    <!-- 加载提示 -->
+    <div class="loading-overlay" id="loading" style="display:none;">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">排料计算中...</div>
     </div>
-    
+
+    <script src="/static/js/common.js"></script>
     <script>
         let pieceIndex = 2;
-        
-        function addPiece() {
-            const container = document.getElementById('pieces-container');
-            const newPiece = document.createElement('div');
-            newPiece.className = 'piece-item';
-            newPiece.dataset.index = pieceIndex++;
+
+        function goStep(step) {
+            // 隐藏所有面板
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
             
-            newPiece.innerHTML = `
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>裁片名称</label>
-                        <input type="text" class="piece-name" value="裁片${pieceIndex}">
-                    </div>
-                    <div class="form-group">
-                        <label>颜色</label>
-                        <input type="color" class="piece-color" value="${getRandomColor()}" class="color-picker">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>宽度 (cm)</label>
-                        <input type="number" class="piece-width" value="40" step="1">
-                    </div>
-                    <div class="form-group">
-                        <label>高度 (cm)</label>
-                        <input type="number" class="piece-height" value="50" step="1">
-                    </div>
-                    <div class="form-group">
-                        <label>数量</label>
-                        <input type="number" class="piece-count" value="1" min="1">
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>切角类型</label>
+            // 显示目标面板和步骤
+            document.getElementById('panel-' + step).classList.add('active');
+            document.querySelector(`[data-step="${step}"]`).classList.add('active');
+            
+            // 如果是步骤2，刷新预览
+            if (step === 2) {
+                refreshPreview();
+            }
+        }
+
+        function addPiece() {
+            const tbody = document.getElementById('pieces-tbody');
+            const colors = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1'];
+            const color = colors[pieceIndex % colors.length];
+            
+            const row = document.createElement('tr');
+            row.dataset.index = pieceIndex++;
+            row.innerHTML = `
+                <td><input type="text" class="piece-name" value="裁片${pieceIndex}"></td>
+                <td><input type="number" class="piece-width" value="40" step="1" min="1"></td>
+                <td><input type="number" class="piece-height" value="50" step="1" min="1"></td>
+                <td><input type="number" class="piece-count" value="1" step="1" min="1"></td>
+                <td>
+                    <select class="piece-type">
+                        <option value="rectangle" selected>矩形</option>
+                        <option value="single_corner">单切角</option>
+                        <option value="double_corner">双切角</option>
+                    </select>
+                </td>
+                <td><input type="color" class="piece-color" value="${color}" style="width:60px;"></td>
+                <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+            `;
+            
+            tbody.appendChild(row);
+            refreshPreview();
+        }
+
+        function removePiece(btn) {
+            const row = btn.parentElement.parentElement;
+            row.remove();
+            refreshPreview();
+        }
+
+        function resetPieces() {
+            const tbody = document.getElementById('pieces-tbody');
+            tbody.innerHTML = `
+                <tr data-index="0">
+                    <td><input type="text" class="piece-name" value="前片"></td>
+                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
+                    <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
+                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                    <td>
+                        <select class="piece-type">
+                            <option value="rectangle">矩形</option>
+                            <option value="single_corner" selected>单切角</option>
+                            <option value="double_corner">双切角</option>
+                        </select>
+                    </td>
+                    <td><input type="color" class="piece-color" value="#007bff" style="width:60px;"></td>
+                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                </tr>
+                <tr data-index="1">
+                    <td><input type="text" class="piece-name" value="后片"></td>
+                    <td><input type="number" class="piece-width" value="50" step="1" min="1"></td>
+                    <td><input type="number" class="piece-height" value="65" step="1" min="1"></td>
+                    <td><input type="number" class="piece-count" value="2" step="1" min="1"></td>
+                    <td>
                         <select class="piece-type">
                             <option value="rectangle" selected>矩形</option>
                             <option value="single_corner">单切角</option>
                             <option value="double_corner">双切角</option>
                         </select>
-                    </div>
-                </div>
-                <button class="remove-piece-btn">删除</button>
+                    </td>
+                    <td><input type="color" class="piece-color" value="#28a745" style="width:60px;"></td>
+                    <td><button class="btn btn-sm btn-danger" onclick="removePiece(this)">删除</button></td>
+                </tr>
             `;
-            
-            container.appendChild(newPiece);
-            bindRemoveButtons();
+            pieceIndex = 2;
+            refreshPreview();
         }
-        
-        function bindRemoveButtons() {
-            document.querySelectorAll('.remove-piece-btn').forEach(btn => {
-                btn.onclick = function() {
-                    this.parentElement.remove();
-                };
-            });
-        }
-        
-        function getRandomColor() {
-            const colors = ['#007bff', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#6f42c1'];
-            return colors[Math.floor(Math.random() * colors.length)];
-        }
-        
+
         function generateVertices(width, height, type) {
             const w = width;
             const h = height;
             
             switch(type) {
                 case 'single_corner':
-                    // 左上角切角
                     return [
-                        [0, 0],
-                        [w, 0],
-                        [w, h],
-                        [w * 0.2, h],
-                        [0, h * 0.8]
+                        [0, 0], [w, 0], [w, h], [w * 0.2, h], [0, h * 0.8]
                     ];
                 case 'double_corner':
-                    // 左上角和右上角都切角
                     return [
-                        [0, 0],
-                        [w, 0],
-                        [w, h * 0.8],
-                        [w * 0.8, h],
-                        [w * 0.2, h],
-                        [0, h * 0.8]
+                        [0, 0], [w, 0], [w, h * 0.8], [w * 0.8, h], [w * 0.2, h], [0, h * 0.8]
                     ];
                 default:
-                    // 矩形
-                    return [
-                        [0, 0],
-                        [w, 0],
-                        [w, h],
-                        [0, h]
-                    ];
+                    return [[0, 0], [w, 0], [w, h], [0, h]];
             }
         }
-        
+
+        function refreshPreview() {
+            const canvas = document.getElementById('pieces-preview');
+            const ctx = canvas.getContext('2d');
+            const scale = 2;
+            const padding = 20;
+            
+            canvas.width = 500;
+            canvas.height = 300;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let currentX = padding;
+            let currentY = padding;
+            let maxHeight = 0;
+            
+            document.querySelectorAll('#pieces-tbody tr').forEach(row => {
+                const width = parseFloat(row.querySelector('.piece-width').value);
+                const height = parseFloat(row.querySelector('.piece-height').value);
+                const type = row.querySelector('.piece-type').value;
+                const color = row.querySelector('.piece-color').value;
+                const count = parseInt(row.querySelector('.piece-count').value);
+                
+                const vertices = generateVertices(width, height, type);
+                
+                if (currentX + width * scale > canvas.width - padding) {
+                    currentX = padding;
+                    currentY += maxHeight + 10;
+                    maxHeight = 0;
+                }
+                
+                ctx.fillStyle = color;
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                
+                vertices.forEach((v, i) => {
+                    const x = currentX + v[0] * scale;
+                    const y = currentY + v[1] * scale;
+                    if(i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                const name = row.querySelector('.piece-name').value;
+                ctx.fillStyle = '#fff';
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 1;
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                const cx = currentX + width * scale / 2;
+                const cy = currentY + height * scale / 2;
+                ctx.strokeText(`${name}×${count}`, cx, cy);
+                ctx.fillText(`${name}×${count}`, cx, cy);
+                
+                currentX += width * scale + 10;
+                maxHeight = Math.max(maxHeight, height * scale);
+            });
+        }
+
         async function calculateNesting() {
             const pieces = [];
             const fabricWidth = parseFloat(document.getElementById('fabric-width').value);
+            const seamGap = parseFloat(document.getElementById('seam-gap').value);
             
-            document.querySelectorAll('.piece-item').forEach((item, idx) => {
-                const name = item.querySelector('.piece-name').value;
-                const width = parseFloat(item.querySelector('.piece-width').value);
-                const height = parseFloat(item.querySelector('.piece-height').value);
-                const count = parseInt(item.querySelector('.piece-count').value);
-                const type = item.querySelector('.piece-type').value;
-                const color = item.querySelector('.piece-color').value;
+            let totalCount = 0;
+            
+            document.querySelectorAll('#pieces-tbody tr').forEach(row => {
+                const name = row.querySelector('.piece-name').value;
+                const width = parseFloat(row.querySelector('.piece-width').value);
+                const height = parseFloat(row.querySelector('.piece-height').value);
+                const count = parseInt(row.querySelector('.piece-count').value);
+                const type = row.querySelector('.piece-type').value;
+                const color = row.querySelector('.piece-color').value;
                 
                 const vertices = generateVertices(width, height, type);
                 
                 for(let i = 0; i < count; i++) {
                     pieces.push({
-                        name: `${name}${i + 1}`,
+                        name: count > 1 ? `${name}${i + 1}` : name,
                         vertices: vertices,
                         width: width,
                         height: height,
                         color: color
                     });
                 }
+                totalCount += count;
             });
+            
+            if (pieces.length === 0) {
+                alert('请至少添加一个裁片');
+                return;
+            }
+            
+            // 显示加载
+            document.getElementById('loading').style.display = 'flex';
             
             const response = await fetch('/api/polygon-nesting', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     pieces: pieces,
-                    fabric_width: fabricWidth
+                    fabric_width: fabricWidth,
+                    seam_gap: seamGap
                 })
             });
+            
+            // 隐藏加载
+            document.getElementById('loading').style.display = 'none';
             
             const result = await response.json();
             
             if(result.success) {
-                displayResult(result.data, fabricWidth);
+                displayResult(result.data, fabricWidth, totalCount);
+                goStep(3);
             } else {
                 alert('排料失败: ' + result.message);
             }
         }
-        
-        function displayResult(data, fabricWidth) {
-            document.getElementById('total-length').textContent = 
-                `${data.total_length_cm.toFixed(2)} cm`;
-            document.getElementById('utilization').textContent = 
-                `${(data.width_utilization * 100).toFixed(2)}%`;
+
+        function displayResult(data, fabricWidth, totalCount) {
+            document.getElementById('total-length').textContent = `${data.total_length_cm.toFixed(2)} cm`;
+            document.getElementById('fabric-width-result').textContent = `${fabricWidth} cm`;
+            document.getElementById('utilization').textContent = `${(data.width_utilization * 100).toFixed(2)}%`;
+            document.getElementById('pieces-count').textContent = totalCount;
             
             drawNesting(data.rows, fabricWidth);
+            updatePiecesTable(data.rows);
         }
-        
+
         function drawNesting(rows, fabricWidth) {
             const canvas = document.getElementById('nesting-canvas');
             const ctx = canvas.getContext('2d');
             
-            const scale = 3; // 缩放比例
-            const padding = 20;
+            const scale = 3;
+            const padding = 30;
             
             const totalHeight = rows.reduce((sum, row) => sum + row.length_cm, 0);
             
@@ -402,10 +465,15 @@
             ctx.lineWidth = 2;
             ctx.strokeRect(padding, padding, fabricWidth * scale, totalHeight * scale);
             
+            // 绘制门幅标注
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#666';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${fabricWidth}cm`, padding + fabricWidth * scale / 2, padding - 10);
+            
             let currentY = padding;
             
-            // 绘制裁片
-            rows.forEach(row => {
+            rows.forEach((row, rowIdx) => {
                 row.pieces.forEach(piece => {
                     ctx.fillStyle = piece.color || '#007bff';
                     ctx.strokeStyle = '#333';
@@ -415,36 +483,83 @@
                     piece.vertices.forEach((v, i) => {
                         const x = padding + (piece.x + v[0]) * scale;
                         const y = currentY + (piece.y + v[1]) * scale;
-                        if(i === 0) {
-                            ctx.moveTo(x, y);
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
+                        if(i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
                     });
                     
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
                     
-                    // 绘制裁片名称
                     ctx.fillStyle = '#fff';
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = 1;
                     ctx.font = 'bold 12px Arial';
                     ctx.textAlign = 'center';
                     
-                    const centerX = padding + piece.x * scale + piece.width * scale / 2;
-                    const centerY = currentY + piece.y * scale + piece.height * scale / 2;
+                    const cx = padding + piece.x * scale + piece.width * scale / 2;
+                    const cy = currentY + piece.y * scale + piece.height * scale / 2;
                     
-                    ctx.strokeText(piece.name, centerX, centerY);
-                    ctx.fillText(piece.name, centerX, centerY);
+                    ctx.strokeText(piece.name, cx, cy);
+                    ctx.fillText(piece.name, cx, cy);
                 });
+                
+                // 行利用率标注
+                const rowUtil = (row.used_width_cm / fabricWidth * 100).toFixed(0);
+                ctx.fillStyle = '#666';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(`${rowUtil}%`, padding + fabricWidth * scale + 10, currentY + row.length_cm * scale / 2);
                 
                 currentY += row.length_cm * scale;
             });
+            
+            // 底部标注
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`总长度: ${(totalHeight).toFixed(2)}cm | 利用率: ${(data.width_utilization * 100).toFixed(2)}%`, 
+                padding + fabricWidth * scale / 2, canvas.height - 10);
         }
-        
-        bindRemoveButtons();
+
+        function updatePiecesTable(rows) {
+            const tbody = document.getElementById('result-pieces-tbody');
+            tbody.innerHTML = '';
+            
+            rows.forEach(row => {
+                row.pieces.forEach(piece => {
+                    const rowEl = document.createElement('tr');
+                    rowEl.innerHTML = `
+                        <td>${piece.name}</td>
+                        <td>${piece.width.toFixed(1)} × ${piece.height.toFixed(1)}</td>
+                        <td>1</td>
+                        <td>(${piece.x.toFixed(1)}, ${piece.y.toFixed(1)})</td>
+                        <td>${(piece.width * piece.height).toFixed(1)}</td>
+                    `;
+                    tbody.appendChild(rowEl);
+                });
+            });
+        }
+
+        function exportResult() {
+            const data = {
+                total_length: document.getElementById('total-length').textContent,
+                utilization: document.getElementById('utilization').textContent,
+                fabric_width: document.getElementById('fabric-width-result').textContent
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `nesting_result_${Date.now()}.json`;
+            a.click();
+        }
+
+        // 初始化预览
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshPreview();
+        });
     </script>
 </body>
 </html>

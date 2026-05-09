@@ -303,7 +303,6 @@ def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
         pack_algo=MaxRectsBssf,
         rotation=True,
         sort_algo="area",
-        bin_algo="best_fit",
     )
 
     # 添加面料卷（无限长度，固定宽度）
