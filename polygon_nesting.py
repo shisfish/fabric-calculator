@@ -152,6 +152,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     2. 简单行式排料，快速计算
     3. 自动尝试旋转90度，选择最优方向
     4. 缝隙填充：小配件可以放在大裁片旁边的空隙中
+    5. 最佳匹配：根据缝隙尺寸智能选择最合适的裁片
     """
     import time
     start_time = time.time()
@@ -233,7 +234,11 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 if placed:
                     break
                 
-                # 第一优先：尝试放入已有行的缝隙中（检查每行的剩余空间）
+                # 第一优先：尝试放入已有行的缝隙中（最佳匹配策略）
+                # 找到最适合的行（剩余空间与裁片尺寸最匹配）
+                best_row = None
+                best_score = -1
+                
                 for row in rows:
                     # 检查高度是否匹配（裁片高度 <= 行高度）
                     if orient["height"] > row["height"] + 0.01:
@@ -244,13 +249,28 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     if available_width < orient["width"] + seam_gap_cm:
                         continue
                     
-                    # 可以放入
+                    # 计算匹配分数：剩余空间越小，分数越高（减少浪费）
+                    # 分数 = 1 - (剩余空间 / 门幅宽度)
+                    waste_ratio = available_width / fabric_width_cm
+                    score = 1 - waste_ratio
+                    
+                    # 如果能正好填满，给予额外奖励
+                    if abs(available_width - orient["width"]) < seam_gap_cm:
+                        score += 0.5
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_row = row
+                
+                if best_row:
+                    # 放入最佳匹配的行
+                    available_width = fabric_width_cm - best_row["used_width_cm"] - seam_gap_cm
                     can_fit = int(available_width / (orient["width"] + seam_gap_cm))
                     fit_count = min(can_fit, remaining)
                     
-                    start_x = row["used_width_cm"] + seam_gap_cm
+                    start_x = best_row["used_width_cm"] + seam_gap_cm
                     for i in range(fit_count):
-                        row["pieces"].append({
+                        best_row["pieces"].append({
                             "name": piece_template["name"],
                             "x": start_x + i * (orient["width"] + seam_gap_cm),
                             "y": 0,
@@ -264,11 +284,10 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                             "rotated": orient["rotated"],
                         })
                     
-                    row["used_width_cm"] = start_x + fit_count * (orient["width"] + seam_gap_cm) - seam_gap_cm
-                    row["pieces_count"] += fit_count
+                    best_row["used_width_cm"] = start_x + fit_count * (orient["width"] + seam_gap_cm) - seam_gap_cm
+                    best_row["pieces_count"] += fit_count
                     remaining -= fit_count
                     placed = True
-                    break
                 
                 # 第二优先：如果还没放置，尝试新建行
                 if not placed:
@@ -310,9 +329,6 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             if not placed:
                 print(f"[排料警告] 裁片 {piece_template['name']} ({piece_template['width']}x{piece_template['height']}) 无法放入门幅 {fabric_width_cm}cm")
                 break
-    
-    # 优化：尝试将小裁片填充到大裁片行的缝隙中
-    # 这一步已经在上面的循环中通过按面积排序实现了
     
     total_length = sum(row["length_cm"] for row in rows)
     total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
