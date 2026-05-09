@@ -331,7 +331,6 @@ def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
             w = rect.width
             h = rect.height
             rid = rect.rid
-            bid = rect.bid
             original_piece = pieces[rid] if rid < len(pieces) else None
 
             # 检查是否需要新建行
