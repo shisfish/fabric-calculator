@@ -325,8 +325,13 @@ def simulate_nesting(pieces_with_dims, fabric_width_cm, seam_gap_cm=0.5):
 
     for bin in packer:
         for rect in bin:
-            # rect: (x, y, width, height, rid, bid, *extra)
-            x, y, w, h, rid, bid = rect[:6]
+            # rect is a Rectangle object with attributes: x, y, width, height, rid, bid
+            x = rect.x
+            y = rect.y
+            w = rect.width
+            h = rect.height
+            rid = rect.rid
+            bid = rect.bid
             original_piece = pieces[rid] if rid < len(pieces) else None
 
             # 检查是否需要新建行
