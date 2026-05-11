@@ -398,10 +398,6 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         return sorted(set(cands))
     
     def find_zone_horizontal_slot(zone, pw, ph):
-        """在区域内从左到右扫描，找到第一个可放置的水平位置
-        
-        返回 (x, y) 或 None
-        """
         if pw + seam_gap_cm * 2 > fabric_width_cm:
             return None
         target_y = zone["y_start"]
@@ -420,6 +416,42 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 return (test_x, target_y)
         
         return None
+    
+    def find_any_row_horizontal_slot(zone, pw, ph):
+        if pw + seam_gap_cm * 2 > fabric_width_cm:
+            return None
+        
+        zone_bottom = zone["y_start"] + zone["height"]
+        zone_rects = [r for r in placed_rects
+                      if zone["y_start"] - 0.01 <= r["y"] <= zone_bottom + seam_gap_cm]
+        
+        rows = {}
+        for r in zone_rects:
+            ry = round(r["y"], 1)
+            if ry not in rows:
+                rows[ry] = []
+            rows[ry].append(r)
+        
+        best = None
+        best_score = float('inf')
+        
+        for row_y in sorted(rows.keys()):
+            cands = [seam_gap_cm]
+            for r in rows[row_y]:
+                cands.append(r["x"] + r["w"] + seam_gap_cm)
+            cands.sort()
+            
+            for cx in cands:
+                if cx + pw + seam_gap_cm > fabric_width_cm:
+                    continue
+                if can_place_global(cx, row_y, pw, ph):
+                    s = row_y * 10000 + cx
+                    if s < best_score:
+                        best_score = s
+                        best = (cx, row_y)
+                    break
+        
+        return best
     
     def create_zone(start_y, first_piece, pw, ph, rotated):
         new_zone = {
@@ -586,6 +618,15 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                                 best_score = s
                                 best_idx = idx
                                 best_result = (zi, xp, 0, pw, ph, rot, "horizontal")
+                        
+                        any_row = find_any_row_horizontal_slot(zone, pw, ph)
+                        if any_row is not None:
+                            axp, ayp = any_row
+                            s = ayp * 10000 + axp + 0.3
+                            if s < best_score:
+                                best_score = s
+                                best_idx = idx
+                                best_result = (zi, axp, ayp - zone["y_start"], pw, ph, rot, "any_row")
                         
                         vgap = find_zone_vertical_gap(zone, pw, ph)
                         if vgap is not None:

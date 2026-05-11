@@ -13,3 +13,7 @@ pieces = [
 
 result = polygon_nesting(pieces, fabric_width_cm=130, rotation=True)
 print(f"\n总长度: {result['total_length_cm']:.1f}cm | 利用率: {result['width_utilization']*100:.1f}%")
+
+print("\n=== 排布详情 ===")
+for i, rect in enumerate(result['placed_rects']):
+    print(f"  #{i}: {rect['name']} @ ({rect['x']:.1f}, {rect['y']:.1f}) {rect['w']:.0f}x{rect['h']:.0f}")
