@@ -750,7 +750,15 @@
                     if (piece.sleeve_cap_width > 0) extraParams.sleeveCapWidth = piece.sleeve_cap_width;
                     if (piece.cuff_width > 0) extraParams.cuffWidth = piece.cuff_width;
                     
-                    const vertices = generateVertices(piece.width, piece.height, piece.shape || 'rectangle', extraParams);
+                    let vertices;
+                    if (piece.rotated) {
+                        const origW = piece.height;
+                        const origH = piece.width;
+                        vertices = generateVertices(origW, origH, piece.shape || 'rectangle', extraParams);
+                        vertices = vertices.map(([x, y]) => [origH - y, x]);
+                    } else {
+                        vertices = generateVertices(piece.width, piece.height, piece.shape || 'rectangle', extraParams);
+                    }
                     
                     ctx.fillStyle = piece.color || '#007bff';
                     ctx.strokeStyle = '#333';
