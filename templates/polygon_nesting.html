@@ -437,28 +437,23 @@
                     ];
                 }
                 case 'double_corner': {
-                    // 双切角：通常用于前/后片
-                    // 如果有肩宽，用实际数据计算肩斜
                     const shoulderWidth = extraParams.shoulderWidth || w * 0.8;
-                    const neckWidth = extraParams.neckWidth || w * 0.2;
-                    const shoulderDrop = extraParams.shoulderDrop || h * 0.15; // 肩斜下落
+                    const shoulderDrop = extraParams.shoulderDrop || h * 0.15;
                     
-                    // 上切角（肩斜）
                     const topCornerX = (w - shoulderWidth) / 2;
                     const topCornerY = shoulderDrop;
                     
-                    // 下切角（下摆收腰）
                     const bottomCornerX = w * 0.15;
-                    const bottomCornerY = h - h * 0.1;
+                    const bottomCornerY = h * 0.9;
                     
                     return [
                         [topCornerX, 0],
                         [w - topCornerX, 0],
                         [w, topCornerY],
-                        [w, h - bottomCornerY + h * 0.1],
+                        [w, bottomCornerY],
                         [w - bottomCornerX, h],
                         [bottomCornerX, h],
-                        [0, h - bottomCornerY + h * 0.1],
+                        [0, bottomCornerY],
                         [0, topCornerY]
                     ];
                 }
