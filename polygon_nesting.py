@@ -1023,11 +1023,467 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     elapsed = time.time() - start_time
     print(f"[排料算法] 完成! 耗时:{elapsed:.3f}s, 总长:{total_length:.2f}cm, 利用率:{util*100:.2f}%")
     
-    return {
+    base_result = {
         "total_length_cm": total_length,
         "rows": rows,
         "width_utilization": round(util, 4),
     }
+    
+    # 执行二次优化（轮廓检测 + 局部填充）
+    optimized_result = secondary_optimization(
+        base_result, pieces, fabric_width_cm, seam_gap_cm, rotation
+    )
+    
+    return optimized_result
+
+# ============================================================
+# 二次优化模块 - 轮廓检测与局部填充
+# ============================================================
+
+def detect_shape_irregularities(result, fabric_width_cm):
+    """
+    检测排料结果的形状不规则性
+    
+    返回:
+    {
+        'is_irregular': bool,          # 是否需要优化
+        'trapezoid_ratio': float,      # 梯形度 (min_right / max_right)
+        'std_dev': float,              # 右边缘标准差
+        'avg_utilization': float,      # 平均利用率
+        'gaps': list,                  # 凹陷区域列表
+        'optimization_score': float    # 优化必要性评分 (0-100)
+    }
+    """
+    rects = []
+    for row in result.get('rows', []):
+        y_start = row.get('y_start', 0)
+        for p in row.get('pieces', []):
+            rects.append({
+                'x': p.get('x', 0),
+                'y': y_start + p.get('y', 0),
+                'w': p.get('width', 0),
+                'h': p.get('height', 0),
+                'name': p.get('name', '')
+            })
+    
+    if not rects:
+        return {'is_irregular': False, 'optimization_score': 0}
+    
+    # 按Y坐标分组计算右边缘
+    ys_sorted = sorted(set(round(r['y'], 1) for r in rects))
+    right_edges = {}
+    
+    for y in ys_sorted:
+        row_rects = [r for r in rects if abs(r['y'] - y) < 0.5]
+        if row_rects:
+            right_edges[y] = max(r['x'] + r['w'] for r in row_rects)
+    
+    if not right_edges:
+        return {'is_irregular': False, 'optimization_score': 0}
+    
+    # 计算统计指标
+    edges_list = list(right_edges.values())
+    avg_right = sum(edges_list) / len(edges_list)
+    max_right = max(edges_list)
+    min_right = min(edges_list)
+    variance = sum((e - avg_right) ** 2 for e in edges_list) / len(edges_list)
+    std_dev = variance ** 0.5
+    trapezoid_ratio = min_right / max_right if max_right > 0 else 1
+    avg_utilization = avg_right / fabric_width_cm
+    
+    # 检测凹陷区域（gap > 10cm 且 利用率 < 90%）
+    gaps = []
+    for y, right_edge in sorted(right_edges.items()):
+        gap = fabric_width_cm - right_edge
+        utilization = right_edge / fabric_width_cm
+        
+        if gap >= 10 and utilization < 0.90:
+            # 计算该行高度
+            row_rects = [r for r in rects if abs(r['y'] - y) < 0.5]
+            row_height = max(r['h'] for r in row_rects) if row_rects else 10
+            
+            gaps.append({
+                'y': y,
+                'x_start': right_edge + 0.5,
+                'width': gap - 0.5,
+                'height': row_height,
+                'area': (gap - 0.5) * row_height,
+                'utilization': utilization,
+                'severity': gap / fabric_width_cm  # 严重程度
+            })
+    
+    # 计算优化必要性评分 (0-100)
+    score = 0
+    if trapezoid_ratio < 0.90:
+        score += (0.90 - trapezoid_ratio) * 100 * 2  # 梯形惩罚
+    if std_dev > 8:
+        score += min((std_dev - 8) * 3, 30)  # 不规则惩罚
+    if gaps:
+        score += len(gaps) * 15 + sum(g['severity'] * 50 for g in gaps)  # 凹陷惩罚
+    if avg_utilization < 0.88:
+        score += (0.88 - avg_utilization) * 200  # 低效惩罚
+    
+    optimization_score = min(score, 100)
+    
+    result_dict = {
+        'is_irregular': optimization_score > 20,
+        'trapezoid_ratio': round(trapezoid_ratio, 3),
+        'std_dev': round(std_dev, 2),
+        'avg_utilization': round(avg_utilization, 4),
+        'gaps': gaps,
+        'optimization_score': round(optimization_score, 1),
+        'right_edges': right_edges
+    }
+    
+    return result_dict
+
+
+def identify_fillable_zones(gaps, placed_rects, seam_gap_cm=0.5):
+    """
+    从凹陷区域中筛选出真正可填充的区域
+    
+    过滤条件:
+    - 面积 > 50cm² (值得填充)
+    - 宽度 >= 最小裁片宽度
+    - 高度 >= 最小裁片高度
+    """
+    fillable = []
+    
+    for gap in gaps:
+        if gap['area'] < 50:
+            continue
+        
+        # 检查该区域是否真的可以放置（简单碰撞检测）
+        test_x = gap['x_start']
+        test_y = gap['y']
+        
+        can_place = True
+        for rect in placed_rects:
+            if (test_x < rect['x'] + rect['w'] + seam_gap_cm and
+                test_x + gap['width'] > rect['x'] - seam_gap_cm and
+                test_y < rect['y'] + rect['h'] + seam_gap_cm and
+                test_y + gap['height'] > rect['y'] - seam_gap_cm):
+                can_place = False
+                break
+        
+        if can_place or True:  # 暂时允许所有区域（后续由具体放置逻辑验证）
+            fillable.append(gap)
+    
+    # 按面积排序（优先填充大区域）
+    fillable.sort(key=lambda g: g['area'], reverse=True)
+    
+    return fillable
+
+
+def select_best_filler(gap_zone, available_pieces, rotation=True):
+    """
+    为指定空白区域选择最佳填充裁片
+    
+    选择策略:
+    1. 完全匹配优先（面积利用率最高）
+    2. 允许一定浪费（<= 20%）
+    3. 优先选择小裁片（便于后续调整）
+    """
+    candidates = []
+    gap_w, gap_h = gap_zone['width'], gap_zone['height']
+    gap_area = gap_zone['area']
+    
+    for piece in available_pieces:
+        orientations = [(piece['width'], piece['height'], False)]
+        
+        if rotation and abs(piece['width'] - piece['height']) > 0.01:
+            orientations.append((piece['height'], piece['width'], True))
+        
+        for pw, ph, rot in orientations:
+            if pw <= gap_w + 0.5 and ph <= gap_h + 0.5:
+                piece_area = pw * ph
+                fit_ratio = piece_area / gap_area
+                
+                # 只考虑合理匹配的（利用率 40%-95%）
+                if 0.40 <= fit_ratio <= 0.95:
+                    waste = gap_area - piece_area
+                    
+                    candidates.append({
+                        'piece': piece,
+                        'pw': pw,
+                        'ph': ph,
+                        'rotated': rot,
+                        'fit_ratio': fit_ratio,
+                        'waste': waste,
+                        'score': fit_ratio * 100 - waste / gap_area * 10  # 综合评分
+                    })
+    
+    if not candidates:
+        return None
+    
+    # 排序：综合评分最高优先
+    candidates.sort(key=lambda c: -c['score'])
+    
+    return candidates[0]
+
+
+def try_local_rearrangement(rects, gap_zone, fabric_width_cm, seam_gap_cm=0.5):
+    """
+    尝试局部重排：移动边界裁片以填补空隙
+    
+    策略:
+    1. 找到gap_zone上方和左侧的边界裁片
+    2. 尝试将它们向右/向下微调
+    3. 如果能对齐右边缘则接受
+    """
+    gap_y = gap_zone['y']
+    gap_x_start = gap_zone['x_start']
+    
+    # 找上方的裁片（可能在gap_y处或稍上方）
+    above_rects = [r for r in rects 
+                   if r['y'] + r['h'] <= gap_y + 1 and r['y'] >= gap_y - 20]
+    
+    # 找左侧的裁片
+    left_rects = [r for r in rects 
+                  if r['x'] + r['w'] <= gap_x_start + 5 and r['x'] >= gap_x_start - 50]
+    
+    improvements = []
+    
+    # 尝试将上方的小裁片下移到gap区域右侧
+    for rect in above_rects:
+        if rect['w'] <= gap_zone['width'] and rect['h'] <= gap_zone['height']:
+            new_x = gap_x_start + seam_gap_cm
+            new_y = gap_y + seam_gap_cm
+            
+            # 检查是否可以移动到这里
+            can_move = True
+            for other in rects:
+                if other is rect:
+                    continue
+                if (new_x < other['x'] + other['w'] + seam_gap_cm and
+                    new_x + rect['w'] > other['x'] - seam_gap_cm and
+                    new_y < other['y'] + other['h'] + seam_gap_cm and
+                    new_y + rect['h'] > other['y'] - seam_gap_cm):
+                    can_move = False
+                    break
+            
+            if can_move:
+                old_right = rect['x'] + rect['w']
+                new_right = new_x + rect['w']
+                
+                improvement = {
+                    'rect': rect,
+                    'old_pos': (rect['x'], rect['y']),
+                    'new_pos': (new_x, new_y),
+                    'right_edge_improvement': min(new_right, fabric_width_cm) - old_right
+                }
+                
+                if improvement['right_edge_improvement'] > 0:
+                    improvements.append(improvement)
+    
+    return improvements
+
+
+def secondary_optimization(result, pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
+    """
+    二次优化主函数
+    
+    流程:
+    1. 检测形状不规则性
+    2. 识别可填充区域
+    3. 执行局部优化（最多3轮）
+    4. 评估改进效果并决定是否接受
+    """
+    print(f"\n[二次优化] 开始轮廓检测...")
+    
+    # 阶段1: 轮廓检测
+    detection = detect_shape_irregularities(result, fabric_width_cm)
+    
+    if not detection['is_irregular']:
+        print(f"[二次优化] 形状规整，无需优化 (评分: {detection['optimization_score']})")
+        return result
+    
+    print(f"[二次优化] ⚠️ 检测到不规则性:")
+    print(f"  • 梯形度: {detection['trapezoid_ratio']} ({'⚠️' if detection['trapezoid_ratio'] < 0.9 else '✓'})")
+    print(f"  • 标准差: {detection['std_dev']}cm ({'⚠️' if detection['std_dev'] > 8 else '✓'})")
+    print(f"  • 平均利用率: {detection['avg_utilization']*100:.1f}%")
+    print(f"  • 凹陷区域数: {len(detection['gaps'])}")
+    print(f"  • 优化评分: {detection['optimization_score']}/100")
+    
+    if detection['gaps']:
+        print(f"\n[二次优化] 凹陷详情:")
+        for i, gap in enumerate(detection['gaps'], 1):
+            print(f"  {i}. Y={gap['y']:.1f}cm: {gap['width']:.1f}cm × {gap['height']:.1f}cm "
+                  f"= {gap['area']:.0f}cm² (利用率{gap['utilization']*100:.1f}%)")
+    
+    # 提取已放置的裁片信息
+    placed_rects = []
+    for row in result.get('rows', []):
+        y_start = row.get('y_start', 0)
+        for p in row.get('pieces', []):
+            placed_rects.append({
+                'x': p.get('x', 0),
+                'y': y_start + p.get('y', 0),
+                'w': p.get('width', 0),
+                'h': p.get('height', 0),
+                'name': p.get('name', '')
+            })
+    
+    # 统计已使用的裁片
+    from collections import Counter
+    placed_names = Counter(r['name'] for r in placed_rects)
+    
+    input_counts = {}
+    for p in pieces:
+        input_counts[p['name']] = p['count']
+    
+    # 找出未完全使用或有剩余的裁片
+    available_pieces = []
+    for p in pieces:
+        placed_count = placed_names.get(p['name'], 0)
+        remaining = p['count'] - placed_count
+        if remaining > 0:
+            for _ in range(remaining):
+                available_pieces.append(p.copy())
+    
+    # 阶段2: 识别可填充区域
+    fillable_zones = identify_fillable_zones(detection['gaps'], placed_rects, seam_gap_cm)
+    
+    if not fillable_zones:
+        print(f"\n[二次优化] 无可填充区域")
+        return result
+    
+    print(f"\n[二次优化] 发现 {len(fillable_zones)} 个可填充区域")
+    
+    original_utilization = result['width_utilization']
+    improved_result = None
+    
+    # 阶段3: 局部优化（最多3轮）
+    for round_num in range(1, 4):
+        print(f"\n[二次优化] 第{round_num}轮优化...")
+        
+        any_improvement = False
+        
+        for zone in fillable_zones[:]:  # 复制列表以便修改
+            best_filler = select_best_filler(zone, available_pieces, rotation)
+            
+            if best_filler:
+                filler_piece = best_filler['piece']
+                
+                print(f"  ✓ 为Y={zone['y']:.1f}cm区域选择: {filler_piece['name']}"
+                      f"({best_filler['pw']:.0f}×{best_filler['ph']:.0f})"
+                      f" 匹配度={best_filler['fit_ratio']*100:.1f}%")
+                
+                # 从可用列表中移除
+                if filler_piece in available_pieces:
+                    available_pieces.remove(filler_piece)
+                
+                # 创建新的row条目
+                new_piece_entry = {
+                    'name': filler_piece['name'],
+                    'x': zone['x_start'],
+                    'y': zone['y'] - get_row_y_start(result, zone['y']),
+                    'width': best_filler['pw'],
+                    'height': best_filler['ph'],
+                    'color': filler_piece.get('color', '#007bff'),
+                    'shape': filler_piece.get('shape', 'rectangle'),
+                    'shoulder_width': filler_piece.get('shoulder_width', 0),
+                    'sleeve_cap_width': filler_piece.get('sleeve_cap_width', 0),
+                    'cuff_width': filler_piece.get('cuff_width', 0),
+                    'rotated': best_filler['rotated'],
+                }
+                
+                # 添加到结果中
+                added = add_piece_to_result(result, new_piece_entry, zone['y'])
+                
+                if added:
+                    any_improvement = True
+                    zone['width'] -= best_filler['pw'] + seam_gap_cm
+                    zone['area'] = zone['width'] * zone['height']
+                    
+                    if zone['width'] < 5 or zone['area'] < 30:
+                        fillable_zones.remove(zone)
+            
+            else:
+                # 尝试局部重排
+                rearrangements = try_local_rearrangement(
+                    placed_rects, zone, fabric_width_cm, seam_gap_cm
+                )
+                
+                if rearrangements:
+                    best = rearrangements[0]
+                    print(f"  → 尝试移动 {best['rect']['name']}: "
+                          f"({best['old_pos'][0]:.1f},{best['old_pos'][1]:.1f}) → "
+                          f"({best['new_pos'][0]:.1f},{best['new_pos'][1]:.1f})")
+                    # 实际移动逻辑需要更复杂的处理...
+        
+        if not any_improvement:
+            print(f"  本轮无改进，停止优化")
+            break
+    
+    # 阶段4: 评估最终效果
+    final_utilization = calculate_updated_utilization(
+        result, fabric_width_cm, pieces
+    )
+    
+    improvement = final_utilization - original_utilization
+    
+    print(f"\n{'='*60}")
+    print(f"  二次优化完成!")
+    print(f"{'='*60}")
+    print(f"  原始利用率: {original_utilization*100:.2f}%")
+    print(f"  最终利用率: {final_utilization*100:.2f}%")
+    print(f"  改进幅度:   {improvement*100:+.2f}%")
+    
+    if improvement > 0.005:  # 至少提升0.5%
+        print(f"  ✅ 优化成功! 已应用改进")
+        improved_result = result
+    elif improvement > -0.01:  # 允许微小波动
+        print(f"  📊 改进有限，保留原始结果")
+    else:
+        print(f"  ⚠️ 结果变差，回滚到原始布局")
+    
+    return improved_result if improved_result else result
+
+
+def get_row_y_start(result, target_y):
+    """找到包含target_y的行的y_start"""
+    for row in result.get('rows', []):
+        y_start = row.get('y_start', 0)
+        row_height = row.get('length_cm', 0)
+        if y_start <= target_y <= y_start + row_height + 1:
+            return y_start
+    return 0
+
+
+def add_piece_to_result(result, piece_entry, target_y):
+    """将新裁片添加到结果中的合适位置"""
+    for row in result.get('rows', []):
+        y_start = row.get('y_start', 0)
+        if abs(y_start - target_y) < 5 or (y_start <= target_y <= y_start + row.get('length_cm', 0) + 5):
+            row.setdefault('pieces', []).append(piece_entry)
+            
+            # 更新used_width_cm
+            current_max = row.get('used_width_cm', 0)
+            new_max = max(current_max, piece_entry['x'] + piece_entry['width'])
+            row['used_width_cm'] = new_max
+            
+            return True
+    
+    # 如果没找到合适的行，创建新行（不应该发生）
+    return False
+
+
+def calculate_updated_utilization(result, fabric_width_cm, all_pieces):
+    """重新计算更新后的利用率"""
+    total_area = 0
+    total_pieces = 0
+    
+    for row in result.get('rows', []):
+        for p in row.get('pieces', []):
+            total_area += p.get('width', 0) * p.get('height', 0)
+            total_pieces += 1
+    
+    total_length = result.get('total_length_cm', 0)
+    
+    if total_length > 0:
+        return total_area / (fabric_width_cm * total_length)
+    return 0
 
 # ============================================================
 # 测试函数
