@@ -751,7 +751,9 @@
                     if (piece.cuff_width > 0) extraParams.cuffWidth = piece.cuff_width;
                     
                     let vertices;
-                    if (piece.rotated) {
+                    if (piece.vertices && piece.vertices.length >= 3) {
+                        vertices = piece.vertices;
+                    } else if (piece.rotated) {
                         const origW = piece.height;
                         const origH = piece.width;
                         vertices = generateVertices(origW, origH, piece.shape || 'rectangle', extraParams);

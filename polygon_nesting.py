@@ -139,6 +139,37 @@ def polygon_width_height(points):
     x_min, y_min, x_max, y_max = polygon_bounding_box(points)
     return x_max - x_min, y_max - y_min
 
+
+def generate_piece_vertices(w, h, shape, shoulder_width=0, sleeve_cap_width=0, cuff_width=0, rotated=False):
+    orig_w = h if rotated else w
+    orig_h = w if rotated else h
+
+    if shape == 'double_corner':
+        sw = shoulder_width if shoulder_width > 0 else orig_w * 0.8
+        sd = orig_h * 0.15
+        tcx = (orig_w - sw) / 2
+        tcy = sd
+        bcx = orig_w * 0.15
+        bcy = orig_h * 0.9
+        verts = [[tcx, 0], [orig_w - tcx, 0], [orig_w, tcy],
+                 [orig_w, bcy], [orig_w - bcx, orig_h],
+                 [bcx, orig_h], [0, bcy], [0, tcy]]
+    elif shape == 'single_corner':
+        scw = sleeve_cap_width if sleeve_cap_width > 0 else orig_w
+        cfw = cuff_width if cuff_width > 0 else orig_w * 0.6
+        cw = (scw - cfw) / 2
+        ch = orig_h * 0.2
+        verts = [[0, 0], [orig_w, 0], [orig_w, orig_h],
+                 [orig_w - cw, orig_h], [0, orig_h - ch]]
+    else:
+        verts = [[0, 0], [orig_w, 0], [orig_w, orig_h], [0, orig_h]]
+
+    if rotated:
+        verts = [[orig_h - y, x] for x, y in verts]
+
+    return verts
+
+
 # ============================================================
 # 多边形排料算法
 # ============================================================
@@ -588,6 +619,14 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             
             row_pieces = []
             for r in zone_rects:
+                rot = r.get("rotated", False)
+                verts = generate_piece_vertices(
+                    r["w"], r["h"], r["shape"],
+                    r.get("shoulder_width", 0),
+                    r.get("sleeve_cap_width", 0),
+                    r.get("cuff_width", 0),
+                    rot
+                )
                 row_pieces.append({
                     "name": r["name"],
                     "x": r["x"],
@@ -599,7 +638,8 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     "shoulder_width": r.get("shoulder_width", 0),
                     "sleeve_cap_width": r.get("sleeve_cap_width", 0),
                     "cuff_width": r.get("cuff_width", 0),
-                    "rotated": r.get("rotated", False),
+                    "rotated": rot,
+                    "vertices": verts,
                 })
             
             max_x = max((p['x'] + p['width'] for p in row_pieces), default=0)
@@ -614,6 +654,14 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                         if not any(zone["y_start"] <= r["y"] < zone["y_start"] + zone["height"] + seam_gap_cm 
                                    for zone in zones)]
         for r in orphan_rects:
+            rot = r.get("rotated", False)
+            verts = generate_piece_vertices(
+                r["w"], r["h"], r["shape"],
+                r.get("shoulder_width", 0),
+                r.get("sleeve_cap_width", 0),
+                r.get("cuff_width", 0),
+                rot
+            )
             rows.append({
                 "length_cm": r["h"],
                 "used_width_cm": r["x"] + r["w"],
@@ -629,7 +677,8 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     "shoulder_width": r.get("shoulder_width", 0),
                     "sleeve_cap_width": r.get("sleeve_cap_width", 0),
                     "cuff_width": r.get("cuff_width", 0),
-                    "rotated": r.get("rotated", False),
+                    "rotated": rot,
+                    "vertices": verts,
                 }],
             })
     

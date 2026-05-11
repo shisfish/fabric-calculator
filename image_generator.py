@@ -375,10 +375,12 @@ def generate_nesting_image(material_name, rows, fabric_width_cm, total_length_cm
         # 使用排料模拟的精确位置数据绘制裁片
         row_pieces = row.get("pieces", [])
         for piece in row_pieces:
+            pw = piece.get("width", piece.get("w", 0))
+            ph = piece.get("height", piece.get("h", 0))
             piece_x = fabric_x + int(piece["x"] * scale)
             piece_y = current_y + int(piece["y"] * scale)
-            piece_w = int(piece["w"] * scale)
-            piece_h = int(piece["h"] * scale)
+            piece_w = int(pw * scale)
+            piece_h = int(ph * scale)
             vertices = piece.get("vertices")
             piece_name = piece.get("name", "")
 
