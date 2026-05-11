@@ -271,25 +271,35 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             ori.append((ow, oh, False))
         return ori
     
-    def find_global_vertical_slot(pw, ph):
-        """在所有已放置的矮裁片上方寻找垂直空隙"""
+    def find_global_vertical_slot(pw, ph, within_zone_only=True):
+        """在所有已放置裁片上方寻找垂直空隙
+        
+        within_zone_only=True: 只返回在已有区域高度范围内的空隙
+        检查每个已放裁片的正上方是否有足够空间放置新裁片
+        """
         best_slot = None
         best_y = float('inf')
         
         for r in placed_rects:
-            if r["h"] >= ph - 0.01:
-                continue
-            
             slot_y = r["y"] + r["h"] + seam_gap_cm
             
-            if slot_y + ph > r["y"] + max(r["h"], ph) + seam_gap_cm + 0.01:
-                pass
+            if within_zone_only:
+                in_zone = False
+                for z in zones:
+                    if slot_y + ph <= z["y_start"] + z["height"] + 0.01:
+                        in_zone = True
+                        break
+                if not in_zone:
+                    continue
             
-            cx = r["x"]
-            if can_place_global(cx, slot_y, pw, ph):
-                if slot_y < best_y:
-                    best_y = slot_y
-                    best_slot = (cx, slot_y)
+            for try_x in [r["x"], seam_gap_cm]:
+                if try_x + pw + seam_gap_cm > fabric_width_cm:
+                    continue
+                if can_place_global(try_x, slot_y, pw, ph):
+                    if slot_y < best_y:
+                        best_y = slot_y
+                        best_slot = (try_x, slot_y)
+                    break
         
         return best_slot
     
@@ -360,8 +370,58 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     best_zi = zi
         return best_zi
     
+    def compute_companion_savings(zone_height, zone_used_width, skip_idx):
+        remaining_width = fabric_width_cm - zone_used_width - seam_gap_cm
+        
+        candidates = []
+        for ci, cp in enumerate(all_pieces):
+            if ci in placed_indices or ci == skip_idx:
+                continue
+            best_fit = None
+            for cpw, cph, _ in get_orientations(cp):
+                if cph <= zone_height + 0.01 and cpw + seam_gap_cm <= remaining_width:
+                    if best_fit is None or cph < best_fit[1] or (cph == best_fit[1] and cpw > best_fit[0]):
+                        best_fit = (cpw, cph)
+            if best_fit:
+                candidates.append(best_fit)
+        
+        if not candidates:
+            return 0
+        
+        candidates.sort(key=lambda c: -c[1])
+        
+        total_savings = 0
+        available_height = zone_height
+        used = set()
+        
+        while available_height > 0 and len(used) < len(candidates):
+            row_w = 0
+            row_h = 0
+            
+            for i, (cw, ch) in enumerate(candidates):
+                if i in used:
+                    continue
+                if ch > available_height + 0.01:
+                    continue
+                needed_w = cw + (seam_gap_cm if row_w > 0 else 0)
+                if row_w + needed_w <= remaining_width:
+                    row_w += needed_w
+                    row_h = max(row_h, ch)
+                    used.add(i)
+            
+            if row_h == 0:
+                break
+            
+            total_savings += row_h
+            available_height -= row_h + seam_gap_cm
+        
+        return min(total_savings, zone_height)
+    
     def fill_all_gaps():
-        """全局填充：扫描所有剩余小裁片，尝试放入任何可用空间"""
+        """全局填充：扫描所有剩余裁片，尝试放入任何可用空间
+        
+        评分标准：优先选择y坐标最低、空间利用最好的放置方案
+        """
         filled = True
         while filled:
             filled = False
@@ -374,13 +434,11 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     continue
                 
                 for pw, ph, rot in get_orientations(piece):
-                    score_base = pw * ph
-                    
                     for zi, zone in enumerate(zones):
                         xp = try_place_in_zone(zone, pw, ph)
                         if xp is not None:
                             place_y = zone["y_start"]
-                            s = place_y * 100 + score_base
+                            s = place_y * 10000 + xp
                             if s < best_score:
                                 best_score = s
                                 best_idx = idx
@@ -389,7 +447,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     vs = find_global_vertical_slot(pw, ph)
                     if vs:
                         vx, vy = vs
-                        s = vy * 100 + score_base * 1.1
+                        s = vy * 10000 + vx + 1
                         if s < best_score:
                             best_score = s
                             best_idx = idx
@@ -419,24 +477,22 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         best_score = float('inf')
         
         for pw, ph, rotated in orientations:
-            rot_penalty = 200 if rotated and (pw * ph > 500) else 0
-            
             zone_idx = get_best_zone(pw, ph)
             if zone_idx is not None:
                 zone = zones[zone_idx]
                 xp = zone["used_width"] + seam_gap_cm
                 place_y = zone["y_start"]
-                score = place_y * 10000 + xp + rot_penalty
-                if score < best_score:
-                    best_score = score
+                s = place_y * 10000 + xp
+                if s < best_score:
+                    best_score = s
                     best_result = ("zone_h", zone_idx, xp, 0, pw, ph, rotated)
             
             vslot = find_global_vertical_slot(pw, ph)
             if vslot:
                 vx, vy = vslot
-                score = vy * 10000 + vx + rot_penalty + 50
-                if score < best_score:
-                    best_score = score
+                s = vy * 10000 + vx + 1
+                if s < best_score:
+                    best_score = s
                     best_result = ("global_v", None, vx, vy, pw, ph, rotated)
         
         if best_result:
@@ -464,16 +520,28 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             placed_indices.add(idx)
             fill_all_gaps()
         else:
+            best_new_result = None
+            best_new_score = float('inf')
+            
             for pw, ph, rotated in orientations:
                 if pw + seam_gap_cm * 2 > fabric_width_cm:
                     continue
                 last_bottom = max((z["y_start"] + z["height"] for z in zones), default=0)
                 new_y = last_bottom + seam_gap_cm if zones else 0
+                zone_used_w = seam_gap_cm + pw
+                savings = compute_companion_savings(ph, zone_used_w, idx)
+                effective_height = ph - savings
+                score = effective_height * 10000 + ph * 100 + pw
+                if score < best_new_score:
+                    best_new_score = score
+                    best_new_result = (pw, ph, rotated, new_y)
+            
+            if best_new_result:
+                pw, ph, rotated, new_y = best_new_result
                 zi = create_zone(new_y, piece, pw, ph, rotated)
                 placed_indices.add(idx)
                 print(f"[排料调试] #{idx} {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rotated else''} → 新行@{new_y:.1f}cm")
                 fill_all_gaps()
-                break
             else:
                 print(f"[排料警告] {piece['name']}({piece['width']}x{piece['height']}) 无法放入!")
     
