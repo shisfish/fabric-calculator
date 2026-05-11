@@ -526,8 +526,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         placed_rects.append(rect)
         zone["pieces_count"] += 1
         
-        if place_type == "horizontal":
-            zone["used_width"] = max(zone["used_width"], px + pw)
+        zone["used_width"] = max(zone["used_width"], px + pw)
         
         return abs_y
     
@@ -622,11 +621,12 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                         any_row = find_any_row_horizontal_slot(zone, pw, ph)
                         if any_row is not None:
                             axp, ayp = any_row
-                            s = ayp * 10000 + axp + 0.3
-                            if s < best_score:
-                                best_score = s
-                                best_idx = idx
-                                best_result = (zi, axp, ayp - zone["y_start"], pw, ph, rot, "any_row")
+                            if abs(ayp - zone["y_start"]) > 0.1:
+                                s = ayp * 10000 + axp
+                                if s < best_score:
+                                    best_score = s
+                                    best_idx = idx
+                                    best_result = (zi, axp, ayp - zone["y_start"], pw, ph, rot, "any_row")
                         
                         vgap = find_zone_vertical_gap(zone, pw, ph)
                         if vgap is not None:
@@ -638,7 +638,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                             actual_gap_h = next_y - vyp
                             piece_area = pw * ph
                             gap_area = actual_gap_h * (fabric_width_cm - zone["used_width"])
-                            if gap_area > 100 and piece_area < gap_area * 0.2 and piece_area < 400:
+                            if gap_area > 100 and piece_area < gap_area * 0.3:
                                 rel_y = vyp - zone["y_start"]
                                 s = vyp * 10000 + vxp + 0.5
                                 if s < best_score:
@@ -676,46 +676,67 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             filled = False
             best_idx = None
             best_result = None
-            best_y = float('inf')
+            best_score = float('inf')
             
             for idx, piece in enumerate(all_pieces):
                 if idx in placed_indices:
                     continue
-                if piece["width"] * piece["height"] > 900:
-                    continue
                 
                 for pw, ph, rot in get_orientations(piece):
+                    for zi, zone in enumerate(zones):
+                        hslot = find_zone_horizontal_slot(zone, pw, ph)
+                        if hslot is not None:
+                            hx, hy = hslot
+                            s = hy * 10000 + hx
+                            if s < best_score:
+                                best_score = s
+                                best_idx = idx
+                                best_result = ("zone_h", zi, hx, max(0,hy), pw, ph, rot)
+                        
+                        any_slot = find_any_row_horizontal_slot(zone, pw, ph)
+                        if any_slot is not None:
+                            ax, ay = any_slot
+                            s = ay * 10000 + ax + 0.3
+                            if s < best_score:
+                                best_score = s
+                                best_idx = idx
+                                best_result = ("any_row", zi, ax, max(0,ay - zone["y_start"]), pw, ph, rot)
+                    
                     for r in placed_rects:
                         below_y = r["y"] + r["h"] + seam_gap_cm
                         for test_x in [r["x"], seam_gap_cm]:
                             if test_x + pw + seam_gap_cm > fabric_width_cm:
                                 continue
                             if can_place_global(test_x, below_y, pw, ph):
-                                if below_y < best_y:
-                                    best_y = below_y
+                                s = below_y * 10000 + test_x + 1
+                                if s < best_score:
+                                    best_score = s
                                     best_idx = idx
-                                    best_result = (test_x, below_y, pw, ph, rot)
+                                    best_result = ("below", None, test_x, below_y, pw, ph, rot)
                                 break
             
             if best_idx is not None:
                 piece = all_pieces[best_idx]
-                px, py, pw, ph, rot = best_result
+                ptype, zi, px, py, pw, ph, rot = best_result
                 
-                matched_zi = None
-                for zi, z in enumerate(zones):
-                    if z["y_start"] <= py < z["y_start"] + z["height"] + seam_gap_cm * 2:
-                        matched_zi = zi
-                        break
-                if matched_zi is None:
-                    for zi, z in enumerate(zones):
-                        if py >= z["y_start"] - seam_gap_cm:
-                            matched_zi = zi
-                
-                if matched_zi is not None:
-                    rel_y = py - zones[matched_zi]["y_start"]
-                    abs_y = add_to_zone(matched_zi, piece, px, max(0, rel_y), pw, ph, rot, "final_fill")
+                if ptype in ("zone_h", "any_row"):
+                    abs_y = add_to_zone(zi, piece, px, py, pw, ph, rot, f"final_{ptype}")
                 else:
-                    rect = {
+                    matched_zi = None
+                    for zidx, z in enumerate(zones):
+                        if z["y_start"] <= py < z["y_start"] + z["height"] + seam_gap_cm * 2:
+                            matched_zi = zidx
+                            break
+                    if matched_zi is None:
+                        for zidx, z in enumerate(zones):
+                            if py >= z["y_start"] - seam_gap_cm:
+                                matched_zi = zidx
+                    
+                    if matched_zi is not None:
+                        rel_y = py - zones[matched_zi]["y_start"]
+                        abs_y = add_to_zone(matched_zi, piece, px, max(0, rel_y), pw, ph, rot, "final_fill")
+                    else:
+                        rect = {
                         "name": piece["name"], "x": px, "y": py,
                         "w": pw, "h": ph, "color": piece["color"],
                         "shape": piece["shape"],
