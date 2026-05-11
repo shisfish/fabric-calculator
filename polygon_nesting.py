@@ -360,6 +360,47 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             return px
         return None
     
+    def find_zone_vertical_gap(zone, pw, ph):
+        zone_bottom = zone["y_start"] + zone["height"]
+        zone_rects = [r for r in placed_rects
+                      if r["y"] >= zone["y_start"] - 0.01 and r["y"] + r["h"] <= zone_bottom + 0.01]
+        
+        if not zone_rects:
+            return None
+        
+        gaps = []
+        checked_ys = set()
+        
+        for r in zone_rects:
+            if r["h"] >= zone["height"] - 0.01:
+                continue
+            below_y = r["y"] + r["h"] + seam_gap_cm
+            if below_y + ph > zone_bottom + 0.01:
+                continue
+            y_key = round(below_y, 1)
+            if y_key in checked_ys:
+                continue
+            checked_ys.add(y_key)
+            
+            for test_x in _get_x_candidates_in_zone(zone, zone_rects):
+                if test_x + pw + seam_gap_cm > fabric_width_cm:
+                    continue
+                if can_place_global(test_x, below_y, pw, ph):
+                    gaps.append((test_x, below_y))
+                    break
+        
+        if not gaps:
+            return None
+        gaps.sort(key=lambda g: (g[1], g[0]))
+        return gaps[0]
+    
+    def _get_x_candidates_in_zone(zone, zone_rects):
+        cands = [seam_gap_cm]
+        for r in zone_rects:
+            if abs(r["y"] - zone["y_start"]) < zone["height"] + seam_gap_cm:
+                cands.append(r["x"] + r["w"] + seam_gap_cm)
+        return sorted(set(cands))
+    
     def find_zone_horizontal_slot(zone, pw, ph):
         """在区域内从左到右扫描，找到第一个可放置的水平位置
         
@@ -516,6 +557,16 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                                 best_score = s
                                 best_idx = idx
                                 best_result = (zi, xp, 0, pw, ph, rot, "horizontal")
+                        
+                        vgap = find_zone_vertical_gap(zone, pw, ph)
+                        if vgap is not None:
+                            vxp, vyp = vgap
+                            rel_y = vyp - zone["y_start"]
+                            s = vyp * 10000 + vxp + 0.5
+                            if s < best_score:
+                                best_score = s
+                                best_idx = idx
+                                best_result = (zi, vxp, rel_y, pw, ph, rot, "zone_vertical")
                     
                     vs = find_global_vertical_slot(pw, ph)
                     if vs:
