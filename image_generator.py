@@ -8,27 +8,52 @@ import math
 import base64
 import io
 import os
+import platform
 from PIL import Image, ImageDraw, ImageFont
 
 
-# ============================================================
-# 字体配置
-# ============================================================
+_IMG_FONT_CACHE = {}
 
 def _get_font(size=14):
-    """获取中文字体"""
-    font_paths = [
-        "/System/Library/Fonts/PingFang.ttc",
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/STHeiti Medium.ttc",
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-    ]
-    for path in font_paths:
-        try:
-            return ImageFont.truetype(path, size)
-        except (IOError, OSError):
-            continue
-    return ImageFont.load_default()
+    if size in _IMG_FONT_CACHE:
+        return _IMG_FONT_CACHE[size]
+
+    system = platform.system()
+    candidates = []
+
+    if system == "Darwin":
+        candidates = [
+            ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", 0),
+            ("/System/Library/Fonts/PingFang.ttc", 0),
+            ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
+        ]
+    elif system == "Windows":
+        windir = os.environ.get("SystemRoot", "C:\\Windows")
+        font_dir = os.path.join(windir, "Fonts")
+        candidates = [
+            (os.path.join(font_dir, "msyh.ttc"), 0),
+            (os.path.join(font_dir, "simsun.ttc"), 0),
+            (os.path.join(font_dir, "simhei.ttf"), 0),
+        ]
+    else:
+        candidates = [
+            ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0),
+            ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+            ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", 0),
+        ]
+
+    for path, index in candidates:
+        if os.path.exists(path):
+            try:
+                font = ImageFont.truetype(path, size, index=index)
+                _IMG_FONT_CACHE[size] = font
+                return font
+            except (IOError, OSError):
+                continue
+
+    default = ImageFont.load_default()
+    _IMG_FONT_CACHE[size] = default
+    return default
 
 
 # ============================================================
