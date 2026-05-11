@@ -506,7 +506,6 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 abs_y = add_to_zone(target_zone_idx, piece, vxp, rel_y, pw, ph, rot, "zone_bottom_fill")
                 placed_indices.add(best_idx)
                 filled_any = True
-                print(f"[排料调试] 填充zone底部: {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rot else''} → ({vxp:.1f},{abs_y:.1f})")
     
     def add_to_zone(zone_idx, piece, px, py_rel, pw, ph, rotated, place_type="horizontal"):
         zone = zones[zone_idx]
@@ -668,7 +667,20 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 abs_y = add_to_zone(zi, piece, px, py_rel, pw, ph, rot, ptype)
                 placed_indices.add(best_idx)
                 filled = True
-                print(f"[排料调试] 填充: {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rot else''} → ({px:.1f},{abs_y:.1f}) 类型={ptype}")
+                
+                right_edge = px + pw + seam_gap_cm
+                if right_edge < fabric_width_cm - 1:
+                    for ci, cp in enumerate(all_pieces):
+                        if ci in placed_indices:
+                            continue
+                        for cpw, cph, crot in get_orientations(cp):
+                            if right_edge + cpw + seam_gap_cm <= fabric_width_cm:
+                                if can_place_global(right_edge, abs_y, cpw, cph):
+                                    add_to_zone(zi, cp, right_edge, max(0, abs_y - zones[zi]["y_start"]), cpw, cph, crot, "fill_compact")
+                                    placed_indices.add(ci)
+                                    right_edge += cpw + seam_gap_cm
+                                    filled = True
+                                    break
     
     def fill_remaining_gaps():
         filled = True
@@ -750,7 +762,82 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 
                 placed_indices.add(best_idx)
                 filled = True
-                print(f"[排料调试] 最终填充: {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rot else''} → ({px:.1f},{abs_y:.1f})")
+                
+                right_edge = px + pw + seam_gap_cm
+                if right_edge < fabric_width_cm - 1:
+                    for ci, cp in enumerate(all_pieces):
+                        if ci in placed_indices:
+                            continue
+                        for cpw, cph, crot in get_orientations(cp):
+                            if right_edge + cpw + seam_gap_cm <= fabric_width_cm:
+                                target_zi = matched_zi if ptype == "below" and matched_zi is not None else (zi if ptype in ("zone_h", "any_row") and zi is not None else None)
+                                if target_zi is not None:
+                                    target_abs_y = abs_y
+                                    if can_place_global(right_edge, target_abs_y, cpw, cph):
+                                        rel_y = target_abs_y - zones[target_zi]["y_start"]
+                                        add_to_zone(target_zi, cp, right_edge, max(0, rel_y), cpw, cph, crot, "final_compact")
+                                        placed_indices.add(ci)
+                                        right_edge += cpw + seam_gap_cm
+                                        filled = True
+                                        break
+                                else:
+                                    if can_place_global(right_edge, abs_y, cpw, cph):
+                                        rect = {
+                                            "name": cp["name"], "x": right_edge, "y": abs_y,
+                                            "w": cpw, "h": cph, "color": cp["color"],
+                                            "shape": cp["shape"],
+                                            "shoulder_width": cp.get("shoulder_width", 0),
+                                            "sleeve_cap_width": cp.get("sleeve_cap_width", 0),
+                                            "cuff_width": cp.get("cuff_width", 0),
+                                            "rotated": crot,
+                                        }
+                                        placed_rects.append(rect)
+                                        placed_indices.add(ci)
+                                        right_edge += cpw + seam_gap_cm
+                                        filled = True
+                                        break
+    
+    def compact_all_rows():
+        improved = True
+        while improved:
+            improved = False
+            for zi, zone in enumerate(zones):
+                zone_rects = [r for r in placed_rects
+                              if zone["y_start"] - 0.01 <= r["y"] <= zone["y_start"] + zone["height"] + seam_gap_cm]
+                rows = {}
+                for r in zone_rects:
+                    ry = round(r["y"], 1)
+                    if ry not in rows:
+                        rows[ry] = []
+                    rows[ry].append(r)
+                
+                for row_y, row_rects in rows.items():
+                    right_max = max(r["x"] + r["w"] for r in row_rects) + seam_gap_cm
+                    if right_max >= fabric_width_cm - 0.5:
+                        continue
+                    
+                    best_ci = None
+                    best_fit = None
+                    best_area = 0
+                    for ci, cp in enumerate(all_pieces):
+                        if ci in placed_indices:
+                            continue
+                        for cpw, cph, crot in get_orientations(cp):
+                            if right_max + cpw + seam_gap_cm <= fabric_width_cm:
+                                if can_place_global(right_max, row_y, cpw, cph):
+                                    area = cpw * cph
+                                    if area > best_area:
+                                        best_area = area
+                                        best_ci = ci
+                                        best_fit = (cpw, cph, crot)
+                                    break
+                    
+                    if best_ci is not None:
+                            cpw, cph, crot = best_fit
+                            rel_y = row_y - zone["y_start"]
+                            add_to_zone(zi, all_pieces[best_ci], right_max, max(0, rel_y), cpw, cph, crot, "compact_row")
+                            placed_indices.add(best_ci)
+                            improved = True
     
     for idx, piece in enumerate(all_pieces):
         if idx in placed_indices:
@@ -785,7 +872,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             
             if ptype == "zone_h":
                 abs_y = add_to_zone(zi, piece, px, py, pw, ph, rot, "horizontal")
-                print(f"[排料调试] #{idx} {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rot else''} → ({px:.1f},{abs_y:.1f}) 区域#{zi}")
+                
             else:
                 matched_zi = None
                 for zidx, z in enumerate(zones):
@@ -800,10 +887,36 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 else:
                     rel_y = py - zones[matched_zi]["y_start"]
                     abs_y = add_to_zone(matched_zi, piece, px, rel_y, pw, ph, rot, "vertical")
-                    print(f"[排料调试] #{idx} {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rot else''} → ({px:.1f},{abs_y:.1f}) 区域#{matched_zi}垂直")
             
             placed_indices.add(idx)
             fill_all_gaps()
+            
+            for zi, zone in enumerate(zones):
+                zone_rects = [r for r in placed_rects
+                              if zone["y_start"] - 0.01 <= r["y"] <= zone["y_start"] + zone["height"] + seam_gap_cm]
+                rows = {}
+                for r in zone_rects:
+                    ry = round(r["y"], 1)
+                    if ry not in rows:
+                        rows[ry] = []
+                    rows[ry].append(r)
+                for row_y, row_rects in rows.items():
+                    right_max = max(r["x"] + r["w"] for r in row_rects) + seam_gap_cm
+                    if right_max >= fabric_width_cm - 1:
+                        continue
+                    for ci, cp in enumerate(all_pieces):
+                        if ci in placed_indices:
+                            continue
+                        for cpw, cph, crot in get_orientations(cp):
+                            if right_max + cpw + seam_gap_cm <= fabric_width_cm:
+                                if can_place_global(right_max, row_y, cpw, cph):
+                                    rel_y = row_y - zone["y_start"]
+                                    add_to_zone(zi, cp, right_max, max(0, rel_y), cpw, cph, crot, "inline_compact")
+                                    placed_indices.add(ci)
+                                    break
+                        if ci not in placed_indices:
+                            continue
+                        break
         else:
             best_new_result = None
             best_new_score = float('inf')
@@ -824,16 +937,16 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 pw, ph, rotated, new_y = best_new_result
                 zi = create_zone(new_y, piece, pw, ph, rotated)
                 placed_indices.add(idx)
-                print(f"[排料调试] #{idx} {piece['name']}({pw:.0f}x{ph:.0f}){'↻'if rotated else''} → 新行@{new_y:.1f}cm")
                 fill_all_gaps()
             else:
                 print(f"[排料警告] {piece['name']}({piece['width']}x{piece['height']}) 无法放入!")
     
     fill_remaining_gaps()
+    compact_all_rows()
     
     rows = []
     if placed_rects and zones:
-        for zone in zones:
+        for zi, zone in enumerate(zones):
             zone_rects = [r for r in placed_rects 
                            if zone["y_start"] <= r["y"] < zone["y_start"] + zone["height"] + seam_gap_cm]
             if not zone_rects:
