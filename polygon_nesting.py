@@ -143,81 +143,20 @@ def polygon_width_height(points):
 # 多边形排料算法
 # ============================================================
 
-def convert_to_rows(placed_rects, seam_gap_cm):
-    """将 Skyline 算法的已放置矩形列表转换为前端 rows 格式
-    
-    按 y 坐标分组，将相近 y 的裁片归为同一行
-    """
-    if not placed_rects:
-        return []
-    
-    sorted_rects = sorted(placed_rects, key=lambda r: (r["y"], r["x"]))
-    rows = []
-    
-    for rect in sorted_rects:
-        row_y = rect["y"]
-        rect_bottom = row_y + rect["height"]
-        
-        matched_row = None
-        for row in rows:
-            if abs(row["y"] - row_y) < seam_gap_cm * 0.5:
-                if rect_bottom > row.get("max_bottom", 0):
-                    row["max_bottom"] = rect_bottom
-                    row["length_cm"] = max(row["length_cm"], rect_bottom - row["y"])
-                matched_row = row
-                break
-        
-        if not matched_row:
-            new_row = {
-                "y": row_y,
-                "length_cm": rect["height"],
-                "max_bottom": rect_bottom,
-                "pieces_count": 0,
-                "pieces": [],
-            }
-            rows.append(new_row)
-            matched_row = new_row
-        
-        piece_entry = {
-            "name": rect["name"],
-            "x": rect["x"],
-            "y": 0,
-            "width": rect["width"],
-            "height": rect["height"],
-            "color": rect["color"],
-            "shape": rect["shape"],
-            "shoulder_width": rect["shoulder_width"],
-            "sleeve_cap_width": rect["sleeve_cap_width"],
-            "cuff_width": rect["cuff_width"],
-            "rotated": rect.get("rotated", False),
-        }
-        matched_row["pieces"].append(piece_entry)
-        matched_row["pieces_count"] += 1
-    
-    for row in rows:
-        row.pop("y", None)
-        row.pop("max_bottom", None)
-    
-    return rows
-
 def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     """
-    多边形排料算法 - Skyline（天际线）版本
+    多边形排料算法 - 改进行式布局 + 垂直空间复用
     
-    核心策略：使用 Skyline/Bottom-Left 算法进行 2D 矩形装箱
-    不再按"行"划分，而是维护已放置矩形列表，新裁片可以放在任何已有矩形的旁边或上方，
-    充分利用垂直空间。
-    
-    特点：
-    1. 大裁片先放（按面积降序），奠定基础轮廓
-    2. 小裁片填充到大裁片旁边的水平和垂直缝隙中
-    3. 支持90度旋转自动选择最优方向
-    4. 底部优先策略：优先选择 y 坐标最低的可用位置
+    策略（专为服装排料优化）：
+    1. 大裁片先放（按面积降序），形成基础布局
+    2. 小裁片优先填充到同行/同区域的水平缝隙
+    3. 垂直空间复用：当区域内存在高度差时，小裁片可放在矮裁片上方
+    4. 支持90度旋转自动选择最优方向
     """
     import time
     start_time = time.time()
     
-    print(f"[排料算法] ========== 开始排料 (Skyline模式) ==========")
+    print(f"[排料算法] ========== 开始排料 (改进行式+垂直填充) ==========")
     print(f"[排料算法] 门幅宽度: {fabric_width_cm}cm")
     print(f"[排料算法] 缝份间隙: {seam_gap_cm}cm")
     print(f"[排料算法] 允许旋转: {rotation}")
@@ -227,7 +166,6 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         print(f"[排料算法] 输入参数无效，返回空结果")
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
     
-    # 预处理裁片，展开为单个裁片列表
     all_pieces = []
     for piece in pieces:
         w = piece.get("width", 0)
@@ -253,100 +191,21 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         print(f"[排料算法] 有效裁片为空，返回空结果")
         return {"total_length_cm": 0, "rows": [], "width_utilization": 0}
     
-    # 按面积降序排序（大裁片先放，小裁片后放用于填充缝隙）
+    # 按面积降序排序（大裁片先放）
     all_pieces.sort(key=lambda p: -(p["width"] * p["height"]))
     
     print(f"[排料算法] 展开后裁片总数: {len(all_pieces)}")
     print(f"[排料算法] 裁片面积总和: {sum(p['width'] * p['height'] for p in all_pieces):.2f}cm²")
     
     total_area = sum(p["width"] * p["height"] for p in all_pieces)
-    placed_rects = []  # 已放置矩形列表: [{x, y, width, height, name, ...}]
     placed_indices = set()
     
-    def rects_overlap(r1, r2):
-        """检查两个矩形是否重叠（含缝份间隙）"""
-        gap = seam_gap_cm
-        not_overlapping = (
-            r1["x"] + r1["width"] + gap <= r2["x"] or
-            r2["x"] + r2["width"] + gap <= r1["x"] or
-            r1["y"] + r1["height"] + gap <= r2["y"] or
-            r2["y"] + r2["height"] + gap <= r1["y"]
-        )
-        return not not_overlapping
+    # 区域列表：每个区域代表一个"带状区域"
+    # 结构: {y_start, height, pieces: [{x, y_rel, w, h, ...}], used_width}
+    zones = []
     
-    def can_place(x, y, w, h):
-        """检查在 (x,y) 位置放置 w×h 的矩形是否可行"""
-        if x < 0 or y < 0:
-            return False
-        if x + w > fabric_width_cm:
-            return False
-        new_rect = {"x": x, "y": y, "width": w, "height": h}
-        for rect in placed_rects:
-            if rects_overlap(new_rect, rect):
-                return False
-        return True
-    
-    def get_skyline_at_x(x_pos, w):
-        """获取在 x_pos 到 x_pos+w 范围内的天际线高度"""
-        max_y = 0
-        for rect in placed_rects:
-            rx, ry, rw, rh = rect["x"], rect["y"], rect["width"], rect["height"]
-            if x_pos < rx + rw + seam_gap_cm and x_pos + w + seam_gap_cm > rx:
-                top = ry + rh
-                if top > max_y:
-                    max_y = top
-        return max_y
-    
-    def find_best_position(piece_w, piece_h):
-        """使用 Skyline 策略找到最佳放置位置
-        
-        候选位置来源：
-        1. 原点 (0, 0) 或当前最底行的左侧起始
-        2. 每个已放置矩形的右侧边缘
-        3. 每个已放置矩形的顶部边缘
-        
-        选择标准：y 坐标最低（底部优先），同 y 时 x 最小
-        """
-        candidates = set()
-        
-        candidates.add((seam_gap_cm, 0))
-        
-        for rect in placed_rects:
-            candidates.add((rect["x"] + rect["width"] + seam_gap_cm, rect["y"]))
-            candidates.add((seam_gap_cm, rect["y"] + rect["height"] + seam_gap_cm))
-            candidates.add((rect["x"], rect["y"] + rect["height"] + seam_gap_cm))
-        
-        best_pos = None
-        best_y = float('inf')
-        best_x = float('inf')
-        
-        for cx, cy in candidates:
-            skyline_y = get_skyline_at_x(cx, piece_w)
-            place_y = max(cy, skyline_y)
-            
-            if can_place(cx, place_y, piece_w, piece_h):
-                if place_y < best_y or (place_y == best_y and cx < best_x):
-                    best_pos = (cx, place_y)
-                    best_y = place_y
-                    best_x = cx
-        
-        return best_pos
-    
-    def get_total_height():
-        """获取当前已放置内容的总高度"""
-        if not placed_rects:
-            return 0
-        return max(r["y"] + r["height"] for r in placed_rects)
-    
-    # 逐个放置裁片
-    for idx, piece in enumerate(all_pieces):
-        if idx in placed_indices:
-            continue
-        
-        piece_area = piece["width"] * piece["height"]
-        print(f"[排料调试] 处理裁片 #{idx}: {piece['name']} ({piece['width']}x{piece['height']}), 面积={piece_area:.2f}cm²")
-        
-        # 准备两种方向
+    def get_orientations(piece):
+        """获取裁片的可选方向"""
         orientations = []
         orig_fits = piece["width"] + seam_gap_cm * 2 <= fabric_width_cm
         rot_fits = piece["height"] + seam_gap_cm * 2 <= fabric_width_cm
@@ -357,52 +216,305 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             orientations.append((piece["height"], piece["width"], True))
         if not orientations:
             orientations.append((piece["width"], piece["height"], False))
+        return orientations
+    
+    def try_place_in_zone(zone, pw, ph):
+        """尝试在指定区域的水平方向放置裁片"""
+        if ph > zone["height"] + 0.01:
+            return None
         
-        placed = False
-        best_result = None
-        best_place_y = float('inf')
+        available = fabric_width_cm - zone["used_width"] - seam_gap_cm
+        if available < pw + seam_gap_cm:
+            return None
         
-        for orient_w, orient_h, rotated in orientations:
-            pos = find_best_position(orient_w, orient_h)
-            if pos is not None:
-                px, py = pos
-                if py < best_place_y or (py == best_place_y and best_result is None):
-                    best_place_y = py
-                    best_result = (px, py, orient_w, orient_h, rotated)
+        x_pos = zone["used_width"] + seam_gap_cm
+        return x_pos
+    
+    def find_vertical_slot_in_zone(zone, pw, ph):
+        """在区域内寻找垂直空隙（矮裁片上方的空间）"""
+        best_slot = None
+        best_y_rel = float('inf')
         
-        if best_result:
-            px, py, pw, ph, rot = best_result
-            new_rect = {
+        for existing in zone["pieces"]:
+            ex, ey, ew, eh = existing["x"], existing["y_rel"], existing["w"], existing["h"]
+            
+            if eh >= ph + seam_gap_cm:
+                continue
+            
+            slot_y = ey + eh + seam_gap_cm
+            
+            if slot_y + ph > zone["height"] + 0.01:
+                continue
+            
+            # 检查x方向是否重叠
+            can_fit_x = True
+            for other in zone["pieces"]:
+                ox, oy, ow, oh = other["x"], other["y_rel"], other["w"], other["h"]
+                
+                if other is existing:
+                    continue
+                
+                x_overlap = not (ex + pw + seam_gap_cm <= ox or ox + ow + seam_gap_cm <= ex)
+                y_overlap = not (slot_y + ph + seam_gap_cm <= oy or oy + oh + seam_gap_cm <= slot_y)
+                
+                if x_overlap and y_overlap:
+                    can_fit_x = False
+                    break
+            
+            if can_fit_x and ex + pw <= fabric_width_cm - seam_gap_cm:
+                if slot_y < best_y_rel:
+                    best_y_rel = slot_y
+                    best_slot = (ex, slot_y)
+        
+        return best_slot
+    
+    def fill_zone_gaps(zone_idx):
+        """填充指定区域的水平和垂直缝隙"""
+        zone = zones[zone_idx]
+        filled_any = True
+        
+        while filled_any:
+            filled_any = False
+            available_h = fabric_width_cm - zone["used_width"] - seam_gap_cm
+            
+            if available_h < seam_gap_cm * 3:
+                break
+            
+            best_piece_idx = None
+            best_orient = None
+            best_area = -1
+            
+            for idx, piece in enumerate(all_pieces):
+                if idx in placed_indices:
+                    continue
+                
+                for orient_w, orient_h, rotated in get_orientations(piece):
+                    if orient_h > zone["height"] + 0.01:
+                        continue
+                    
+                    # 尝试水平放置（行尾）
+                    if orient_w + seam_gap_cm <= available_h:
+                        piece_area = orient_w * orient_h
+                        if piece_area > best_area:
+                            best_area = piece_area
+                            best_piece_idx = idx
+                            best_orient = (orient_w, orient_h, rotated, "horizontal")
+                    
+                    # 尝试垂直放置（矮裁片上方）
+                    vslot = find_vertical_slot_in_zone(zone, orient_w, orient_h)
+                    if vslot:
+                        piece_area = orient_w * orient_h
+                        if piece_area > best_area:
+                            best_area = piece_area
+                            best_piece_idx = idx
+                            best_orient = (orient_w, orient_h, rotated, "vertical", vslot[0], vslot[1])
+            
+            if best_piece_idx is None:
+                break
+            
+            piece = all_pieces[best_piece_idx]
+            pw, ph, rot = best_orient[0], best_orient[1], best_orient[2]
+            place_type = best_orient[3]
+            
+            if place_type == "horizontal":
+                x_pos = zone["used_width"] + seam_gap_cm
+                y_rel = 0
+                zone["used_width"] = x_pos + pw
+            else:
+                x_pos = best_orient[4]
+                y_rel = best_orient[5]
+            
+            zone["pieces"].append({
                 "name": piece["name"],
-                "x": px,
-                "y": py,
-                "width": pw,
-                "height": ph,
+                "x": x_pos,
+                "y_rel": y_rel,
+                "w": pw,
+                "h": ph,
                 "color": piece["color"],
                 "shape": piece["shape"],
                 "shoulder_width": piece["shoulder_width"],
                 "sleeve_cap_width": piece["sleeve_cap_width"],
                 "cuff_width": piece["cuff_width"],
                 "rotated": rot,
-            }
-            placed_rects.append(new_rect)
+            })
+            zone["pieces_count"] += 1
+            placed_indices.add(best_piece_idx)
+            filled_any = True
+            
+            print(f"[排料调试] 区域#{zone_idx}填充: {piece['name']} ({pw:.1f}x{ph:.1f}) at ({x_pos:.1f},{y_rel:.1f}), 类型={place_type}")
+    
+    def create_zone(start_y, first_piece, pw, ph, rotated):
+        """创建新区域并放入第一个裁片"""
+        new_zone = {
+            "y_start": start_y,
+            "height": ph,
+            "used_width": seam_gap_cm + pw,
+            "pieces_count": 1,
+            "pieces": [{
+                "name": first_piece["name"],
+                "x": seam_gap_cm,
+                "y_rel": 0,
+                "w": pw,
+                "h": ph,
+                "color": first_piece["color"],
+                "shape": first_piece["shape"],
+                "shoulder_width": first_piece["shoulder_width"],
+                "sleeve_cap_width": first_piece["sleeve_cap_width"],
+                "cuff_width": first_piece["cuff_width"],
+                "rotated": rotated,
+            }],
+        }
+        zones.append(new_zone)
+        return len(zones) - 1
+    
+    def get_best_zone(pw, ph):
+        """找到最适合放置的区域（优先选择能放入且浪费最少的）"""
+        best_zone_idx = None
+        best_score = -1
+        best_waste = float('inf')
+        
+        for zi, zone in enumerate(zones):
+            if ph > zone["height"] + 0.01:
+                continue
+            
+            avail = fabric_width_cm - zone["used_width"] - seam_gap_cm
+            if avail < pw + seam_gap_cm:
+                continue
+            
+            waste = avail - pw
+            score = 100 - waste / fabric_width_cm * 100
+            
+            if score > best_score or (score == best_score and waste < best_waste):
+                best_score = score
+                best_waste = waste
+                best_zone_idx = zi
+        
+        return best_zone_idx
+    
+    # 主循环：逐个放置裁片
+    for idx, piece in enumerate(all_pieces):
+        if idx in placed_indices:
+            continue
+        
+        piece_area = piece["width"] * piece["height"]
+        print(f"[排料调试] 处理裁片 #{idx}: {piece['name']} ({piece['width']}x{piece['height']}), 面积={piece_area:.2f}cm²")
+        
+        orientations = get_orientations(piece)
+        placed = False
+        best_result = None
+        best_zone_for_result = None
+        best_place_y = float('inf')
+        
+        for orient_w, orient_h, rotated in orientations:
+            # 策略1：尝试放入现有区域（水平方向）
+            zone_idx = get_best_zone(orient_w, orient_h)
+            if zone_idx is not None:
+                zone = zones[zone_idx]
+                x_pos = zone["used_width"] + seam_gap_cm
+                place_y = zone["y_start"]
+                
+                if place_y < best_place_y or (place_y == best_place_y and best_result is None):
+                    best_place_y = place_y
+                    best_result = (x_pos, 0, orient_w, orient_h, rotated, "horizontal")
+                    best_zone_for_result = zone_idx
+            
+            # 策略2：尝试在现有区域的垂直空隙中放置
+            for zi, zone in enumerate(zones):
+                vslot = find_vertical_slot_in_zone(zone, orient_w, orient_h)
+                if vslot:
+                    place_y = zone["y_start"]
+                    if place_y < best_place_y or (place_y == best_place_y and best_result is None):
+                        best_place_y = place_y
+                        best_result = (vslot[0], vslot[1], orient_w, orient_h, rotated, "vertical")
+                        best_zone_for_result = zi
+        
+        if best_result:
+            px, py_rel, pw, ph, rot, ptype = best_result
+            zone = zones[best_zone_for_result]
+            
+            zone["pieces"].append({
+                "name": piece["name"],
+                "x": px,
+                "y_rel": py_rel,
+                "w": pw,
+                "h": ph,
+                "color": piece["color"],
+                "shape": piece["shape"],
+                "shoulder_width": piece["shoulder_width"],
+                "sleeve_cap_width": piece["sleeve_cap_width"],
+                "cuff_width": piece["cuff_width"],
+                "rotated": rot,
+            })
+            zone["pieces_count"] += 1
+            
+            if ptype == "horizontal":
+                zone["used_width"] = max(zone["used_width"], px + pw)
+            
             placed_indices.add(idx)
             placed = True
-            current_h = get_total_height()
-            print(f"[排料调试] 已放置: {piece['name']} at ({px:.1f},{py:.1f}) {pw}x{ph}, 当前总高={current_h:.1f}cm")
+            
+            current_bottom = max(z["y_start"] + z["height"] for z in zones) if zones else 0
+            print(f"[排料调试] 已放置: {piece['name']} at ({px:.1f},{py_rel:.1f}) {pw}x{ph}, 区域#{best_zone_for_result}, 类型={ptype}, 当前底部={current_bottom:.1f}cm")
+            
+            # 放置后立即尝试填充该区域剩余空间
+            fill_zone_gaps(best_zone_for_result)
+        
+        # 策略3：如果没找到合适区域，新建区域
+        if not placed:
+            for orient_w, orient_h, rotated in orientations:
+                if orient_w + seam_gap_cm * 2 > fabric_width_cm:
+                    continue
+                
+                last_bottom = max((z["y_start"] + z["height"] for z in zones), default=0)
+                new_y = last_bottom + seam_gap_cm if zones else 0
+                
+                zi = create_zone(new_y, piece, orient_w, orient_h, rotated)
+                placed_indices.add(idx)
+                placed = True
+                
+                print(f"[排料调试] 新建区域#{zi}: {piece['name']} ({orient_w:.1f}x{orient_h:.1f}), 起始Y={new_y:.1f}cm")
+                
+                # 新建后立即填充
+                fill_zone_gaps(zi)
+                break
         
         if not placed:
             print(f"[排料警告] 裁片 {piece['name']} ({piece['width']}x{piece['height']}) 无法放入门幅 {fabric_width_cm}cm")
     
-    # 将 placed_rects 转换为前端需要的 rows 格式
-    rows = convert_to_rows(placed_rects, seam_gap_cm)
+    # 将zones转换为前端需要的rows格式
+    rows = []
+    for zone in zones:
+        row_pieces = []
+        max_right = 0
+        for p in zone["pieces"]:
+            row_pieces.append({
+                "name": p["name"],
+                "x": p["x"],
+                "y": p["y_rel"],
+                "width": p["w"],
+                "height": p["h"],
+                "color": p["color"],
+                "shape": p["shape"],
+                "shoulder_width": p["shoulder_width"],
+                "sleeve_cap_width": p["sleeve_cap_width"],
+                "cuff_width": p["cuff_width"],
+                "rotated": p["rotated"],
+            })
+            max_right = max(max_right, p["x"] + p["w"])
+        
+        rows.append({
+            "length_cm": zone["height"],
+            "used_width_cm": max_right,
+            "pieces_count": zone["pieces_count"],
+            "pieces": row_pieces,
+        })
     
-    total_length = get_total_height()
+    total_length = sum(row["length_cm"] for row in rows) if rows else 0
     total_available_area = fabric_width_cm * total_length if total_length > 0 else 0
     width_utilization = total_area / total_available_area if total_available_area > 0 else 0
     
     elapsed = time.time() - start_time
-    print(f"[排料算法] 耗时: {elapsed:.3f}秒, 裁片数量: {len(all_pieces)}, 已放置: {len(placed_rects)}, 总长度: {total_length:.2f}cm")
+    print(f"[排料算法] 耗时: {elapsed:.3f}秒, 裁片数量: {len(all_pieces)}, 已放置: {len(placed_indices)}, 总长度: {total_length:.2f}cm")
     
     return {
         "total_length_cm": total_length,
