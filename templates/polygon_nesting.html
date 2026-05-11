@@ -180,6 +180,9 @@
                 </div>
             </div>
 
+            <!-- 裁片图形 -->
+            <div class="section" id="piece-images-container" style="display:none;"></div>
+
             <!-- 裁片明细 -->
             <div class="section">
                 <h3>✂️ 裁片明细</h3>
@@ -700,6 +703,35 @@
 
             drawNesting(data.rows, fabricWidth, data.width_utilization);
             updatePiecesTable(data.pieces_detail || []);
+            renderPieceImages(data.piece_images || []);
+        }
+
+        function renderPieceImages(pieceImages) {
+            const container = document.getElementById('piece-images-container');
+            if (!container) return;
+            
+            if (pieceImages.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            container.innerHTML = `
+                <h3 style="font-size:16px;font-weight:600;margin:16px 0 12px;color:var(--text-primary);">
+                    裁片图形 (${pieceImages.length}个)
+                </h3>
+                <div style="display:flex;flex-wrap:wrap;gap:12px;">
+                    ${pieceImages.map(img => `
+                        <div style="background:#fff;border:1px solid var(--border-color);border-radius:8px;padding:8px;text-align:center;">
+                            <img src="${img.base64}" alt="${img.name}"
+                                 style="max-width:200px;height:auto;border-radius:4px;border:1px solid #e5e7eb;">
+                            <div style="margin-top:6px;font-size:12px;color:var(--text-secondary);">
+                                ${img.name}${img.rotated ? ' ↻' : ''} ×${img.count}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         }
 
         function drawNesting(rows, fabricWidth, widthUtilization) {

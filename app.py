@@ -503,7 +503,12 @@ def api_polygon_nesting():
         
         print(f"[API] 收到排料请求: {len(pieces)}种裁片, 门幅{fabric_width}cm")
         
-        # 执行多边形排料
+        from piece_generator import generate_all_pieces_images
+        
+        piece_images = generate_all_pieces_images(pieces, fabric_width_cm=fabric_width, save_to_file=True)
+        
+        print(f"[API] 生成 {len(piece_images)} 个裁片图形")
+        
         nesting_result = polygon_nesting(pieces, fabric_width)
         
         # 构建裁片明细
@@ -702,6 +707,7 @@ def api_polygon_nesting():
                 "pieces_detail": pieces_detail,
                 "warnings": warnings,
                 "nesting_images": nesting_images,
+                "piece_images": piece_images,
             }
         })
     
