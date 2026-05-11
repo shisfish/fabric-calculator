@@ -294,11 +294,21 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     def get_orientations(piece):
         ori = []
         ow, oh = piece["width"], piece["height"]
-        if ow + seam_gap_cm * 2 <= fabric_width_cm:
+        can_original = ow + seam_gap_cm * 2 <= fabric_width_cm
+        can_rotated = rotation and abs(ow - oh) > 0.01 and oh + seam_gap_cm * 2 <= fabric_width_cm
+
+        if can_original and can_rotated:
+            if oh <= ow:
+                ori.append((ow, oh, False))
+                ori.append((oh, ow, True))
+            else:
+                ori.append((oh, ow, True))
+                ori.append((ow, oh, False))
+        elif can_original:
             ori.append((ow, oh, False))
-        if rotation and abs(ow - oh) > 0.01 and oh + seam_gap_cm * 2 <= fabric_width_cm:
+        elif can_rotated:
             ori.append((oh, ow, True))
-        if not ori:
+        else:
             ori.append((ow, oh, False))
         return ori
     
@@ -546,7 +556,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 slot = find_zone_horizontal_slot(zone, pw, ph)
                 if slot is not None:
                     xp, place_y = slot
-                    s = place_y * 10000 + xp
+                    s = place_y * 10000 + ph * 10 + xp
                     if s < best_score:
                         best_score = s
                         best_result = ("zone_h", zone_idx, xp, 0, pw, ph, rotated)
@@ -554,7 +564,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             vslot = find_global_vertical_slot(pw, ph)
             if vslot:
                 vx, vy = vslot
-                s = vy * 10000 + vx + 1
+                s = vy * 10000 + ph * 10 + vx + 1
                 if s < best_score:
                     best_score = s
                     best_result = ("global_v", None, vx, vy, pw, ph, rotated)
@@ -594,8 +604,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 new_y = last_bottom + seam_gap_cm if zones else 0
                 zone_used_w = seam_gap_cm + pw
                 savings = compute_companion_savings(ph, zone_used_w, idx)
-                effective_height = ph - savings
-                score = effective_height * 10000 + ph * 100 + pw
+                score = ph * 100000 + (ph - savings) * 1000 + pw
                 if score < best_new_score:
                     best_new_score = score
                     best_new_result = (pw, ph, rotated, new_y)
