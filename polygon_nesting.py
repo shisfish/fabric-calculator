@@ -274,8 +274,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     def find_global_vertical_slot(pw, ph, within_zone_only=True):
         """在所有已放置裁片上方寻找垂直空隙
         
-        within_zone_only=True: 只返回在已有区域高度范围内的空隙
-        检查每个已放裁片的正上方是否有足够空间放置新裁片
+        within_zone_only=True: 确保裁片不超出所在zone的高度范围
         """
         best_slot = None
         best_y = float('inf')
@@ -283,13 +282,18 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         for r in placed_rects:
             slot_y = r["y"] + r["h"] + seam_gap_cm
             
-            if within_zone_only:
-                in_zone = False
+            if within_zone_only and zones:
+                zone_limit = None
                 for z in zones:
-                    if slot_y + ph <= z["y_start"] + z["height"] + 0.01:
-                        in_zone = True
+                    if z["y_start"] <= r["y"] < z["y_start"] + z["height"]:
+                        zone_limit = z["y_start"] + z["height"]
                         break
-                if not in_zone:
+                if zone_limit is None:
+                    for z in zones:
+                        if abs(z["y_start"] - r["y"]) < z["height"]:
+                            zone_limit = z["y_start"] + z["height"]
+                            break
+                if zone_limit is not None and slot_y + ph > zone_limit + 0.01:
                     continue
             
             for try_x in [r["x"], seam_gap_cm]:
@@ -575,33 +579,59 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 print(f"[排料警告] {piece['name']}({piece['width']}x{piece['height']}) 无法放入!")
     
     rows = []
-    for zone in zones:
-        zone_rects = [r for r in placed_rects 
-                       if zone["y_start"] <= r["y"] < zone["y_start"] + zone["height"] + seam_gap_cm]
-        row_pieces = []
-        max_right = 0
-        for r in zone_rects:
-            row_pieces.append({
-                "name": r["name"],
-                "x": r["x"],
-                "y": r["y"] - zone["y_start"],
-                "width": r["w"],
-                "height": r["h"],
-                "color": r["color"],
-                "shape": r["shape"],
-                "shoulder_width": r.get("shoulder_width", 0),
-                "sleeve_cap_width": r.get("sleeve_cap_width", 0),
-                "cuff_width": r.get("cuff_width", 0),
-                "rotated": r.get("rotated", False),
+    if placed_rects and zones:
+        for zone in zones:
+            zone_rects = [r for r in placed_rects 
+                           if zone["y_start"] <= r["y"] < zone["y_start"] + zone["height"] + seam_gap_cm]
+            if not zone_rects:
+                continue
+            
+            row_pieces = []
+            for r in zone_rects:
+                row_pieces.append({
+                    "name": r["name"],
+                    "x": r["x"],
+                    "y": r["y"] - zone["y_start"],
+                    "width": r["w"],
+                    "height": r["h"],
+                    "color": r["color"],
+                    "shape": r["shape"],
+                    "shoulder_width": r.get("shoulder_width", 0),
+                    "sleeve_cap_width": r.get("sleeve_cap_width", 0),
+                    "cuff_width": r.get("cuff_width", 0),
+                    "rotated": r.get("rotated", False),
+                })
+            
+            max_x = max((p['x'] + p['width'] for p in row_pieces), default=0)
+            rows.append({
+                "length_cm": zone["height"],
+                "used_width_cm": max_x,
+                "pieces_count": len(row_pieces),
+                "pieces": row_pieces,
             })
-            max_right = max(max_right, r["x"] + r["w"])
         
-        rows.append({
-            "length_cm": zone["height"],
-            "used_width_cm": max_right,
-            "pieces_count": len(row_pieces),
-            "pieces": row_pieces,
-        })
+        orphan_rects = [r for r in placed_rects 
+                        if not any(zone["y_start"] <= r["y"] < zone["y_start"] + zone["height"] + seam_gap_cm 
+                                   for zone in zones)]
+        for r in orphan_rects:
+            rows.append({
+                "length_cm": r["h"],
+                "used_width_cm": r["x"] + r["w"],
+                "pieces_count": 1,
+                "pieces": [{
+                    "name": r["name"],
+                    "x": r["x"],
+                    "y": 0,
+                    "width": r["w"],
+                    "height": r["h"],
+                    "color": r["color"],
+                    "shape": r["shape"],
+                    "shoulder_width": r.get("shoulder_width", 0),
+                    "sleeve_cap_width": r.get("sleeve_cap_width", 0),
+                    "cuff_width": r.get("cuff_width", 0),
+                    "rotated": r.get("rotated", False),
+                }],
+            })
     
     total_length = get_total_height()
     util = total_area / (fabric_width_cm * total_length) if total_length > 0 else 0
