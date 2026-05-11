@@ -303,13 +303,41 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         
         return best_slot
     
-    def try_place_in_zone(zone, pw, ph):
+    def try_place_in_zone(zone, pw, ph, target_y=None):
         if pw + seam_gap_cm * 2 > fabric_width_cm:
             return None
         avail = fabric_width_cm - zone["used_width"] - seam_gap_cm
         if avail < pw + seam_gap_cm:
             return None
-        return zone["used_width"] + seam_gap_cm
+        px = zone["used_width"] + seam_gap_cm
+        py = target_y if target_y is not None else zone["y_start"]
+        if can_place_global(px, py, pw, ph):
+            return px
+        return None
+    
+    def find_zone_horizontal_slot(zone, pw, ph):
+        """在区域内从左到右扫描，找到第一个可放置的水平位置
+        
+        返回 (x, y) 或 None
+        """
+        if pw + seam_gap_cm * 2 > fabric_width_cm:
+            return None
+        target_y = zone["y_start"]
+        
+        x_candidates = [seam_gap_cm]
+        for r in placed_rects:
+            if abs(r["y"] - target_y) < zone["height"] + seam_gap_cm:
+                x_candidates.append(r["x"] + r["w"] + seam_gap_cm)
+        
+        x_candidates.sort()
+        
+        for test_x in x_candidates:
+            if test_x + pw + seam_gap_cm > fabric_width_cm:
+                continue
+            if can_place_global(test_x, target_y, pw, ph):
+                return (test_x, target_y)
+        
+        return None
     
     def create_zone(start_y, first_piece, pw, ph, rotated):
         new_zone = {
@@ -435,9 +463,9 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 
                 for pw, ph, rot in get_orientations(piece):
                     for zi, zone in enumerate(zones):
-                        xp = try_place_in_zone(zone, pw, ph)
-                        if xp is not None:
-                            place_y = zone["y_start"]
+                        slot = find_zone_horizontal_slot(zone, pw, ph)
+                        if slot is not None:
+                            xp, place_y = slot
                             s = place_y * 10000 + xp
                             if s < best_score:
                                 best_score = s
@@ -480,12 +508,13 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             zone_idx = get_best_zone(pw, ph)
             if zone_idx is not None:
                 zone = zones[zone_idx]
-                xp = zone["used_width"] + seam_gap_cm
-                place_y = zone["y_start"]
-                s = place_y * 10000 + xp
-                if s < best_score:
-                    best_score = s
-                    best_result = ("zone_h", zone_idx, xp, 0, pw, ph, rotated)
+                slot = find_zone_horizontal_slot(zone, pw, ph)
+                if slot is not None:
+                    xp, place_y = slot
+                    s = place_y * 10000 + xp
+                    if s < best_score:
+                        best_score = s
+                        best_result = ("zone_h", zone_idx, xp, 0, pw, ph, rotated)
             
             vslot = find_global_vertical_slot(pw, ph)
             if vslot:
