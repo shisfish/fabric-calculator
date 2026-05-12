@@ -286,61 +286,38 @@ def generate_cad_pieces_preview(measurements, options=None):
     """
     import subprocess
     import json
-    import sys
-    
+
     if options is None:
         options = {}
-    
-    ts_script = '''
-import { TshirtPatternGenerator } from './patterns/index.js';
 
-const measurements = MEASUREMENTS_PLACEHOLDER;
-const options = OPTIONS_PLACEHOLDER;
+    input_data = json.dumps({
+        "mode": "preview",
+        "measurements": measurements,
+        "options": options
+    })
 
-const generator = new TshirtPatternGenerator(measurements, options);
-const pieces = generator.generate();
-
-const result = pieces.map(piece => ({
-    name: piece.name,
-    points: Object.entries(piece.points).map(([key, p]) => ({
-        key,
-        x: p.x,
-        y: p.y
-    })),
-    pathOps: piece.path.ops.map(op => ({
-        type: op.type,
-        to: op.to ? { x: op.to.x, y: op.to.y } : null,
-        cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
-        cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-    })),
-    cutCount: piece.cutCount,
-    onFold: piece.onFold
-}));
-
-console.log(JSON.stringify(result));
-'''.replace('MEASUREMENTS_PLACEHOLDER', json.dumps(measurements)) \
-   .replace('OPTIONS_PLACEHOLDER', json.dumps(options))
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
     try:
         result = subprocess.run(
-            [_find_npx(), 'tsx', '-e', ts_script],
+            [_find_npx(), 'tsx', 'cad_runner.ts', input_data],
             capture_output=True,
             text=True,
             timeout=30,
-            cwd=os.path.dirname(os.path.abspath(__file__))
+            cwd=base_dir
         )
-        
+
         if result.returncode != 0:
             print(f"TypeScript执行错误: {result.stderr}")
             return {"pieces": [], "error": result.stderr}
-        
+
         pieces = json.loads(result.stdout.strip())
-        
+
         pieces_with_svg = []
         for piece in pieces:
             bbox = _calculate_bbox_from_points(piece['points'])
             svg_path = _generate_svg_path_from_ops(piece['pathOps'])
-            
+
             pieces_with_svg.append({
                 "name": piece['name'],
                 "cutCount": piece['cutCount'],
@@ -349,9 +326,9 @@ console.log(JSON.stringify(result));
                 "svgPath": svg_path,
                 "area": _calculate_polygon_area(piece['points'])
             })
-        
+
         return {"pieces": pieces_with_svg}
-        
+
     except subprocess.TimeoutExpired:
         return {"pieces": [], "error": "预览生成超时"}
     except Exception as e:
@@ -366,94 +343,50 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
     """
     import subprocess
     import json
-    
+
     if options is None:
         options = {}
-    
-    ts_script = '''
-import { TshirtPatternGenerator } from './patterns/index.js';
-import { PolygonConverter } from './nesting/index.js';
-import { NestEngine } from './nesting/index.js';
-import { SvgExporter } from './export/index.js';
 
-const measurements = MEASUREMENTS_PLACEHOLDER;
-const options = OPTIONS_PLACEHOLDER;
-const fabricWidth = FABRIC_WIDTH_PLACEHOLDER;
+    input_data = json.dumps({
+        "mode": "nesting",
+        "measurements": measurements,
+        "options": options,
+        "fabricWidth": fabric_width
+    })
 
-const generator = new TshirtPatternGenerator(measurements, options);
-const pieces = generator.generate();
-
-const engine = new NestEngine({
-    fabricWidth: fabricWidth,
-    fabricHeight: 3000,
-    spacing: 10,
-    rotations: [0, 90, 180, 270]
-});
-engine.addPieces(pieces);
-const result = engine.nest();
-
-const piecesData = pieces.map(piece => {
-    const bbox = piece.path.getBoundingBox();
-    return {
-        name: piece.name,
-        cutCount: piece.cutCount,
-        onFold: piece.onFold,
-        width: bbox ? bbox.bottomRight.x - bbox.topLeft.x : 0,
-        height: bbox ? bbox.bottomRight.y - bbox.topLeft.y : 0,
-        area: piece.path.getArea ? piece.path.getArea() : 0
-    };
-});
-
-const positions = result.positions.map(pos => ({
-    pieceId: pos.pieceId,
-    x: pos.x,
-    y: pos.y,
-    rotation: pos.rotation
-}));
-
-console.log(JSON.stringify({
-    pieces: piecesData,
-    positions: positions,
-    utilization: result.utilization,
-    bounds: result.bounds,
-    totalArea: result.totalArea,
-    usedArea: result.usedArea
-}));
-'''.replace('MEASUREMENTS_PLACEHOLDER', json.dumps(measurements)) \
-   .replace('OPTIONS_PLACEHOLDER', json.dumps(options)) \
-   .replace('FABRIC_WIDTH_PLACEHOLDER', str(fabric_width))
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
     try:
         result = subprocess.run(
-            [_find_npx(), 'tsx', '-e', ts_script],
+            [_find_npx(), 'tsx', 'cad_runner.ts', input_data],
             capture_output=True,
             text=True,
             timeout=60,
-            cwd=os.path.dirname(os.path.abspath(__file__))
+            cwd=base_dir
         )
-        
+
         if result.returncode != 0:
             print(f"TypeScript执行错误: {result.stderr}")
             raise Exception(f"排料计算失败: {result.stderr}")
-        
+
         data = json.loads(result.stdout.strip())
-        
-        total_area_cm2 = data.get('totalArea', 0) * 10000
-        used_area_cm2 = data.get('usedArea', 0) * 10000
-        
+
+        total_area_cm2 = data.get('totalArea', 0)
+        used_area_cm2 = data.get('usedArea', 0)
+
         total_area_m2 = total_area_cm2 / 10000
-        per_piece_length_m = data.get('bounds', {}).get('width', 0) / 100
+        per_piece_length_m = data.get('bounds', {}).get('height', 0) / 100
         total_length_m = per_piece_length_m * quantity
-        
+
         fabric_weight_kg = 0
         if fabric_weight_gsm > 0:
             fabric_weight_kg = (total_area_m2 * fabric_weight_gsm * (1 + wastage_rate / 100)) / 1000
-        
+
         utilization_rate = data.get('utilization', 0)
-        
+
         pieces_detail = []
         for p in data.get('pieces', []):
-            area_cm2 = p.get('area', 0) * 10000
+            area_cm2 = p.get('area', 0)
             pieces_detail.append({
                 "name": p.get('name', ''),
                 "original_length": round(p.get('height', 0), 2),
@@ -464,11 +397,11 @@ console.log(JSON.stringify({
                 "material": "main",
                 "on_fold": p.get('onFold', False)
             })
-        
+
         positions = data.get('positions', [])
-        
+
         nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width)
-        
+
         return {
             "pieces": data.get('pieces', []),
             "positions": positions,
@@ -499,7 +432,7 @@ console.log(JSON.stringify({
                 }
             }
         }
-        
+
     except subprocess.TimeoutExpired:
         raise Exception("排料计算超时")
     except json.JSONDecodeError as e:
