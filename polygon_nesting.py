@@ -1164,7 +1164,12 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         base_result, pieces, fabric_width_cm, seam_gap_cm, rotation
     )
     
-    return optimized_result
+    # 执行紧凑度优化（减少碎片化空洞，提高规整度）
+    final_result = compactness_optimization(
+        optimized_result, pieces, fabric_width_cm, seam_gap_cm
+    )
+    
+    return final_result
 
 # ============================================================
 # 二次优化模块 - 轮廓检测与局部填充
@@ -1685,6 +1690,353 @@ def secondary_optimization(result, pieces, fabric_width_cm, seam_gap_cm=0.5, rot
     else:
         print(f"  ⚠️ 结果变差，但保留（实际应用中应回滚）")
         return result
+
+
+def analyze_fragmentation(result, fabric_width_cm, grid_size=2):
+    """
+    分析布局的碎片化程度
+    
+    返回:
+    - fragmentation_score: 碎片度评分 (0-100, 越高越碎)
+    - blank_regions: 所有空白区域的列表 [{x, y, w, h, area}, ...]
+    - stats: 统计信息
+    """
+    # 收集所有已放置的矩形
+    placed_rects = []
+    for row in result.get('rows', []):
+        y_start = row.get('y_start', 0)
+        for p in row.get('pieces', []):
+            placed_rects.append({
+                'x': p.get('x', 0),
+                'y': y_start + p.get('y', 0),
+                'w': p.get('width', 0),
+                'h': p.get('height', 0),
+            })
+    
+    if not placed_rects:
+        return {'fragmentation_score': 0, 'blank_regions': [], 'stats': {}}
+    
+    # 计算总边界
+    max_y = max(r['y'] + r['h'] for r in placed_rects)
+    
+    # 创建网格 (0=空白, 1=占用)
+    grid_w = int(fabric_width_cm / grid_size) + 1
+    grid_h = int(max_y / grid_size) + 1
+    grid = [[0] * grid_w for _ in range(grid_h)]
+    
+    # 标记占用的格子
+    for r in placed_rects:
+        x1 = max(0, int(r['x'] / grid_size))
+        y1 = max(0, int(r['y'] / grid_size))
+        x2 = min(grid_w - 1, int((r['x'] + r['w']) / grid_size))
+        y2 = min(grid_h - 1, int((r['y'] + r['h']) / grid_size))
+        
+        for gy in range(y1, y2 + 1):
+            for gx in range(x1, x2 + 1):
+                if 0 <= gy < grid_h and 0 <= gx < grid_w:
+                    grid[gy][gx] = 1
+    
+    # 使用BFS找连通的空白区域
+    visited = [[False] * grid_w for _ in range(grid_h)]
+    blank_regions = []
+    
+    for start_y in range(grid_h):
+        for start_x in range(grid_w):
+            if grid[start_y][start_x] == 0 and not visited[start_y][start_x]:
+                # BFS找到整个连通区域
+                region_cells = []
+                queue = [(start_y, start_x)]
+                visited[start_y][start_x] = True
+                
+                while queue:
+                    cy, cx = queue.pop(0)
+                    region_cells.append((cx, cy))
+                    
+                    for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        ny, nx = cy + dy, cx + dx
+                        if (0 <= ny < grid_h and 0 <= nx < grid_w and 
+                            not visited[ny][nx] and grid[ny][nx] == 0):
+                            visited[ny][nx] = True
+                            queue.append((ny, nx))
+                
+                # 计算该区域的边界框
+                if region_cells:
+                    min_x = min(c[0] for c in region_cells) * grid_size
+                    max_x = (max(c[0] for c in region_cells) + 1) * grid_size
+                    min_y = min(c[1] for c in region_cells) * grid_size
+                    max_y = (max(c[1] for c in region_cells) + 1) * grid_size
+                    
+                    area = len(region_cells) * grid_size * grid_size
+                    
+                    # 只记录面积>10cm²的区域（忽略极小的缝隙）
+                    if area > 10:
+                        blank_regions.append({
+                            'x': min_x,
+                            'y': min_y,
+                            'w': max_x - min_x,
+                            'h': max_y - min_y,
+                            'area': area,
+                            'cell_count': len(region_cells)
+                        })
+    
+    # 计算碎片度评分
+    if not blank_regions:
+        fragmentation_score = 0
+    else:
+        total_blank_area = sum(r['area'] for r in blank_regions)
+        avg_area = total_blank_area / len(blank_regions)
+        
+        # 碎片度因子
+        count_factor = min(len(blank_regions) / 10, 1.0)  # 区域数量
+        size_factor = 1 - min(avg_area / 500, 1.0)  # 平均大小（越小越碎）
+        
+        # 额外惩罚：很多小区域
+        small_count = sum(1 for r in blank_regions if r['area'] < 50)
+        small_penalty = min(small_count / 20, 1.0)
+        
+        fragmentation_score = (
+            count_factor * 40 + 
+            size_factor * 40 + 
+            small_penalty * 20
+        )
+    
+    # 统计信息
+    stats = {
+        'total_blank_regions': len(blank_regions),
+        'total_blank_area': sum(r['area'] for r in blank_regions),
+        'avg_region_area': sum(r['area'] for r in blank_regions) / len(blank_regions) if blank_regions else 0,
+        'max_region_area': max(r['area'] for r in blank_regions) if blank_regions else 0,
+        'min_region_area': min(r['area'] for r in blank_regions) if blank_regions else 0,
+        'small_regions_count': sum(1 for r in blank_regions if r['area'] < 50),
+        'large_regions_count': sum(1 for r in blank_regions if r['area'] >= 200),
+    }
+    
+    return {
+        'fragmentation_score': fragmentation_score,
+        'blank_regions': blank_regions,
+        'stats': stats
+    }
+
+
+def compactness_optimization(result, pieces, fabric_width_cm, seam_gap_cm=0.5):
+    """
+    紧凑度优化主函数
+    
+    目标:
+    1. 减少碎片化空洞的数量
+    2. 合并小空白区域为大块连续空白
+    3. 提高边缘规整度
+    4. 让裁片排列更紧凑
+    
+    策略:
+    - 识别碎片化严重的区域
+    - 尝试移动小裁片以合并空白
+    - 优先保留大块空白区域
+    """
+    print(f"\n{'='*60}")
+    print(f"[紧凑度优化] 开始分析...")
+    print(f"{'='*60}")
+    
+    # 阶段1: 碎片度分析
+    frag_analysis = analyze_fragmentation(result, fabric_width_cm)
+    frag_score = frag_analysis['fragmentation_score']
+    blank_regions = frag_analysis['blank_regions']
+    stats = frag_analysis['stats']
+    
+    print(f"\n碎片度分析结果:")
+    print(f"  • 碎片度评分: {frag_score:.1f}/100", end="")
+    if frag_score > 50:
+        print(" ⚠️ 严重碎片化")
+    elif frag_score > 30:
+        print(" ⚠️ 中等碎片")
+    else:
+        print(" ✓ 较为规整")
+    
+    print(f"  • 空白区域数: {stats['total_blank_regions']}个")
+    print(f"  • 总空白面积: {stats['total_blank_area']:.0f}cm²")
+    print(f"  • 平均区域大小: {stats['avg_region_area']:.0f}cm²")
+    print(f"  • 小区域(<50cm²): {stats['small_regions_count']}个")
+    print(f"  • 大区域(≥200cm²): {stats['large_regions_count']}个")
+    
+    # 如果碎片度不高，直接返回
+    if frag_score < 25:
+        print(f"\n[紧凑度优化] 布局已较紧凑，无需优化")
+        return result
+    
+    # 阶段2: 提取所有已放置的裁片信息
+    placed_pieces_info = []
+    for row_idx, row in enumerate(result.get('rows', [])):
+        y_start = row.get('y_start', 0)
+        for p_idx, p in enumerate(row.get('pieces', [])):
+            placed_pieces_info.append({
+                'x': p.get('x', 0),
+                'y_abs': y_start + p.get('y', 0),
+                'w': p.get('width', 0),
+                'h': p.get('height', 0),
+                'name': p.get('name', ''),
+                'area': p.get('width', 0) * p.get('height', 0),
+                'row_idx': row_idx,
+                'piece_idx': p_idx,
+                'row_y_start': y_start,
+                'rel_y': p.get('y', 0),
+            })
+    
+    original_utilization = calculate_updated_utilization(result, fabric_width_cm, pieces)
+    
+    # 阶段3: 识别可优化的碎片化区域并尝试合并
+    optimization_rounds = 3
+    total_improvements = 0
+    
+    for round_num in range(1, optimization_rounds + 1):
+        print(f"\n[紧凑度优化] 第{round_num}轮优化...")
+        
+        round_improved = False
+        
+        # 重新分析当前碎片状态
+        current_frag = analyze_fragmentation(result, fabric_width_cm)
+        current_blanks = current_frag['blank_regions']
+        
+        # 按面积排序，优先处理小碎片（它们最需要合并）
+        small_blanks = sorted(
+            [b for b in current_blanks if b['area'] < 100], 
+            key=lambda x: x['area']
+        )
+        
+        if not small_blanks:
+            print(f"  无小碎片区域，停止优化")
+            break
+        
+        processed_in_round = 0
+        
+        for blank in small_blanks[:5]:  # 每轮最多处理5个小碎片
+            bx, by = blank['x'], blank['y']
+            bw, bh = blank['w'], blank['h']
+            
+            print(f"\n  处理小碎片: ({bx:.1f},{by:.1f}) {bw:.1f}×{bh:.1f} = {blank['area']:.0f}cm²")
+            
+            # 策略A: 尝试将附近的小裁片移入此区域，从而让原位置形成更大的空白
+            nearby_small_pieces = []
+            for pp in placed_pieces_info:
+                # 只考虑面积≤400的小裁片
+                if pp['area'] > 400:
+                    continue
+                    
+                # 在±15cm范围内
+                distance = ((pp['x_abs'] - bx)**2 + (pp['y_abs'] - by)**2) ** 0.5
+                if distance <= 20:
+                    # 检查能否放入这个空白区
+                    if pp['w'] <= bw + 2 and pp['h'] <= bh + 2:
+                        nearby_small_pieces.append((distance, pp))
+            
+            # 按距离排序，优先选近的
+            nearby_small_pieces.sort(key=lambda x: x[0])
+            
+            moved_this_blank = False
+            
+            for dist, piece in nearby_small_pieces[:3]:  # 最多尝试3个候选
+                if moved_this_blank:
+                    break
+                
+                new_x = bx + seam_gap_cm
+                new_y = by + seam_gap_cm
+                
+                # 碰撞检测
+                can_move = True
+                for other in placed_pieces_info:
+                    if other is piece:
+                        continue
+                    
+                    ox, oy = other['x_abs'], other['y_abs']
+                    ow, oh = other['w'], other['h']
+                    
+                    if (new_x < ox + ow + seam_gap_cm and
+                        new_x + piece['w'] > ox - seam_gap_cm and
+                        new_y < oy + oh + seam_gap_cm and
+                        new_y + piece['h'] > oy - seam_gap_cm):
+                        can_move = False
+                        break
+                
+                if can_move:
+                    # 执行移动
+                    old_row = None
+                    old_piece_data = None
+                    
+                    # 从原row移除
+                    for row in result['rows']:
+                        if row.get('y_start', 0) == piece['row_y_start']:
+                            pieces_list = row.get('pieces', [])
+                            if piece['piece_idx'] < len(pieces_list):
+                                old_piece_data = pieces_list.pop(piece['piece_idx'])
+                            break
+                    
+                    if old_piece_data:
+                        # 更新位置
+                        old_piece_data['x'] = new_x
+                        old_piece_data['y'] = new_y
+                        
+                        # 找到目标row并添加
+                        target_row = None
+                        for row in result['rows']:
+                            rys = row.get('y_start', 0)
+                            rh = row.get('length_cm', 0)
+                            if rys <= new_y <= rys + rh + 5:
+                                target_row = row
+                                break
+                        
+                        if target_row is None:
+                            # 创建新row或使用最近的row
+                            target_row = result['rows'][0] if result['rows'] else {'pieces': []}
+                        
+                        target_row.setdefault('pieces', []).append(old_piece_data)
+                        
+                        # 更新placed_pieces_info中的引用
+                        piece['x'] = new_x
+                        piece['y_abs'] = new_y
+                        piece['row_y_start'] = target_row.get('y_start', piece['row_y_start'])
+                        piece['rel_y'] = new_y - piece['row_y_start']
+                        
+                        print(f"    ✓ 移动 {piece['name']}({piece['w']:.0f}×{piece['h']:.0f})"
+                              f": ({piece['x']-new_x+piece['x']:.1f},{piece['y_abs']-new_y+piece['y_abs']:.1f})"
+                              f" → ({new_x:.1f},{new_y:.1f})")
+                        
+                        moved_this_blank = True
+                        round_improved = True
+                        processed_in_round += 1
+                        break
+            
+            if not moved_this_blank:
+                print(f"    ✗ 无法找到合适的裁片填充")
+        
+        if not round_improved or processed_in_round == 0:
+            print(f"  本轮无改进，停止优化")
+            break
+        
+        total_improvements += processed_in_round
+    
+    # 阶段4: 最终评估
+    final_utilization = calculate_updated_utilization(result, fabric_width_cm, pieces)
+    final_frag = analyze_fragmentation(result, fabric_width_cm)
+    improvement = final_utilization - original_utilization
+    frag_change = frag_score - final_frag['fragmentation_score']
+    
+    print(f"\n{'='*60}")
+    print(f"  紧凑度优化完成!")
+    print(f"{'='*60}")
+    print(f"  原始利用率:   {original_utilization*100:.2f}%")
+    print(f"  最终利用率:   {final_utilization*100:.2f}%")
+    print(f"  利用率变化:   {improvement*100:+.2f}%")
+    print(f"  碎片度变化:   {frag_score:.1f} → {final_frag['fragmentation_score']:.1f} ({frag_change:+.1f})")
+    print(f"  空白区域数:   {stats['total_blank_regions']} → {final_frag['stats']['total_blank_regions']}")
+    print(f"  移动操作数:   {total_improvements}")
+    
+    if frag_change > 5 or total_improvements > 0:
+        print(f"  ✅ 紧凑度显著提升!")
+    elif frag_change > 0:
+        print(f"  📊 紧凑度有所改善")
+    else:
+        print(f"  ℹ️ 紧凑度变化不明显")
+    
+    return result
 
 
 def get_row_y_start(result, target_y):
