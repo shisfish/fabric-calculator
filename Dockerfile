@@ -14,6 +14,14 @@ RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.
 # 安装系统依赖（opencv-python-headless 只需要 libglib2.0-0）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Node.js 20 LTS（CAD排料模块需要执行TypeScript）
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && node --version \
+    && npm --version \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
@@ -22,6 +30,10 @@ WORKDIR /app
 # 先复制依赖文件，利用Docker缓存层加速构建
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 安装 Node.js 依赖（CAD排料模块需要TypeScript运行时）
+COPY package.json package-lock.json ./
+RUN npm install --omit=dev
 
 # 复制项目文件
 COPY . .

@@ -13,9 +13,27 @@ import base64
 import io
 import os
 import platform
+import shutil
 from PIL import Image, ImageDraw, ImageFont
 
 _FONT_CACHE = {}
+
+def _find_npx():
+    """查找npx可执行文件路径"""
+    npx_path = shutil.which('npx')
+    if npx_path:
+        return npx_path
+    common_paths = [
+        os.path.expanduser('~/.nvm/versions/node/*/bin/npx'),
+        '/usr/local/bin/npx',
+        '/opt/homebrew/bin/npx',
+    ]
+    for p in common_paths:
+        import glob
+        matches = glob.glob(p)
+        if matches:
+            return matches[0]
+    return 'npx'
 
 def _get_font(size=14):
     cache_key = size
@@ -305,7 +323,7 @@ console.log(JSON.stringify(result));
 
     try:
         result = subprocess.run(
-            ['npx', 'tsx', '-e', ts_script],
+            [_find_npx(), 'tsx', '-e', ts_script],
             capture_output=True,
             text=True,
             timeout=30
@@ -406,7 +424,7 @@ console.log(JSON.stringify({
 
     try:
         result = subprocess.run(
-            ['npx', 'tsx', '-e', ts_script],
+            [_find_npx(), 'tsx', '-e', ts_script],
             capture_output=True,
             text=True,
             timeout=60
