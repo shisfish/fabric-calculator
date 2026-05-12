@@ -326,7 +326,8 @@ console.log(JSON.stringify(result));
             [_find_npx(), 'tsx', '-e', ts_script],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            cwd=os.path.dirname(os.path.abspath(__file__))
         )
         
         if result.returncode != 0:
@@ -427,7 +428,8 @@ console.log(JSON.stringify({
             [_find_npx(), 'tsx', '-e', ts_script],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
+            cwd=os.path.dirname(os.path.abspath(__file__))
         )
         
         if result.returncode != 0:
