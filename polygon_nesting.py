@@ -593,7 +593,7 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
     def fill_all_gaps():
         """全局填充：扫描所有剩余裁片，尝试放入任何可用空间
         
-        评分标准：优先选择y坐标最低、空间利用最好的放置方案
+        评分标准：优先选择y坐标最低、空间利用最好、轮廓最规整的放置方案
         """
         filled = True
         while filled:
@@ -601,6 +601,24 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             best_idx = None
             best_result = None
             best_score = float('inf')
+            
+            # 【新增】获取当前各Y层的最大右边缘（用于轮廓规整度评分）
+            current_right_edges = {}
+            for r in placed_rects:
+                ry = round(r['y'], 1)
+                if ry not in current_right_edges:
+                    current_right_edges[ry] = 0
+                current_right_edges[ry] = max(current_right_edges[ry], r['x'] + r['w'])
+            
+            # 只在有足够数据时才启用轮廓感知
+            enable_contour_aware = len(current_right_edges) >= 3 and len(placed_indices) > 5
+            
+            if enable_contour_aware:
+                avg_right_edge = sum(current_right_edges.values()) / len(current_right_edges)
+                max_right_edge = max(current_right_edges.values())
+                target_right_edge = max_right_edge * 0.95
+            else:
+                target_right_edge = fabric_width_cm
             
             for idx, piece in enumerate(all_pieces):
                 if idx in placed_indices:
@@ -611,7 +629,23 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                         slot = find_zone_horizontal_slot(zone, pw, ph)
                         if slot is not None:
                             xp, place_y = slot
-                            s = place_y * 10000 + xp
+                            abs_place_y = zone["y_start"] + place_y
+                            
+                            # 基础分
+                            s = abs_place_y * 10000 + xp
+                            
+                            # 【新增】右边缘对齐奖励（仅在有足够数据时启用）
+                            if enable_contour_aware:
+                                potential_right = xp + pw
+                                gap_to_target = target_right_edge - potential_right
+                                
+                                if gap_to_target <= 5:
+                                    s -= 2000
+                                elif gap_to_target <= 15:
+                                    s -= 1000
+                                elif gap_to_target > 30:
+                                    s += (gap_to_target - 30) * 50
+                            
                             if s < best_score:
                                 best_score = s
                                 best_idx = idx
@@ -622,6 +656,19 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                             axp, ayp = any_row
                             if abs(ayp - zone["y_start"]) > 0.1:
                                 s = ayp * 10000 + axp
+                                
+                                # 【新增】对齐奖励（仅在有足够数据时启用）
+                                if enable_contour_aware:
+                                    potential_right_ar = axp + pw
+                                    gap_to_target_ar = target_right_edge - potential_right_ar
+                                    
+                                    if gap_to_target_ar <= 5:
+                                        s -= 2000
+                                    elif gap_to_target_ar <= 15:
+                                        s -= 1000
+                                    elif gap_to_target_ar > 30:
+                                        s += (gap_to_target_ar - 30) * 50
+                                
                                 if s < best_score:
                                     best_score = s
                                     best_idx = idx
@@ -640,6 +687,19 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                             if gap_area > 100 and piece_area < gap_area * 0.3:
                                 rel_y = vyp - zone["y_start"]
                                 s = vyp * 10000 + vxp + 0.5
+                                
+                                # 【新增】对齐奖励（仅在有足够数据时启用）
+                                if enable_contour_aware:
+                                    potential_right_vg = vxp + pw
+                                    gap_to_target_vg = target_right_edge - potential_right_vg
+                                    
+                                    if gap_to_target_vg <= 5:
+                                        s -= 2000
+                                    elif gap_to_target_vg <= 15:
+                                        s -= 1000
+                                    elif gap_to_target_vg > 30:
+                                        s += (gap_to_target_vg - 30) * 50
+                                
                                 if s < best_score:
                                     best_score = s
                                     best_idx = idx
@@ -649,6 +709,19 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                     if vs:
                         vx, vy = vs
                         s = vy * 10000 + vx + 1
+                        
+                        # 【新增】对齐奖励（仅在有足够数据时启用）
+                        if enable_contour_aware:
+                            potential_right_vs = vx + pw
+                            gap_to_target_vs = target_right_edge - potential_right_vs
+                            
+                            if gap_to_target_vs <= 5:
+                                s -= 2000
+                            elif gap_to_target_vs <= 15:
+                                s -= 1000
+                            elif gap_to_target_vs > 30:
+                                s += (gap_to_target_vs - 30) * 50
+                        
                         if s < best_score:
                             best_score = s
                             best_idx = idx
@@ -847,6 +920,26 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
         best_result = None
         best_score = float('inf')
         
+        # 【新增】获取当前各Y层的最大右边缘（用于轮廓规整度评分）
+        current_right_edges = {}
+        for r in placed_rects:
+            ry = round(r['y'], 1)
+            if ry not in current_right_edges:
+                current_right_edges[ry] = 0
+            current_right_edges[ry] = max(current_right_edges[ry], r['x'] + r['w'])
+        
+        # 只在有足够数据时才启用轮廓感知（避免早期干扰）
+        enable_contour_aware = len(current_right_edges) >= 3 and len(placed_indices) > 5
+        
+        if enable_contour_aware:
+            avg_right_edge = sum(current_right_edges.values()) / len(current_right_edges)
+            max_right_edge = max(current_right_edges.values())
+            target_right_edge = max_right_edge * 0.95  # 目标：接近最大右边缘
+        else:
+            avg_right_edge = fabric_width_cm * 0.9
+            max_right_edge = fabric_width_cm * 0.9
+            target_right_edge = fabric_width_cm
+        
         for pw, ph, rotated in orientations:
             zone_idx = get_best_zone(pw, ph)
             if zone_idx is not None:
@@ -854,7 +947,29 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
                 slot = find_zone_horizontal_slot(zone, pw, ph)
                 if slot is not None:
                     xp, place_y = slot
-                    s = place_y * 10000 + ph * 10 + xp
+                    abs_place_y = zone["y_start"] + place_y
+                    
+                    # 基础分：Y坐标优先（保持从上到下）
+                    s = abs_place_y * 10000  # 恢复原权重
+                    
+                    # 高度因子：偏好矮的裁片放下面
+                    s += ph * 10
+                    
+                    # X坐标因子
+                    s += xp
+                    
+                    # 【新增】右边缘对齐奖励（仅在有足够数据时启用）
+                    if enable_contour_aware:
+                        potential_right = xp + pw
+                        gap_to_target = target_right_edge - potential_right
+                        
+                        if gap_to_target <= 5:  # 非常接近目标
+                            s -= 2000  # 中等奖励
+                        elif gap_to_target <= 15:  # 比较接近
+                            s -= 1000  # 小奖励
+                        elif gap_to_target > 30:  # 离目标太远（可能造成凹陷）
+                            s += (gap_to_target - 30) * 50  # 轻微惩罚
+                    
                     if s < best_score:
                         best_score = s
                         best_result = ("zone_h", zone_idx, xp, 0, pw, ph, rotated)
@@ -862,7 +977,22 @@ def polygon_nesting(pieces, fabric_width_cm, seam_gap_cm=0.5, rotation=True):
             vslot = find_global_vertical_slot(pw, ph)
             if vslot:
                 vx, vy = vslot
+                
+                # 基础分
                 s = vy * 10000 + ph * 10 + vx + 1
+                
+                # 【新增】垂直放置的右边缘对齐奖励（仅在有足够数据时启用）
+                if enable_contour_aware:
+                    potential_right_v = vx + pw
+                    gap_to_target_v = target_right_edge - potential_right_v
+                    
+                    if gap_to_target_v <= 5:
+                        s -= 2000
+                    elif gap_to_target_v <= 15:
+                        s -= 1000
+                    elif gap_to_target_v > 30:
+                        s += (gap_to_target_v - 30) * 50
+                
                 if s < best_score:
                     best_score = s
                     best_result = ("global_v", None, vx, vy, pw, ph, rotated)
