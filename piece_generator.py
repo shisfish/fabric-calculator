@@ -282,7 +282,7 @@ if __name__ == "__main__":
 
 def generate_cad_pieces_preview(measurements, options=None):
     """
-    CAD裁片预览 - 基于人体参数生成裁片预览
+    CAD裁片预览 - 基于实物测量数据生成裁片预览
     """
     import subprocess
     import json
@@ -290,9 +290,11 @@ def generate_cad_pieces_preview(measurements, options=None):
     if options is None:
         options = {}
 
+    garment_input = _normalize_garment_input(measurements)
+
     input_data = json.dumps({
         "mode": "preview",
-        "measurements": measurements,
+        "garmentInput": garment_input,
         "options": options
     })
 
@@ -339,7 +341,7 @@ def generate_cad_pieces_preview(measurements, options=None):
 def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate, 
                                  wastage_rate, fabric_weight_gsm, quantity):
     """
-    CAD排料计算 - 基于人体参数生成裁片并排料
+    CAD排料计算 - 基于实物测量数据生成裁片并排料
     """
     import subprocess
     import json
@@ -347,9 +349,11 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
     if options is None:
         options = {}
 
+    garment_input = _normalize_garment_input(measurements)
+
     input_data = json.dumps({
         "mode": "nesting",
-        "measurements": measurements,
+        "garmentInput": garment_input,
         "options": options,
         "fabricWidth": fabric_width
     })
@@ -439,6 +443,48 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         raise Exception(f"解析结果失败: {str(e)}")
     except Exception as e:
         raise e
+
+
+def _normalize_garment_input(measurements):
+    """将输入数据规范化为 garmentInput 格式（实物测量数据）"""
+    if not measurements:
+        return {}
+
+    garment_fields = {
+        'chestWidth': ('chestWidth', '胸宽', '半胸宽', 'chest_width'),
+        'shoulderWidth': ('shoulderWidth', '肩宽', 'shoulder_width'),
+        'bodyLength': ('bodyLength', '衣长', 'body_length'),
+        'sleeveLength': ('sleeveLength', '袖长', 'sleeve_length'),
+        'neckWidth': ('neckWidth', '领宽', 'neck_width'),
+        'armholeDepth': ('armholeDepth', '袖窿深', 'armhole_depth'),
+        'cuffWidth': ('cuffWidth', '袖口宽', 'cuff_width'),
+        'hemCurve': ('hemCurve', '下摆弧度', 'hem_curve'),
+        'shoulderSlope': ('shoulderSlope', '肩斜角', 'shoulder_slope'),
+    }
+
+    result = {}
+    for target, aliases in garment_fields.items():
+        for alias in aliases:
+            if alias in measurements and measurements[alias] is not None:
+                result[target] = float(measurements[alias])
+                break
+
+    legacy_map = {
+        'chest': ('chestWidth', 0.52),
+        'shoulderToShoulder': ('shoulderWidth', 1),
+        'hpsToWaistBack': ('bodyLength', 1),
+        'hpsToWaistFront': ('bodyLength', 1.05),
+        'neck': ('neckWidth', 0.45),
+        'biceps': ('armholeDepth', 0.55),
+        'wrist': ('cuffWidth', 1.1),
+        'shoulderSlope': ('shoulderSlope', 1),
+    }
+
+    for legacy_key, (target, factor) in legacy_map.items():
+        if target not in result and legacy_key in measurements:
+            result[target] = float(measurements[legacy_key]) * factor
+
+    return result
 
 
 def _calculate_bbox_from_points(points):

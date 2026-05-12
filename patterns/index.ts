@@ -1,8 +1,9 @@
+export { TshirtPatternGenerator, type PatternPiece } from './Tshirt.js';
 export {
-  TshirtPatternGenerator,
-  type Measurements,
-  type PatternOptions,
-  type PatternPiece,
-  DEFAULT_MEASUREMENTS,
-  DEFAULT_OPTIONS,
-} from './Tshirt.js';
+  GarmentMeasurementAdapter,
+  type GarmentMeasurementInput,
+  type GarmentParams,
+  type BackPanelParams,
+  type FrontPanelParams,
+  type SleeveParams,
+} from './GarmentMeasurementAdapter.js';

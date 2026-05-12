@@ -1,14 +1,24 @@
-import { TshirtPatternGenerator } from './patterns/index.js';
+import { TshirtPatternGenerator, GarmentMeasurementAdapter, type GarmentParams } from './patterns/index.js';
 import { NestEngine } from './nesting/index.js';
 
 const input = JSON.parse(process.argv[2]);
 
-const measurements = input.measurements || {};
-const options = input.options || {};
-const fabricWidth = (input.fabricWidth || 145) * 10;
+let params: GarmentParams;
 
-const generator = new TshirtPatternGenerator(measurements, options);
-const pieces = generator.generate();
+if (input.garmentInput) {
+  params = GarmentMeasurementAdapter.adapt(input.garmentInput);
+} else if (input.measurements) {
+  params = GarmentMeasurementAdapter.fromLegacyMeasurements(input.measurements);
+} else {
+  params = GarmentMeasurementAdapter.adapt();
+}
+
+if (input.garmentParams) {
+  params = { ...params, ...input.garmentParams };
+}
+
+const pieces = TshirtPatternGenerator.generatePattern(params);
+const fabricWidth = (input.fabricWidth || 145) * 10;
 
 if (input.mode === 'preview') {
     const result = pieces.map(piece => ({

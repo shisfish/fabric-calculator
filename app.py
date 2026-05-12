@@ -738,14 +738,17 @@ def cad_preview():
             return jsonify({"success": False, "message": "请求数据为空"}), 400
 
         category = data.get("category", "tshirt")
+        garment_input = data.get("garmentInput", {})
         measurements = data.get("measurements", {})
-        options = data.get("options", {})
 
         if category != "tshirt":
             return jsonify({"success": False, "message": "当前仅支持T恤品类"}), 400
 
         from piece_generator import generate_cad_pieces_preview
-        result = generate_cad_pieces_preview(measurements, options)
+        result = generate_cad_pieces_preview(
+            garment_input if garment_input else measurements,
+            {}
+        )
 
         return jsonify({"success": True, "data": result})
 
@@ -767,8 +770,8 @@ def cad_nesting():
             return jsonify({"success": False, "message": "请求数据为空"}), 400
 
         category = data.get("category", "tshirt")
+        garment_input = data.get("garmentInput", {})
         measurements = data.get("measurements", {})
-        options = data.get("options", {})
         fabric_params = data.get("fabricParams", {})
 
         if category != "tshirt":
@@ -784,8 +787,8 @@ def cad_nesting():
 
         from piece_generator import generate_cad_nesting_result
         result = generate_cad_nesting_result(
-            measurements=measurements,
-            options=options,
+            measurements=garment_input if garment_input else measurements,
+            options={},
             fabric_width=fabric_width,
             shrinkage_rate=shrinkage_rate,
             wastage_rate=wastage_rate,
@@ -806,8 +809,8 @@ def cad_nesting():
                 "wastage_rate": wastage_rate,
                 "fabric_weight_gsm": fabric_weight_gsm,
                 "quantity": quantity,
+                "garmentInput": garment_input if garment_input else {},
                 "measurements": measurements,
-                "options": options,
             },
             "result": {
                 "per_piece_length_m": result.get("per_piece_length_m"),
