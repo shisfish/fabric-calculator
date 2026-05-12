@@ -31,9 +31,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 安装 Node.js 依赖（CAD排料模块需要TypeScript运行时）
+# 安装 Node.js 依赖（CAD排料模块需要TypeScript运行时 + React前端组件）
 COPY package.json package-lock.json ./
-RUN npm install --omit=dev
+RUN npm install
+
+# 构建 React 前端组件
+RUN npm run build:frontend
 
 # 复制项目文件
 COPY . .

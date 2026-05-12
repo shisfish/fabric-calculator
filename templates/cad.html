@@ -254,7 +254,7 @@
             <div class="section">
                 <h3>📐 排料图</h3>
                 <div class="nesting-svg-container" id="nesting-svg-container">
-                    <p style="color:var(--text-secondary);text-align:center;">加载中...</p>
+                    <div id="cad-nesting-viewer" style="min-height: 400px;"></div>
                 </div>
             </div>
 
@@ -286,5 +286,7 @@
 
     <script src="/static/js/common.js"></script>
     <script src="/static/js/cad.js"></script>
+    <script type="module" src="/static/js/cad/bundle.js"></script>
+    <link rel="stylesheet" href="/static/css/cad-viewer.css">
 </body>
 </html>

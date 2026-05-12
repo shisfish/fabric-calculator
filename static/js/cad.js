@@ -185,12 +185,7 @@ function renderResult(result) {
         </div>
     `).join('');
 
-    const svgContainer = document.getElementById('nesting-svg-container');
-    if (result.nesting_svg) {
-        svgContainer.innerHTML = result.nesting_svg;
-    } else {
-        svgContainer.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
-    }
+    renderNestingWithReact(result, params.fabric_width);
 
     const piecesTbody = document.getElementById('result-pieces-tbody');
     const pieces = result.pieces_detail || [];
@@ -204,6 +199,52 @@ function renderResult(result) {
             <td>${p.on_fold ? '是' : '否'}</td>
         </tr>
     `).join('');
+}
+
+function renderNestingWithReact(result, fabricWidth) {
+    if (typeof window.renderNestingResult !== 'function') {
+        console.warn('React组件未加载，使用SVG回退');
+        const svgContainer = document.getElementById('nesting-svg-container');
+        if (result.nesting_svg) {
+            svgContainer.innerHTML = result.nesting_svg;
+        } else {
+            svgContainer.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
+        }
+        return;
+    }
+
+    const pieces = (result.pieces || []).map(p => ({
+        name: p.name,
+        points: [],
+        pathOps: generateRectPathOps(p.width, p.height),
+        cutCount: p.cutCount || 1,
+        onFold: p.onFold || false,
+        area: p.area
+    }));
+
+    const nestingResult = {
+        pieces: result.pieces || [],
+        positions: result.positions || [],
+        utilization: result.utilization_rate || 0,
+        bounds: {
+            width: fabricWidth,
+            height: result.per_piece_length_m * 100
+        },
+        totalArea: result.total_area_m2 * 10000 || 0,
+        usedArea: (result.total_area_m2 * 10000 * result.utilization_rate / 100) || 0
+    };
+
+    window.renderNestingResult(pieces, nestingResult, fabricWidth);
+}
+
+function generateRectPathOps(width, height) {
+    return [
+        { type: 'move', to: { x: 0, y: 0 } },
+        { type: 'line', to: { x: width, y: 0 } },
+        { type: 'line', to: { x: width, y: height } },
+        { type: 'line', to: { x: 0, y: height } },
+        { type: 'close' }
+    ];
 }
 
 function exportResult() {
