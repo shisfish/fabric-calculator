@@ -7,7 +7,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "build:frontend": "esbuild static/js/cad/index.ts --bundle --outfile=static/js/cad/bundle.js --format=esm --target=es2020 --jsx=automatic",
+    "build:frontend": "node build-frontend.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'geometry/**/*.ts'"
   },
