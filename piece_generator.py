@@ -260,3 +260,324 @@ if __name__ == "__main__":
         print(f"\n{r['name']}×{r['count']}{rot_str}: {r['width']}×{r['height']} {r['shape']}")
         print(f"  顶点数: {len(r['vertices'])}")
         print(f"  文件: {r.get('file_path', 'N/A')}")
+
+
+def generate_cad_pieces_preview(measurements, options=None):
+    """
+    CAD裁片预览 - 基于人体参数生成裁片预览
+    """
+    import subprocess
+    import json
+    import sys
+    
+    if options is None:
+        options = {}
+    
+    ts_script = '''
+import { TshirtPatternGenerator } from './patterns/index.js';
+
+const measurements = MEASUREMENTS_PLACEHOLDER;
+const options = OPTIONS_PLACEHOLDER;
+
+const generator = new TshirtPatternGenerator(measurements, options);
+const pieces = generator.generate();
+
+const result = pieces.map(piece => ({
+    name: piece.name,
+    points: Object.entries(piece.points).map(([key, p]) => ({
+        key,
+        x: p.x,
+        y: p.y
+    })),
+    pathOps: piece.path.ops.map(op => ({
+        type: op.type,
+        to: op.to ? { x: op.to.x, y: op.to.y } : null,
+        cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+        cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+    })),
+    cutCount: piece.cutCount,
+    onFold: piece.onFold
+}));
+
+console.log(JSON.stringify(result));
+'''.replace('MEASUREMENTS_PLACEHOLDER', json.dumps(measurements)) \
+   .replace('OPTIONS_PLACEHOLDER', json.dumps(options))
+
+    try:
+        result = subprocess.run(
+            ['npx', 'tsx', '-e', ts_script],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            print(f"TypeScript执行错误: {result.stderr}")
+            return {"pieces": [], "error": result.stderr}
+        
+        pieces = json.loads(result.stdout.strip())
+        
+        pieces_with_svg = []
+        for piece in pieces:
+            bbox = _calculate_bbox_from_points(piece['points'])
+            svg_path = _generate_svg_path_from_ops(piece['pathOps'])
+            
+            pieces_with_svg.append({
+                "name": piece['name'],
+                "cutCount": piece['cutCount'],
+                "onFold": piece['onFold'],
+                "bbox": bbox,
+                "svgPath": svg_path,
+                "area": _calculate_polygon_area(piece['points'])
+            })
+        
+        return {"pieces": pieces_with_svg}
+        
+    except subprocess.TimeoutExpired:
+        return {"pieces": [], "error": "预览生成超时"}
+    except Exception as e:
+        print(f"CAD预览错误: {str(e)}")
+        return {"pieces": [], "error": str(e)}
+
+
+def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate, 
+                                 wastage_rate, fabric_weight_gsm, quantity):
+    """
+    CAD排料计算 - 基于人体参数生成裁片并排料
+    """
+    import subprocess
+    import json
+    
+    if options is None:
+        options = {}
+    
+    ts_script = '''
+import { TshirtPatternGenerator } from './patterns/index.js';
+import { PolygonConverter } from './nesting/index.js';
+import { NestEngine } from './nesting/index.js';
+import { SvgExporter } from './export/index.js';
+
+const measurements = MEASUREMENTS_PLACEHOLDER;
+const options = OPTIONS_PLACEHOLDER;
+const fabricWidth = FABRIC_WIDTH_PLACEHOLDER;
+
+const generator = new TshirtPatternGenerator(measurements, options);
+const pieces = generator.generate();
+
+const engine = new NestEngine({
+    fabricWidth: fabricWidth,
+    fabricHeight: 3000,
+    spacing: 10,
+    rotations: [0, 90, 180, 270]
+});
+engine.addPieces(pieces);
+const result = engine.nest();
+
+const piecesData = pieces.map(piece => {
+    const bbox = piece.path.getBoundingBox();
+    return {
+        name: piece.name,
+        cutCount: piece.cutCount,
+        onFold: piece.onFold,
+        width: bbox ? bbox.bottomRight.x - bbox.topLeft.x : 0,
+        height: bbox ? bbox.bottomRight.y - bbox.topLeft.y : 0,
+        area: piece.path.getArea ? piece.path.getArea() : 0
+    };
+});
+
+const positions = result.positions.map(pos => ({
+    pieceId: pos.pieceId,
+    x: pos.x,
+    y: pos.y,
+    rotation: pos.rotation
+}));
+
+console.log(JSON.stringify({
+    pieces: piecesData,
+    positions: positions,
+    utilization: result.utilization,
+    bounds: result.bounds,
+    totalArea: result.totalArea,
+    usedArea: result.usedArea
+}));
+'''.replace('MEASUREMENTS_PLACEHOLDER', json.dumps(measurements)) \
+   .replace('OPTIONS_PLACEHOLDER', json.dumps(options)) \
+   .replace('FABRIC_WIDTH_PLACEHOLDER', str(fabric_width))
+
+    try:
+        result = subprocess.run(
+            ['npx', 'tsx', '-e', ts_script],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        
+        if result.returncode != 0:
+            print(f"TypeScript执行错误: {result.stderr}")
+            raise Exception(f"排料计算失败: {result.stderr}")
+        
+        data = json.loads(result.stdout.strip())
+        
+        total_area_cm2 = data.get('totalArea', 0) * 10000
+        used_area_cm2 = data.get('usedArea', 0) * 10000
+        
+        total_area_m2 = total_area_cm2 / 10000
+        per_piece_length_m = data.get('bounds', {}).get('width', 0) / 100
+        total_length_m = per_piece_length_m * quantity
+        
+        fabric_weight_kg = 0
+        if fabric_weight_gsm > 0:
+            fabric_weight_kg = (total_area_m2 * fabric_weight_gsm * (1 + wastage_rate / 100)) / 1000
+        
+        utilization_rate = data.get('utilization', 0)
+        
+        pieces_detail = []
+        for p in data.get('pieces', []):
+            area_cm2 = p.get('area', 0) * 10000
+            pieces_detail.append({
+                "name": p.get('name', ''),
+                "original_length": round(p.get('height', 0), 2),
+                "original_width": round(p.get('width', 0), 2),
+                "count": p.get('cutCount', 1),
+                "area_cm2": round(area_cm2, 2),
+                "area_with_shrinkage_cm2": round(area_cm2 * (1 + shrinkage_rate / 100), 2),
+                "material": "main",
+                "on_fold": p.get('onFold', False)
+            })
+        
+        positions = data.get('positions', [])
+        
+        nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width)
+        
+        return {
+            "pieces": data.get('pieces', []),
+            "positions": positions,
+            "nesting_svg": nesting_svg,
+            "pieces_detail": pieces_detail,
+            "per_piece_length_m": round(per_piece_length_m, 3),
+            "total_length_m": round(total_length_m, 2),
+            "total_area_m2": round(total_area_m2, 4),
+            "utilization_rate": round(utilization_rate, 1),
+            "fabric_weight_kg": round(fabric_weight_kg, 3),
+            "params": {
+                "fabric_width": fabric_width,
+                "shrinkage_rate": shrinkage_rate,
+                "wastage_rate": wastage_rate,
+                "fabric_weight_gsm": fabric_weight_gsm,
+                "quantity": quantity,
+                "measurements": measurements,
+                "options": options
+            },
+            "material_breakdown": {
+                "main": {
+                    "name": "主面料",
+                    "area_m2": round(total_area_m2, 4),
+                    "length_m": round(total_length_m, 2),
+                    "length_cm": round(total_length_m * 100, 1),
+                    "weight_kg": round(fabric_weight_kg, 3),
+                    "width_utilization": utilization_rate / 100
+                }
+            }
+        }
+        
+    except subprocess.TimeoutExpired:
+        raise Exception("排料计算超时")
+    except json.JSONDecodeError as e:
+        raise Exception(f"解析结果失败: {str(e)}")
+    except Exception as e:
+        raise e
+
+
+def _calculate_bbox_from_points(points):
+    """计算点集的边界框"""
+    if not points:
+        return {"minX": 0, "minY": 0, "maxX": 0, "maxY": 0, "width": 0, "height": 0}
+    
+    xs = [p['x'] for p in points]
+    ys = [p['y'] for p in points]
+    
+    return {
+        "minX": min(xs),
+        "minY": min(ys),
+        "maxX": max(xs),
+        "maxY": max(ys),
+        "width": max(xs) - min(xs),
+        "height": max(ys) - min(ys)
+    }
+
+
+def _generate_svg_path_from_ops(ops):
+    """从路径操作生成SVG路径字符串"""
+    parts = []
+    for op in ops:
+        if op['type'] == 'M':
+            parts.append(f"M {op['to']['x']:.2f} {op['to']['y']:.2f}")
+        elif op['type'] == 'L':
+            parts.append(f"L {op['to']['x']:.2f} {op['to']['y']:.2f}")
+        elif op['type'] == 'C':
+            parts.append(f"C {op['cp1']['x']:.2f} {op['cp1']['y']:.2f} "
+                        f"{op['cp2']['x']:.2f} {op['cp2']['y']:.2f} "
+                        f"{op['to']['x']:.2f} {op['to']['y']:.2f}")
+        elif op['type'] == 'Z':
+            parts.append("Z")
+    return " ".join(parts)
+
+
+def _calculate_polygon_area(points):
+    """计算多边形面积"""
+    if len(points) < 3:
+        return 0
+    
+    n = len(points)
+    area = 0
+    for i in range(n):
+        j = (i + 1) % n
+        area += points[i]['x'] * points[j]['y']
+        area -= points[j]['x'] * points[i]['y']
+    return abs(area) / 2
+
+
+def _generate_nesting_svg(pieces, positions, fabric_width):
+    """生成排料图SVG"""
+    if not positions:
+        return ""
+    
+    scale = 0.5
+    padding = 20
+    
+    max_x = max((p.get('x', 0) + p.get('width', 0)) for p in pieces) if pieces else fabric_width
+    max_y = max((pos.get('y', 0) + 100) for pos in positions) if positions else 500
+    
+    svg_width = int(fabric_width * scale + padding * 2)
+    svg_height = int(max_y * scale + padding * 2)
+    
+    lines = []
+    lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_width}" height="{svg_height}">')
+    lines.append(f'<rect x="{padding}" y="{padding}" width="{fabric_width * scale}" height="{max_y * scale}" '
+                f'fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="5,3"/>')
+    
+    piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+    
+    for i, pos in enumerate(positions):
+        piece_id = pos.get('pieceId', '')
+        x = pos.get('x', 0) * scale + padding
+        y = pos.get('y', 0) * scale + padding
+        rotation = pos.get('rotation', 0)
+        
+        piece = next((p for p in pieces if f"{p.get('name', '')}_0" == piece_id or 
+                      piece_id.startswith(p.get('name', ''))), None)
+        
+        if piece:
+            w = piece.get('width', 50) * scale
+            h = piece.get('height', 50) * scale
+            color = piece_colors[i % len(piece_colors)]
+            
+            lines.append(f'<g transform="translate({x:.1f}, {y:.1f}) rotate({rotation})">')
+            lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
+                        f'fill="{color}33" stroke="{color}" stroke-width="1"/>')
+            lines.append(f'<text x="{w/2:.1f}" y="{h/2:.1f}" text-anchor="middle" '
+                        f'dominant-baseline="middle" font-size="10" fill="{color}">{piece.get("name", "")}</text>')
+            lines.append('</g>')
+    
+    lines.append('</svg>')
+    return "\n".join(lines)

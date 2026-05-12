@@ -720,6 +720,120 @@ def api_polygon_nesting():
 
 
 # ============================================================
+# CAD排料模块
+# ============================================================
+
+@app.route('/cad')
+def cad_page():
+    """CAD排料页面"""
+    return render_template('cad.html')
+
+
+@app.route('/api/cad-preview', methods=['POST'])
+def cad_preview():
+    """CAD裁片预览API"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+
+        category = data.get("category", "tshirt")
+        measurements = data.get("measurements", {})
+        options = data.get("options", {})
+
+        if category != "tshirt":
+            return jsonify({"success": False, "message": "当前仅支持T恤品类"}), 400
+
+        from piece_generator import generate_cad_pieces_preview
+        result = generate_cad_pieces_preview(measurements, options)
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        import traceback
+        print(f"[CAD预览] 错误: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"预览生成错误: {str(e)}"}), 500
+
+
+@app.route('/api/cad-nesting', methods=['POST'])
+def cad_nesting():
+    """CAD排料计算API"""
+    import time
+    start_time = time.time()
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+
+        category = data.get("category", "tshirt")
+        measurements = data.get("measurements", {})
+        options = data.get("options", {})
+        fabric_params = data.get("fabricParams", {})
+
+        if category != "tshirt":
+            return jsonify({"success": False, "message": "当前仅支持T恤品类"}), 400
+
+        fabric_width = float(fabric_params.get("width", 145))
+        shrinkage_rate = float(fabric_params.get("shrinkageRate", 3))
+        wastage_rate = float(fabric_params.get("wastageRate", 8))
+        fabric_weight_gsm = float(fabric_params.get("weightGsm", 0))
+        quantity = int(fabric_params.get("quantity", 1))
+
+        print(f"[CAD] 收到排料请求: 品类={category}, 门幅={fabric_width}cm, 数量={quantity}")
+
+        from piece_generator import generate_cad_nesting_result
+        result = generate_cad_nesting_result(
+            measurements=measurements,
+            options=options,
+            fabric_width=fabric_width,
+            shrinkage_rate=shrinkage_rate,
+            wastage_rate=wastage_rate,
+            fabric_weight_gsm=fabric_weight_gsm,
+            quantity=quantity
+        )
+
+        record_id = datetime.now().strftime("%Y%m%d%H%M%S")
+
+        record = {
+            "id": record_id,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type": "cad",
+            "category": category,
+            "params": {
+                "fabric_width": fabric_width,
+                "shrinkage_rate": shrinkage_rate,
+                "wastage_rate": wastage_rate,
+                "fabric_weight_gsm": fabric_weight_gsm,
+                "quantity": quantity,
+                "measurements": measurements,
+                "options": options,
+            },
+            "result": {
+                "per_piece_length_m": result.get("per_piece_length_m"),
+                "total_area_m2": result.get("total_area_m2"),
+                "utilization_rate": result.get("utilization_rate"),
+                "fabric_weight_kg": result.get("fabric_weight_kg"),
+            },
+            "input_data": data,
+            "full_result": result,
+        }
+        db_manager.save_record(record)
+
+        elapsed = time.time() - start_time
+        print(f"[CAD] 排料完成: 单件{result.get('per_piece_length_m')}m, 利用率{result.get('utilization_rate')}%, 耗时{elapsed:.3f}秒")
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        import traceback
+        elapsed = time.time() - start_time
+        print(f"[CAD] 排料失败: {str(e)}, 耗时{elapsed:.3f}秒")
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"CAD排料错误: {str(e)}"}), 500
+
+
+# ============================================================
 # 静态文件服务（上传图片）
 # ============================================================
 
@@ -728,7 +842,6 @@ def serve_upload(filename):
     """提供上传图片的访问"""
     import os
     from flask import send_from_directory, abort
-    # 安全检查：防止路径遍历攻击
     if '..' in filename or filename.startswith('/'):
         abort(404)
     return send_from_directory(UPLOAD_DIR, filename)

@@ -43,25 +43,34 @@ function renderDetail(record) {
     const isPrecise = record.type === 'precise';
     const isCurved = record.type === 'curved';
     const isPolygon = record.type === 'polygon';
+    const isCad = record.type === 'cad';
     currentRecordType = record.type || 'precise';
-    const typeLabel = isCurved ? '曲线计算' : (isPrecise ? '精确计算' : (isPolygon ? '多边形排料' : '快速估算'));
+    
+    let typeLabel = '快速估算';
+    if (isCurved) typeLabel = '曲线计算';
+    else if (isPrecise) typeLabel = '精确计算';
+    else if (isPolygon) typeLabel = '多边形排料';
+    else if (isCad) typeLabel = 'CAD排料';
+    
     const categoryName = DictManager.getCategoryName(record.category, record.category);
 
     document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
     document.getElementById('detail-subtitle').textContent = `记录时间: ${record.timestamp}`;
 
-    if ((isPrecise || isCurved || isPolygon) && record.input_data) {
+    if ((isPrecise || isCurved || isPolygon || isCad) && record.input_data) {
         document.getElementById('btn-edit').style.display = '';
     }
     document.getElementById('btn-export').style.display = '';
     document.getElementById('btn-quotation').style.display = '';
 
-    renderInfoCardCompact(record, isPrecise || isCurved || isPolygon, categoryName);
+    renderInfoCardCompact(record, isPrecise || isCurved || isPolygon || isCad, categoryName);
 
     if (isCurved || isPrecise) {
         renderPreciseResult(record);
     } else if (isPolygon) {
         renderPolygonResult(record);
+    } else if (isCad) {
+        renderCadResult(record);
     } else {
         renderQuickResult(record);
     }
@@ -151,6 +160,8 @@ function editRecord() {
         targetPage = '/curves';
     } else if (type === 'polygon') {
         targetPage = '/polygon-nesting';
+    } else if (type === 'cad') {
+        targetPage = '/cad';
     }
     
     window.location.href = `${targetPage}?edit=${RECORD_ID}`;
@@ -438,6 +449,112 @@ function renderPolygonResult(record) {
             <td>${p.area_cm2}</td>
             <td>${p.area_with_shrinkage_cm2}</td>
             <td>${DictManager.getMaterialName(p.material, p.material)}</td>
+        </tr>
+    `).join('');
+}
+
+function renderCadResult(record) {
+    const area = document.getElementById('cad-result-area');
+    area.style.display = 'block';
+
+    const fullResult = record.full_result;
+    if (!fullResult) {
+        area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
+        return;
+    }
+
+    const params = fullResult.params || {};
+    const measurements = params.measurements || {};
+    const options = params.options || {};
+
+    const measurementsGrid = document.getElementById('cad-measurements-grid');
+    const measurementLabels = {
+        chest: '胸围',
+        waist: '腰围',
+        hips: '臀围',
+        neck: '领围',
+        shoulderToShoulder: '肩宽',
+        shoulderSlope: '肩斜(°)',
+        biceps: '大臂围',
+        wrist: '手腕围',
+        hpsToWaistFront: '前颈点-腰',
+        hpsToWaistBack: '后颈点-腰',
+        waistToHips: '腰-臀',
+    };
+    
+    measurementsGrid.innerHTML = Object.entries(measurementLabels).map(([key, label]) => {
+        const value = measurements[key];
+        if (value === undefined || value === null) return '';
+        return `
+            <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                <div style="font-size:12px;color:var(--text-secondary);">${label}</div>
+                <div style="font-size:14px;font-weight:600;">${value} cm</div>
+            </div>
+        `;
+    }).join('');
+
+    const optionsGrid = document.getElementById('cad-options-grid');
+    const optionLabels = {
+        chestEase: '胸围松量',
+        waistEase: '腰围松量',
+        bicepsEase: '袖肥松量',
+        collarEase: '领围松量',
+    };
+    
+    optionsGrid.innerHTML = Object.entries(optionLabels).map(([key, label]) => {
+        const value = options[key];
+        if (value === undefined || value === null) return '';
+        return `
+            <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                <div style="font-size:12px;color:var(--text-secondary);">${label}</div>
+                <div style="font-size:14px;font-weight:600;">${value}%</div>
+            </div>
+        `;
+    }).join('');
+
+    const matCards = document.getElementById('cad-material-cards');
+    const matBreakdown = fullResult.material_breakdown || {};
+    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
+        <div class="card" style="border-left:4px solid #3b82f6;">
+            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
+                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
+                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
+                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
+                </div>
+                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                    <div style="font-size:12px;color:var(--text-secondary);">利用率</div>
+                    <div style="font-size:15px;font-weight:600;">${(val.width_utilization * 100).toFixed(1)}%</div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    const nestingSvg = document.getElementById('cad-nesting-svg');
+    if (fullResult.nesting_svg) {
+        nestingSvg.innerHTML = fullResult.nesting_svg;
+    } else {
+        nestingSvg.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
+    }
+
+    const piecesTbody = document.getElementById('cad-pieces-tbody');
+    const pieces = fullResult.pieces_detail || [];
+    piecesTbody.innerHTML = pieces.map(p => `
+        <tr>
+            <td>${p.name}</td>
+            <td>${p.original_length} × ${p.original_width}</td>
+            <td>${p.count}</td>
+            <td>${p.area_cm2}</td>
+            <td>${p.area_with_shrinkage_cm2}</td>
+            <td>${p.on_fold ? '是' : '否'}</td>
         </tr>
     `).join('');
 }

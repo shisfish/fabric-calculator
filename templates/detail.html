@@ -159,6 +159,61 @@
                 </div>
             </div>
 
+            <!-- CAD排料结果区域 -->
+            <div id="cad-result-area" style="display:none;">
+                <!-- 人体参数 -->
+                <div class="section">
+                    <h3>📐 人体参数</h3>
+                    <div id="cad-measurements-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 松量设置 -->
+                <div class="section">
+                    <h3>📊 松量设置</h3>
+                    <div id="cad-options-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 材料汇总 -->
+                <div class="section">
+                    <h3>📦 材料汇总</h3>
+                    <div id="cad-material-cards" style="display:flex;flex-direction:column;gap:12px;">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 排料图 -->
+                <div class="section">
+                    <h3>📐 排料图</h3>
+                    <div id="cad-nesting-svg" class="nesting-svg-container" style="background:white;border:1px solid var(--border-color);border-radius:8px;padding:16px;overflow-x:auto;">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 裁片明细 -->
+                <div class="section">
+                    <h3>✂️ 裁片明细</h3>
+                    <div class="table-container">
+                        <table class="data-table" id="cad-pieces-table">
+                            <thead>
+                                <tr>
+                                    <th>裁片名称</th>
+                                    <th>尺寸(cm)</th>
+                                    <th>数量</th>
+                                    <th>面积(cm²)</th>
+                                    <th>含缩水面积(cm²)</th>
+                                    <th>对折</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cad-pieces-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 

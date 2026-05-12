@@ -1,0 +1,29 @@
+{
+  "name": "fabric-calculator",
+  "version": "1.0.0",
+  "description": "Industrial Garment CAD System",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint 'geometry/**/*.ts'"
+  },
+  "keywords": [
+    "garment",
+    "cad",
+    "pattern",
+    "nesting",
+    "sewing"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.10.0"
+  },
+  "dependencies": {
+    "bezier-js": "^6.1.4"
+  }
+}
