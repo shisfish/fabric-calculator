@@ -31,14 +31,18 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 安装 Node.js 依赖（CAD排料模块需要TypeScript运行时 + React前端组件）
+# 安装 Node.js 依赖（CAD 排料模块需要 TypeScript 运行时 + React 前端组件）
 COPY package.json package-lock.json ./
 RUN npm install
+
+# 复制前端构建脚本和源文件（必须在构建之前）
+COPY build-frontend.js ./
+COPY static/js/cad/ ./static/js/cad/
 
 # 构建 React 前端组件
 RUN npm run build:frontend
 
-# 复制项目文件
+# 复制剩余项目文件
 COPY . .
 
 # 创建数据目录（持久化数据通过Docker卷挂载到外部路径）
