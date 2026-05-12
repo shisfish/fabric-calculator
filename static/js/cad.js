@@ -213,38 +213,34 @@ function renderNestingWithReact(result, fabricWidth) {
         return;
     }
 
-    const pieces = (result.pieces || []).map(p => ({
-        name: p.name,
-        points: [],
-        pathOps: generateRectPathOps(p.width, p.height),
-        cutCount: p.cutCount || 1,
-        onFold: p.onFold || false,
-        area: p.area
-    }));
+    const pieces = (result.pieces || []).map(p => {
+        const pathOps = p.pathOps;
+        if (!pathOps || pathOps.length === 0) {
+            console.warn(`裁片 ${p.name} 缺少pathOps数据，将无法正确渲染`);
+        }
+        return {
+            name: p.name,
+            points: [],
+            pathOps: pathOps || [],
+            cutCount: p.cutCount || 1,
+            onFold: p.onFold || false,
+            area: p.area
+        };
+    });
 
     const nestingResult = {
         pieces: result.pieces || [],
         positions: result.positions || [],
-        utilization: result.utilization_rate || 0,
+        utilization: result.utilization_rate || result.utilization || 0,
         bounds: {
             width: fabricWidth,
-            height: result.per_piece_length_m * 100
+            height: (result.bounds?.height || result.per_piece_length_m * 100)
         },
-        totalArea: result.total_area_m2 * 10000 || 0,
-        usedArea: (result.total_area_m2 * 10000 * result.utilization_rate / 100) || 0
+        totalArea: result.total_area_m2 ? result.total_area_m2 * 10000 : (result.totalArea || 0),
+        usedArea: result.total_area_m2 ? (result.total_area_m2 * 10000 * (result.utilization_rate || 0) / 100) : (result.usedArea || 0)
     };
 
     window.renderNestingResult(pieces, nestingResult, fabricWidth);
-}
-
-function generateRectPathOps(width, height) {
-    return [
-        { type: 'move', to: { x: 0, y: 0 } },
-        { type: 'line', to: { x: width, y: 0 } },
-        { type: 'line', to: { x: width, y: height } },
-        { type: 'line', to: { x: 0, y: height } },
-        { type: 'close' }
-    ];
 }
 
 function exportResult() {

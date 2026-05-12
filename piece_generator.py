@@ -537,15 +537,15 @@ def _calculate_polygon_area(points):
 
 
 def _generate_nesting_svg(pieces, positions, fabric_width):
-    """生成排料图SVG"""
+    """生成排料图SVG - 基于真实Bezier路径"""
     if not positions:
         return ""
     
     scale = 0.5
     padding = 20
     
-    max_x = max((p.get('x', 0) + p.get('width', 0)) for p in pieces) if pieces else fabric_width
-    max_y = max((pos.get('y', 0) + 100) for pos in positions) if positions else 500
+    max_x = fabric_width
+    max_y = max((pos.get('y', 0) + 150) for pos in positions) if positions else 500
     
     svg_width = int(fabric_width * scale + padding * 2)
     svg_height = int(max_y * scale + padding * 2)
@@ -557,26 +557,66 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
     
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
     
+    piece_path_map = {}
+    for p in pieces:
+        piece_path_map[p.get('name', '')] = p.get('pathOps', [])
+    
     for i, pos in enumerate(positions):
-        piece_id = pos.get('pieceId', '')
+        name = pos.get('name', '')
         x = pos.get('x', 0) * scale + padding
         y = pos.get('y', 0) * scale + padding
         rotation = pos.get('rotation', 0)
         
-        piece = next((p for p in pieces if f"{p.get('name', '')}_0" == piece_id or 
-                      piece_id.startswith(p.get('name', ''))), None)
+        path_ops = piece_path_map.get(name, [])
+        color = piece_colors[i % len(piece_colors)]
         
-        if piece:
-            w = piece.get('width', 50) * scale
-            h = piece.get('height', 50) * scale
-            color = piece_colors[i % len(piece_colors)]
-            
+        if path_ops:
+            path_d = _convert_path_ops_to_svg_d(path_ops, scale)
+            lines.append(f'<g transform="translate({x:.1f}, {y:.1f}) rotate({rotation})">')
+            lines.append(f'<path d="{path_d}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
+            lines.append(f'<text x="5" y="-5" font-size="10" fill="{color}">{name}</text>')
+            lines.append('</g>')
+        else:
+            w = 50 * scale
+            h = 80 * scale
             lines.append(f'<g transform="translate({x:.1f}, {y:.1f}) rotate({rotation})">')
             lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
-                        f'fill="{color}33" stroke="{color}" stroke-width="1"/>')
+                        f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
             lines.append(f'<text x="{w/2:.1f}" y="{h/2:.1f}" text-anchor="middle" '
-                        f'dominant-baseline="middle" font-size="10" fill="{color}">{piece.get("name", "")}</text>')
+                        f'dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
             lines.append('</g>')
     
     lines.append('</svg>')
     return "\n".join(lines)
+
+
+def _convert_path_ops_to_svg_d(ops, scale=1):
+    """将PathOperation数组转换为SVG d属性"""
+    d_parts = []
+    for op in ops:
+        op_type = op.get('type')
+        if op_type == 'move':
+            to = op.get('to')
+            if to:
+                d_parts.append(f"M {to['x'] * scale:.2f},{to['y'] * scale:.2f}")
+        elif op_type == 'line':
+            to = op.get('to')
+            if to:
+                d_parts.append(f"L {to['x'] * scale:.2f},{to['y'] * scale:.2f}")
+        elif op_type == 'curve':
+            cp1 = op.get('cp1')
+            cp2 = op.get('cp2')
+            to = op.get('to')
+            if cp1 and cp2 and to:
+                d_parts.append(f"C {cp1['x'] * scale:.2f},{cp1['y'] * scale:.2f} "
+                              f"{cp2['x'] * scale:.2f},{cp2['y'] * scale:.2f} "
+                              f"{to['x'] * scale:.2f},{to['y'] * scale:.2f}")
+        elif op_type == 'quad':
+            cp1 = op.get('cp1')
+            to = op.get('to')
+            if cp1 and to:
+                d_parts.append(f"Q {cp1['x'] * scale:.2f},{cp1['y'] * scale:.2f} "
+                              f"{to['x'] * scale:.2f},{to['y'] * scale:.2f}")
+        elif op_type == 'close':
+            d_parts.append("Z")
+    return " ".join(d_parts)

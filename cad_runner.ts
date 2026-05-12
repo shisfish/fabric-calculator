@@ -48,10 +48,21 @@ if (input.mode === 'preview') {
     const result = engine.nest();
     const placedPolygons = engine.getPlacedPolygons();
 
+    const piecePathMap = new Map<string, any>();
+    for (const piece of pieces) {
+        piecePathMap.set(piece.name, piece.path.ops.map(op => ({
+            type: op.type,
+            to: op.to ? { x: op.to.x, y: op.to.y } : null,
+            cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+            cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+        })));
+    }
+
     const piecesData = placedPolygons.map(pp => {
         const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
+        const name = pp.id.replace(/_\d+$/, '');
         return {
-            name: pp.id.replace(/_\d+$/, ''),
+            name,
             x: pp.x,
             y: pp.y,
             width: bbox.width,
@@ -59,7 +70,8 @@ if (input.mode === 'preview') {
             area: pp.polygon.getArea(),
             cutCount: 1,
             onFold: false,
-            rotation: pp.rotation
+            rotation: pp.rotation,
+            pathOps: piecePathMap.get(name) || []
         };
     });
 
