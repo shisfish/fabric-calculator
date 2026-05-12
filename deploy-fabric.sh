@@ -38,7 +38,7 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     cd "$REPO_DIR"
     
     log_info "首次构建并启动..."
-    docker compose build fabric-calculator --no-cache
+    docker compose build fabric-calculator
     docker compose up -d fabric-calculator
     
     sleep 5
@@ -77,7 +77,7 @@ git pull origin "$GIT_BRANCH"
 
 # 重新构建并启动
 log_info "重新构建 Docker 镜像..."
-docker compose build fabric-calculator --no-cache
+docker compose build fabric-calculator
 
 log_info "重新启动服务..."
 docker compose up -d fabric-calculator

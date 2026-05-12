@@ -18,7 +18,7 @@ if (input.garmentParams) {
 }
 
 const pieces = TshirtPatternGenerator.generatePattern(params);
-const fabricWidth = (input.fabricWidth || 145) * 10;
+const fabricWidth = input.fabricWidth || 145;
 
 if (input.mode === 'preview') {
     const result = pieces.map(piece => ({
@@ -52,11 +52,11 @@ if (input.mode === 'preview') {
         const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
         return {
             name: pp.id.replace(/_\d+$/, ''),
-            x: pp.x / 10,
-            y: pp.y / 10,
-            width: bbox.width / 10,
-            height: bbox.height / 10,
-            area: pp.polygon.getArea() * 100,
+            x: pp.x,
+            y: pp.y,
+            width: bbox.width,
+            height: bbox.height,
+            area: pp.polygon.getArea(),
             cutCount: 1,
             onFold: false,
             rotation: pp.rotation
@@ -67,16 +67,16 @@ if (input.mode === 'preview') {
         pieces: piecesData,
         positions: result.positions.map(p => ({
             name: p.pieceId.replace(/_\d+$/, ''),
-            x: p.x / 10,
-            y: p.y / 10,
+            x: p.x,
+            y: p.y,
             rotation: p.rotation
         })),
         utilization: result.utilization,
         bounds: {
-            width: result.bounds.width / 10,
-            height: result.bounds.height / 10
+            width: result.bounds.width,
+            height: result.bounds.height
         },
-        totalArea: result.totalArea * 100,
-        usedArea: result.usedArea * 100
+        totalArea: result.totalArea,
+        usedArea: result.usedArea
     }));
 }
