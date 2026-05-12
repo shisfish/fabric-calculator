@@ -11,11 +11,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 使用腾讯云内网镜像源加速
 RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装系统依赖 + Node.js 20 LTS（CAD排料模块需要TypeScript运行时）
-# 合并为单层RUN避免重复构建，apt缓存清理在同一层减小镜像体积
+# 安装系统依赖 + Node.js 20 LTS（CAD 排料模块需要 TypeScript 运行时）
+# 合并为单层 RUN 避免重复构建，apt 缓存清理在同一层减小镜像体积
 RUN set -eux; \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
-    apt-get update && apt-get install -y --no-install-recommends \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         nodejs \
     && node --version \
