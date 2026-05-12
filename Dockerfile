@@ -11,17 +11,18 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 使用腾讯云内网镜像源加速
 RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装系统依赖 + Node.js 20 LTS（CAD 排料模块需要 TypeScript 运行时）
-# 合并为单层 RUN 避免重复构建，apt 缓存清理在同一层减小镜像体积
-RUN set -eux; \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        libglib2.0-0 \
-        nodejs \
+# 安装系统依赖（opencv-python-headless 只需要 libglib2.0-0）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Node.js 20 LTS（CAD排料模块需要执行TypeScript）
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && node --version \
     && npm --version \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
 WORKDIR /app
