@@ -137,9 +137,12 @@ export class TshirtPatternGenerator {
     // 领口控制点：保持在最低点同一水平线，确保前中无折角
     points.neckCp = new Point(neckW * 0.42, neckD); 
 
-    // 2. 肩点：修正 Y 轴计算，确保肩膀是向下斜的
+    // 2. 肩点：基于工业比例计算，确保肩点始终在领口右侧
+    // 工业规则：shoulder.x = neckW + shoulderW * ratio
+    // 其中ratio (0.4~0.5) 控制肩线长度和角度
     const shoulderDrop = Math.tan((fp.shoulderSlope ?? 5.5) * Math.PI / 180) * shoulderW;
-    points.shoulder = new Point(shoulderW, shoulderDrop);
+    const shoulderX = neckW + shoulderW * 0.45;
+    points.shoulder = new Point(shoulderX, shoulderDrop);
 
     // 3. 侧缝与下摆锚点
     points.armholeEnd = new Point(W, armholeD);
