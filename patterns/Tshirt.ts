@@ -50,44 +50,48 @@ export class TshirtPatternGenerator {
     points.neck = new Point(neckW, 0);
     points.hps = new Point(neckW, 0);
 
-    points.shoulder = new Point(shoulderW, shoulderDrop);
+    const backShoulderRatio = 0.50;
+    const backShoulderX = neckW + shoulderW * backShoulderRatio;
+    points.shoulder = new Point(backShoulderX, shoulderDrop);
 
     points.cbArmhole = new Point(0, shoulderDrop + armholeD);
     points.armhole = new Point(W, shoulderDrop + armholeD);
 
+    const backArmholeW = W - backShoulderX;
+
     points.armholePitch = new Point(
-      bp.armholePitchX || shoulderW + (W - shoulderW) * 0.55,
-      shoulderDrop + armholeD * 0.35
+      backShoulderX + backArmholeW * 0.20,
+      shoulderDrop + armholeD * 0.30
     );
 
     points.waist = new Point(W, L * 0.58);
     points.hem = new Point(W, L + (bp.hemExtension ?? 1));
 
     points.neckCp2 = new Point(neckW * 0.85, neckD * 0.7);
-    points.shoulderCp1 = new Point(shoulderW * 0.85, shoulderDrop * 0.8);
+    points.shoulderCp1 = new Point(backShoulderX * 0.90, shoulderDrop * 0.8);
 
     points.armholePitchCp1 = new Point(
       points.armholePitch.x,
-      points.armholePitch.y + (points.armhole.y - points.armholePitch.y) * 0.4
+      points.armholePitch.y + (points.armhole.y - points.armholePitch.y) * 0.35
     );
     points.armholePitchCp2 = new Point(
       points.armholePitch.x,
-      points.shoulder.y + (points.armholePitch.y - points.shoulder.y) * 0.3
+      points.shoulder.y + (points.armholePitch.y - points.shoulder.y) * 0.25
     );
 
     const armholeSpanX = W - points.armholePitch.x;
     points.armholeHollow = new Point(
-      points.armholePitch.x + armholeSpanX * 0.55,
-      points.armhole.y - (points.armhole.y - points.armholePitch.y) * 0.15
+      points.armholePitch.x + armholeSpanX * 0.50,
+      points.armhole.y - (points.armhole.y - points.armholePitch.y) * 0.10
     );
 
     points.armholeHollowCp1 = new Point(
-      points.armholeHollow.x + armholeSpanX * 0.08,
-      points.armholeHollow.y - (points.armhole.y - points.armholeHollow.y) * 0.5
+      points.armholeHollow.x + armholeSpanX * 0.06,
+      points.armholeHollow.y - (points.armhole.y - points.armholeHollow.y) * 0.40
     );
     points.armholeHollowCp2 = new Point(
-      points.armholeHollow.x - armholeSpanX * 0.12,
-      points.armholeHollow.y + (points.armholeHollow.y - points.armholePitch.y) * 0.4
+      points.armholeHollow.x - armholeSpanX * 0.10,
+      points.armholeHollow.y + (points.armholeHollow.y - points.armholePitch.y) * 0.35
     );
 
     points.armholeCp2 = new Point(points.armhole.x - W * 0.08, points.armhole.y);
@@ -238,21 +242,36 @@ export class TshirtPatternGenerator {
     points.backSleeveSide = new Point(-halfBiceps, capHeight);
     points.frontSleeveSide = new Point(halfBiceps, capHeight);
 
-    points.backSleeveCap = new Point(-halfBiceps * 0.30, 0);
-    points.frontSleeveCap = new Point(halfBiceps * 0.40, 0);
+    const backCapRatio = 0.28;
+    const frontCapRatio = 0.42;
+    
+    points.backSleeveCap = new Point(-halfBiceps * backCapRatio, 0);
+    points.frontSleeveCap = new Point(halfBiceps * frontCapRatio, 0);
 
     const capCurveDepth = capHeight * capRatio;
 
-    points.backCapCp1 = new Point(-halfBiceps * 0.15, capCurveDepth * 0.38);
-    points.backCapCp2 = new Point(-halfBiceps, capCurveDepth * 0.68);
-    points.frontCapCp1 = new Point(halfBiceps * 0.22, capCurveDepth * 0.52);
-    points.frontCapCp2 = new Point(halfBiceps, capCurveDepth * 0.78);
+    points.backCapCp1 = new Point(-halfBiceps * 0.12, capCurveDepth * 0.32);
+    points.backCapCp2 = new Point(-halfBiceps * 0.88, capCurveDepth * 0.72);
+    points.frontCapCp1 = new Point(halfBiceps * 0.25, capCurveDepth * 0.55);
+    points.frontCapCp2 = new Point(halfBiceps * 0.92, capCurveDepth * 0.82);
 
     points.backCuff = new Point(-sl.cuffWidth / 2, capHeight + sl.sleeveLength);
     points.frontCuff = new Point(sl.cuffWidth / 2, capHeight + sl.sleeveLength);
 
     points.backCuffCp = new Point(-sl.cuffWidth / 2, capHeight + sl.sleeveLength * 0.78);
     points.frontCuffCp = new Point(sl.cuffWidth / 2, capHeight + sl.sleeveLength * 0.82);
+
+    const backNotchY = capCurveDepth * 0.45;
+    const frontNotchY = capCurveDepth * 0.58;
+    
+    points.backNotch = new Point(
+      -halfBiceps * (backCapRatio + (1 - backCapRatio) * 0.35),
+      backNotchY
+    );
+    points.frontNotch = new Point(
+      halfBiceps * (frontCapRatio + (1 - frontCapRatio) * 0.40),
+      frontNotchY
+    );
 
     const path = new Path()
       .move(points.sleeveCapTop)
@@ -274,7 +293,7 @@ export class TshirtPatternGenerator {
         start: new Point(0, capHeight + 20),
         end: new Point(0, capHeight + sl.sleeveLength - 20),
       },
-      notches: [points.sleeveCapTop],
+      notches: [points.backNotch, points.frontNotch],
       cutCount: 2,
       onFold: false,
     };
