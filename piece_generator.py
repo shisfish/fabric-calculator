@@ -446,13 +446,19 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
 
 def _normalize_garment_input(measurements):
-    """将输入数据规范化为 garmentInput 格式（实物测量数据）"""
+    """
+    将输入数据规范化为 garmentInput 格式（实物测量数据）
+
+    重要：必须转换为嵌套结构 {front: {...}, back: {...}, sleeve: {...}}
+    因为 GarmentMeasurementAdapter.adapt() 期望这种格式！
+    """
     if not measurements:
         return {}
 
+    # 提取扁平化字段
     garment_fields = {
         'chestWidth': ('chestWidth', '胸宽', '半胸宽', 'chest_width'),
-        'shoulderWidth': ('shoulderWidth', '肩宽', 'shoulder_width'),
+        'shoulderWidth': ('shoulderWidth', '肩长', 'shoulder_width'),
         'bodyLength': ('bodyLength', '衣长', 'body_length'),
         'sleeveLength': ('sleeveLength', '袖长', 'sleeve_length'),
         'neckWidth': ('neckWidth', '领宽', 'neck_width'),
@@ -462,11 +468,11 @@ def _normalize_garment_input(measurements):
         'shoulderSlope': ('shoulderSlope', '肩斜角', 'shoulder_slope'),
     }
 
-    result = {}
+    flat_result = {}
     for target, aliases in garment_fields.items():
         for alias in aliases:
             if alias in measurements and measurements[alias] is not None:
-                result[target] = float(measurements[alias])
+                flat_result[target] = float(measurements[alias])
                 break
 
     legacy_map = {
@@ -481,10 +487,55 @@ def _normalize_garment_input(measurements):
     }
 
     for legacy_key, (target, factor) in legacy_map.items():
-        if target not in result and legacy_key in measurements:
-            result[target] = float(measurements[legacy_key]) * factor
+        if target not in flat_result and legacy_key in measurements:
+            flat_result[target] = float(measurements[legacy_key]) * factor
 
-    return result
+    # 🔥 关键修复：将扁平化对象转换为嵌套结构
+    chest_width = flat_result.get('chestWidth', 59)
+    shoulder_width = flat_result.get('shoulderWidth', 19.5)
+    body_length = flat_result.get('bodyLength', 68)
+    sleeve_length = flat_result.get('sleeveLength', 60)
+    neck_width = flat_result.get('neckWidth', 25)
+    armhole_depth = flat_result.get('armholeDepth', 28)
+    cuff_width = flat_result.get('cuffWidth', 10)
+    shoulder_slope = flat_result.get('shoulderSlope', 5.5)
+
+    # 计算领深（基于领宽的比例）
+    front_neck_drop = neck_width * 0.34 if neck_width else 8.5
+    back_neck_drop = neck_width * 0.10 if neck_width else 2.5
+
+    # 转换为 GarmentMeasurementAdapter 期望的嵌套格式
+    nested_result = {
+        'garment': 'basic_tshirt',
+        'front': {
+            'chestWidth': chest_width,
+            'bodyLength': body_length,
+            'shoulderWidth': shoulder_width,
+            'neckWidth': neck_width,
+            'neckDrop': front_neck_drop,
+            'armholeDepth': armhole_depth
+        },
+        'back': {
+            'chestWidth': chest_width,
+            'bodyLength': body_length,
+            'shoulderWidth': shoulder_width,
+            'neckWidth': neck_width,
+            'neckDrop': back_neck_drop,
+            'armholeDepth': armhole_depth
+        },
+        'sleeve': {
+            'sleeveLength': sleeve_length,
+            'bicepWidth': chest_width * 0.38,  # 基于胸宽估算
+            'cuffWidth': cuff_width * 2,       # 袖口宽是半围，需要×2
+            'sleeveCapHeight': armhole_depth * 0.45
+        }
+    }
+
+    print(f"[参数转换] 扁平化 → 嵌套结构")
+    print(f"  输入: chestWidth={chest_width}, shoulderWidth={shoulder_width}")
+    print(f"  转换: front.chestWidth={chest_width}, back.chestWidth={chest_width}")
+    
+    return nested_result
 
 
 def _calculate_bbox_from_points(points):
