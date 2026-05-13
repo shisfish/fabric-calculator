@@ -1,0 +1,41 @@
+{
+  "name": "oversize_front",
+
+  "type": "half_front",
+
+  "unit": "cm",
+
+  "size": "L",
+
+  "measurements": {
+    "chestWidth": 34,
+    "bodyLength": 78,
+    "shoulderWidth": 30,
+    "neckWidth": 10,
+    "neckDepth": 8.5,
+    "armholeDepth": 31
+  },
+
+  "points": {
+
+    "cfNeck": [0, 0],
+
+    "neckCp": [4.5, 0],
+
+    "neck": [10, 8.5],
+
+    "shoulder": [30, 2.5],
+
+    "armholeCp1": [37, 10],
+
+    "armholeCp2": [33, 24],
+
+    "underarm": [34, 31],
+
+    "sideBottom": [34, 78],
+
+    "hemCp": [16, 79],
+
+    "cfHem": [0, 78]
+  }
+}

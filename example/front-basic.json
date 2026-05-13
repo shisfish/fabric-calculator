@@ -1,0 +1,41 @@
+{
+  "name": "basic_tshirt_front",
+
+  "type": "half_front",
+
+  "unit": "cm",
+
+  "size": "M",
+
+  "measurements": {
+    "chestWidth": 29,
+    "bodyLength": 72,
+    "shoulderWidth": 24,
+    "neckWidth": 9,
+    "neckDepth": 8,
+    "armholeDepth": 26
+  },
+
+  "points": {
+
+    "cfNeck": [0, 0],
+
+    "neckCp": [4, 0],
+
+    "neck": [9, 8],
+
+    "shoulder": [24, 3],
+
+    "armholeCp1": [30, 8],
+
+    "armholeCp2": [27, 20],
+
+    "underarm": [29, 26],
+
+    "sideBottom": [29, 72],
+
+    "hemCp": [14, 73],
+
+    "cfHem": [0, 72]
+  }
+}
