@@ -32,48 +32,68 @@ export class TshirtPatternGenerator {
 
   private static generateBackPanel(bp: BackPanelParams, seamAllowance: number): PatternPiece {
     const points: Record<string, Point> = {};
-    const W = bp.width;
-    const L = bp.length;
-    const neckW = bp.neckWidth;
-    const neckD = bp.neckDepth; // 后领深通常很浅 (2-3cm)
-    const shoulderW = bp.shoulderWidth;
-    const armholeD = bp.armholeDepth;
 
-    // 1. 基础点：以 HPS 为 (neckW, 0)
-    points.hps = new Point(neckW, 0);
-    points.cbNeck = new Point(0, neckD); // 后中领深点
-    points.cbHem = new Point(0, L);      // 后中下摆
-    points.hem = new Point(W, L);        // 侧缝下摆
-    points.armholeEnd = new Point(W, armholeD); // 腋下点
-
-    // 2. 肩点计算 (后肩通常比前肩略高或倾斜度略小)
-    const shoulderDrop = Math.tan((bp.shoulderSlope ?? 12) * Math.PI / 180) * shoulderW;
-    points.shoulder = new Point(neckW + shoulderW, shoulderDrop);
-
-    // 3. 后领口控制点 (确保后中平齐)
-    points.neckCp = new Point(neckW * 0.4, neckD);
-
-    // 4. 后袖窿曲线 (比前片更平直一些)
-    const armholeW = W - points.shoulder.x;
-    const armholeH = armholeD - shoulderDrop;
+    // --- 1. 基础参数与常量计算 ---
+    const { width: W, length: L, neckWidth: nW, neckDepth: nD, shoulderWidth: sW, armholeDepth: aD } = bp;
+    const sSlope = bp.shoulderSlope ?? 12;
+    const sDrop = Math.tan(sSlope * Math.PI / 180) * sW;
     
-    // 后袖窿 Pitch 点 (位置稍高)
-    points.armholePitch = new Point(points.shoulder.x + armholeW * 0.1, shoulderDrop + armholeH * 0.4);
-    points.armholeCp1 = new Point(points.armholePitch.x, points.armholePitch.y + armholeH * 0.3);
-    points.armholeCp2 = new Point(points.armholeEnd.x - armholeW * 0.3, points.armholeEnd.y);
+    // 计算袖窿核心常量
+    const aW = W - (nW + sW); 
+    const aH = aD - sDrop;
 
+    // --- 2. 关键点定义 (以中心线为 X=0) ---
+    // 右侧点
+    points.hps_R = new Point(nW, 0);
+    points.shoulder_R = new Point(nW + sW, sDrop);
+    points.armholeEnd_R = new Point(W, aD);
+    points.hem_R = new Point(W, L);
+    
+    // 左侧点 (镜像)
+    points.hps_L = new Point(-nW, 0);
+    points.shoulder_L = new Point(-(nW + sW), sDrop);
+    points.armholeEnd_L = new Point(-W, aD);
+    points.hem_L = new Point(-W, L);
+
+    // 中线点
+    points.cbNeck = new Point(0, nD);
+    points.cbHem = new Point(0, L);
+
+    // --- 3. 曲线控制点计算 ---
+    // 领口控制点
+    points.neckCp_R = new Point(nW * 0.4, nD);
+    points.neckCp_L = new Point(-nW * 0.4, nD);
+
+    // 袖窿控制点 (右侧)
+    points.aPitch_R = new Point(points.shoulder_R.x + aW * 0.1, sDrop + aH * 0.4);
+    points.aCp1_R = new Point(points.aPitch_R.x, points.aPitch_R.y + aH * 0.3);
+    points.aCp2_R = new Point(points.armholeEnd_R.x - aW * 0.3, points.armholeEnd_R.y);
+
+    // 袖窿控制点 (左侧镜像)
+    points.aPitch_L = new Point(-points.aPitch_R.x, points.aPitch_R.y);
+    points.aCp1_L = new Point(-points.aCp1_R.x, points.aCp1_R.y);
+    points.aCp2_L = new Point(-points.aCp2_R.x, points.aCp2_R.y);
+
+    // --- 4. 构建全铺开路径 ---
     const path = new Path()
-      .move(new Point(0, 0)) // 辅助点
       .move(points.cbNeck)
-      .quad(points.neckCp, points.hps) // 后领弧线
-      .line(points.shoulder)          // 肩线必须是直线
-      .curve(points.shoulder, points.armholePitch, points.armholePitch) // 袖窿上段
-      .curve(points.armholeCp1, points.armholeCp2, points.armholeEnd)   // 袖窿下段
-      .line(points.hem)
-      .line(points.cbHem)
+      // 连向右侧
+      .quad(points.neckCp_R, points.hps_R)
+      .line(points.shoulder_R)
+      .line(points.aPitch_R)
+      .curve(points.aCp1_R, points.aCp2_R, points.armholeEnd_R)
+      .line(points.hem_R)
+      .line(points.cbHem) // 连回中心底端
+      // 连向左侧 (镜像)
+      .line(points.hem_L)
+      .line(points.armholeEnd_L)
+      .curve(points.aCp2_L, points.aCp1_L, points.aPitch_L)
+      .line(points.shoulder_L)
+      .line(points.hps_L)
+      .quad(points.neckCp_L, points.cbNeck)
       .close();
 
-    return { name: 'back', path, points, seamAllowance, cutCount: 1, onFold: true };
+    return { name: 'back', path, points, seamAllowance, cutCount: 1, onFold: false };
   }
 
   private static generateFrontPanel(fp: FrontPanelParams, seamAllowance: number): PatternPiece {
@@ -177,44 +197,46 @@ export class TshirtPatternGenerator {
 
   private static generateSleeve(sl: SleeveParams, _bp: BackPanelParams, _fp: FrontPanelParams, seamAllowance: number): PatternPiece {
     const points: Record<string, Point> = {};
-    const halfBiceps = sl.bicepsWidth / 2;
-    const capH = sl.sleeveCapHeight;
-    const fullL = sl.sleeveLength + capH;
-    const halfCuff = sl.cuffWidth / 2;
 
-    // 核心坐标
-    points.capTop = new Point(0, 0);
-    points.backAxilla = new Point(-halfBiceps, capH);  // 后腋下
-    points.frontAxilla = new Point(halfBiceps, capH); // 前腋下
-    points.backCuff = new Point(-halfCuff, fullL);
-    points.frontCuff = new Point(halfCuff, fullL);
+    // --- 1. 基础参数计算 ---
+    const { bicepsWidth, sleeveCapHeight: capH, sleeveLength, cuffWidth } = sl;
+    const halfBicep = bicepsWidth / 2;
+    const halfCuff = cuffWidth / 2;
+    const totalL = sleeveLength + capH;
 
-    // 袖山曲线控制点 (S形曲线)
-    // 前袖山 (通常更凹)
-    points.fCp1 = new Point(halfBiceps * 0.4, 0); // 靠近顶点，平出
-    points.fCp2 = new Point(halfBiceps * 0.7, capH * 0.1);
-    points.fCp3 = new Point(halfBiceps * 0.5, capH * 0.9);
-    points.fCp4 = new Point(halfBiceps, capH);
+    // --- 2. 核心骨架点 ---
+    points.capTop = new Point(0, 0);                 // 袖山顶点
+    points.backAxilla = new Point(-halfBicep, capH); // 后腋下点 (左)
+    points.frontAxilla = new Point(halfBicep, capH); // 前腋下点 (右)
+    points.backCuff = new Point(-halfCuff, totalL);  // 后袖口
+    points.frontCuff = new Point(halfCuff, totalL); // 前袖口
 
-    // 后袖山 (更饱满)
-    points.bCp1 = new Point(-halfBiceps * 0.4, 0);
-    points.bCp2 = new Point(-halfBiceps * 0.9, capH * 0.2);
-    points.bCp3 = new Point(-halfBiceps * 0.8, capH * 0.8);
-    points.bCp4 = new Point(-halfBiceps, capH);
+    // --- 3. 袖山曲线控制点 (模拟人体工学 S 曲线) ---
+    // 前袖山 (Front): 进深更大，更凹
+    points.fCp1 = new Point(halfBicep * 0.35, 0);           // 顶点出线平滑
+    points.fCp2 = new Point(halfBicep * 0.7, capH * 0.05);  // 前上部饱满度
+    points.fCp3 = new Point(halfBicep * 0.45, capH * 0.95); // 前腋下深挖点
+    
+    // 后袖山 (Back): 更加圆润饱满
+    points.bCp1 = new Point(-halfBicep * 0.3, 0);
+    points.bCp2 = new Point(-halfBicep * 0.85, capH * 0.15);
+    points.bCp3 = new Point(-halfBicep * 0.75, capH * 0.85);
 
+    // --- 4. 路径构建 ---
     const path = new Path()
       .move(points.capTop)
       // 绘制前袖山 (顶点 -> 前腋下)
-      .curve(points.fCp1, points.fCp2, new Point(halfBiceps * 0.8, capH * 0.5))
-      .curve(new Point(halfBiceps * 0.9, capH * 0.8), points.frontAxilla, points.frontAxilla)
+      .curve(points.fCp1, points.fCp2, new Point(halfBicep * 0.8, capH * 0.5))
+      .curve(new Point(halfBicep * 0.9, capH * 0.8), points.frontAxilla, points.frontAxilla)
       // 侧缝与袖口
       .line(points.frontCuff)
       .line(points.backCuff)
       .line(points.backAxilla)
       // 绘制后袖山 (后腋下 -> 顶点)
-      .curve(new Point(-halfBiceps * 0.9, capH * 0.8), points.bCp2, points.capTop)
+      .curve(points.bCp3, points.bCp2, points.capTop)
       .close();
 
+    path.attr('class', 'fabric');
     return { name: 'sleeve', path, points, seamAllowance, cutCount: 2, onFold: false };
   }
 }
