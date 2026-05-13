@@ -10,12 +10,32 @@ uploads
 .cache
 .vscode
 .idea
+
+# 文档
 *.md
 DEPLOY.md
 README.md
+
+# 部署脚本
 deploy-*.sh
 start.sh
 init.sql
+
+# 示例数据
 example/
 .trae/
+
+# 🔴 1.4G 参考资料目录 - 必须排除
 reference/
+
+# 前端源码 (Docker 中从 builder stage 复制 dist)
+static/js/cad/*.tsx
+static/js/cad/*.ts
+static/js/cad/tsconfig.json
+static/js/cad/bundle.js
+
+# Python 缓存
+*.pyo
+.pytest_cache
+.mypy_cache
+*.egg-info
