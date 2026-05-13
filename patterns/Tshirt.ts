@@ -129,30 +129,39 @@ export class TshirtPatternGenerator {
     const shoulderW = fp.shoulderWidth;
     const armholeD = fp.armholeDepth;
 
-    const halfChest = W;
-    const shoulderDrop = 3;
+    const shoulderDrop = fp.shoulderSlope ?? 3;
 
     points.cfNeck = new Point(0, 0);
 
-    points.neckCp = new Point(neckW * 0.45, 0);
+    points.neckCp = new Point(neckW * 0.42, 0);
 
     points.neckEnd = new Point(neckW, neckD);
 
     points.shoulder = new Point(shoulderW, shoulderDrop);
 
-    points.armholeCp1 = new Point(
-      shoulderW + (halfChest - shoulderW) * 0.15,
-      armholeD * 0.18
+    points.armholePitch = new Point(
+      shoulderW + (W - shoulderW) * 0.28,
+      armholeD * 0.34
     );
 
-    points.armholeCp2 = new Point(
-      halfChest + 1.5,
+    points.armholeHollow = new Point(
+      W * 0.88,
       armholeD * 0.72
     );
 
-    points.armholeEnd = new Point(halfChest, armholeD);
+    points.armholeEnd = new Point(W, armholeD);
 
-    points.sideBottom = new Point(halfChest, L);
+    points.armholeCp1 = new Point(
+      shoulderW + (points.armholePitch.x - shoulderW) * 0.35,
+      shoulderDrop + (points.armholePitch.y - shoulderDrop) * 0.12
+    );
+
+    points.armholeCp2 = new Point(
+      points.armholeHollow.x + (points.armholeEnd.x - points.armholeHollow.x) * 0.45,
+      armholeD * 0.85
+    );
+
+    points.sideBottom = new Point(W, L);
 
     points.hemFold = new Point(0, L);
 
@@ -176,7 +185,7 @@ export class TshirtPatternGenerator {
         start: new Point(8, points.cfNeck.y + 10),
         end: new Point(8, points.hemFold.y - 10),
       },
-      notches: [points.shoulder],
+      notches: [points.armholePitch],
       cutCount: 1,
       onFold: false,
     };
