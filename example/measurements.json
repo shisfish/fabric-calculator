@@ -1,0 +1,25 @@
+{
+  "garment": "basic_tshirt_front",
+
+  "unit": "cm",
+
+  "size": "M",
+
+  "chestWidth": 58,
+
+  "bodyLength": 72,
+
+  "hemWidth": 58,
+
+  "neckWidth": 18,
+
+  "frontNeckDepth": 8.5,
+
+  "shoulderWidth": 24,
+
+  "shoulderSlope": 3,
+
+  "armholeDepth": 26,
+
+  "sideSeamLength": 46
+}

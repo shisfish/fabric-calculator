@@ -1,0 +1,19 @@
+{
+  "garment": "oversize_tshirt_front",
+
+  "chestWidth": 66,
+
+  "bodyLength": 78,
+
+  "hemWidth": 66,
+
+  "neckWidth": 21,
+
+  "frontNeckDepth": 9,
+
+  "shoulderWidth": 30,
+
+  "shoulderSlope": 2,
+
+  "armholeDepth": 31
+}

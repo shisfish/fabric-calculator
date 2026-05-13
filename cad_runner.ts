@@ -1,4 +1,4 @@
-import { TshirtPatternGenerator, GarmentMeasurementAdapter, type GarmentParams } from './patterns/index.js';
+import { TshirtPatternGenerator, GarmentMeasurementAdapter, FrontPatternGenerator, type GarmentParams, type FrontPatternParams } from './patterns/index.js';
 import { NestEngine } from './nesting/index.js';
 
 const input = JSON.parse(process.argv[2]);
@@ -17,18 +17,33 @@ if (input.garmentParams) {
   params = { ...params, ...input.garmentParams };
 }
 
-const pieces = TshirtPatternGenerator.generatePattern(params);
+let pieces: any[];
+
+if (input.frontOnly && input.frontParams) {
+  const frontPath = FrontPatternGenerator.generate(input.frontParams as FrontPatternParams);
+  pieces = [{
+    name: 'front',
+    path: frontPath,
+    points: {},
+    cutCount: 1,
+    onFold: false,
+    seamAllowance: 0
+  }];
+} else {
+  pieces = TshirtPatternGenerator.generatePattern(params);
+}
+
 const fabricWidth = input.fabricWidth || 145;
 
 if (input.mode === 'preview') {
-    const result = pieces.map(piece => ({
+    const result = pieces.map((piece: any) => ({
         name: piece.name,
-        points: Object.entries(piece.points).map(([key, p]) => ({
+        points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
             key,
             x: p.x,
             y: p.y
         })),
-        pathOps: piece.path.ops.map(op => ({
+        pathOps: (piece.path?.ops || []).map((op: any) => ({
             type: op.type,
             to: op.to ? { x: op.to.x, y: op.to.y } : null,
             cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
@@ -50,7 +65,7 @@ if (input.mode === 'preview') {
 
     const piecePathMap = new Map<string, any>();
     for (const piece of pieces) {
-        piecePathMap.set(piece.name, piece.path.ops.map(op => ({
+        piecePathMap.set(piece.name, (piece.path?.ops || []).map((op: any) => ({
             type: op.type,
             to: op.to ? { x: op.to.x, y: op.to.y } : null,
             cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,

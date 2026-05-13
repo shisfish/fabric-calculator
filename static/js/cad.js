@@ -63,15 +63,28 @@ function goStep(step) {
 
 function getGarmentInput() {
     return {
-        chestWidth: parseFloat(document.getElementById('g-chestWidth').value) || 52,
-        shoulderWidth: parseFloat(document.getElementById('g-shoulderWidth').value) || 44,
-        bodyLength: parseFloat(document.getElementById('g-bodyLength').value) || 68,
+        chestWidth: parseFloat(document.getElementById('g-chestWidth').value) || 58,
+        shoulderWidth: parseFloat(document.getElementById('g-shoulderWidth').value) || 24,
+        bodyLength: parseFloat(document.getElementById('g-bodyLength').value) || 72,
         sleeveLength: parseFloat(document.getElementById('g-sleeveLength').value) || 22,
         neckWidth: parseFloat(document.getElementById('g-neckWidth').value) || 18,
-        armholeDepth: parseFloat(document.getElementById('g-armholeDepth').value) || 20,
+        armholeDepth: parseFloat(document.getElementById('g-armholeDepth').value) || 26,
         cuffWidth: parseFloat(document.getElementById('g-cuffWidth').value) || 16,
         hemCurve: parseFloat(document.getElementById('g-hemCurve').value) || 0,
-        shoulderSlope: parseFloat(document.getElementById('g-shoulderSlope').value) || 18,
+        shoulderSlope: parseFloat(document.getElementById('g-shoulderSlope').value) || 3,
+    };
+}
+
+function getFrontPatternParams() {
+    return {
+        chestWidth: parseFloat(document.getElementById('g-chestWidth').value) || 58,
+        bodyLength: parseFloat(document.getElementById('g-bodyLength').value) || 72,
+        neckWidth: parseFloat(document.getElementById('g-neckWidth').value) || 18,
+        armholeDepth: parseFloat(document.getElementById('g-armholeDepth').value) || 26,
+        hemWidth: parseFloat(document.getElementById('g-hemWidth')?.value) || null,
+        frontNeckDepth: parseFloat(document.getElementById('g-frontNeckDepth')?.value) || null,
+        shoulderWidth: parseFloat(document.getElementById('g-shoulderWidth').value) || 24,
+        shoulderSlope: parseFloat(document.getElementById('g-shoulderSlope').value) || 3
     };
 }
 
@@ -94,14 +107,22 @@ async function calculateNesting() {
     showLoading();
 
     try {
+        const frontOnly = document.getElementById('front-only-mode')?.checked || false;
+        const requestBody = {
+            category: currentCategory,
+            garmentInput: getGarmentInput(),
+            fabricParams: getFabricParams(),
+        };
+
+        if (frontOnly) {
+            requestBody.frontOnly = true;
+            requestBody.frontParams = getFrontPatternParams();
+        }
+
         const response = await fetch('/api/cad-nesting', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                category: currentCategory,
-                garmentInput: getGarmentInput(),
-                fabricParams: getFabricParams(),
-            }),
+            body: JSON.stringify(requestBody),
         });
 
         const data = await response.json();

@@ -7,3 +7,4 @@ export {
   type FrontPanelParams,
   type SleeveParams,
 } from './GarmentMeasurementAdapter.js';
+export { FrontPatternGenerator, type FrontPatternParams } from './FrontPatternGenerator.js';

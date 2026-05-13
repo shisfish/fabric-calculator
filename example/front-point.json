@@ -1,0 +1,20 @@
+{
+  "points": {
+
+    "neckLeft": [120, 120],
+
+    "neckCenter": [170, 95],
+
+    "shoulderEnd": [240, 140],
+
+    "armholeTop": [275, 185],
+
+    "armholeBottom": [290, 300],
+
+    "sideBottom": [290, 680],
+
+    "hemCenter": [180, 700],
+
+    "leftBottom": [120, 680]
+  }
+}
