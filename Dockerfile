@@ -48,7 +48,7 @@ RUN pip install \
 
 COPY . .
 
-COPY --from=frontend-builder /frontend/static/js/cad/dist ./static/js/cad/dist
+COPY --from=frontend-builder /frontend/static/js/cad/bundle.js ./static/js/cad/bundle.js
 
 RUN mkdir -p /opt/fabric-data/uploads && \
     useradd -m -r appuser && \
