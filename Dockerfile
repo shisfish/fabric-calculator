@@ -1,61 +1,130 @@
-# 面料用量快速计算系统 - Dockerfile
-FROM python:3.13-slim
+# =========================================================
+# Stage 1: Frontend Builder
+# =========================================================
+FROM node:20-slim AS frontend-builder
 
-LABEL maintainer="fabric-calculator"
-LABEL description="面料用量快速计算系统 - Fabric Consumption Quick Calculator"
+WORKDIR /frontend
 
-# 设置时区为上海
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# 使用腾讯云内网镜像源加速
-RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources
-
-# 安装系统依赖（opencv-python-headless 只需要 libglib2.0-0）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# 安装 Node.js 20 LTS（CAD排料模块需要执行TypeScript）
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && node --version \
-    && npm --version \
-    && rm -rf /var/lib/apt/lists/*
-
-# 设置工作目录
-WORKDIR /app
-
-# 先复制依赖文件，利用Docker缓存层加速构建
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-# 安装 Node.js 依赖（CAD 排料模块需要 TypeScript 运行时 + React 前端组件）
+# 复制 package 文件（最大化利用缓存）
 COPY package.json package-lock.json ./
-RUN npm install
 
-# 复制前端构建脚本和源文件（必须在构建之前）
+# 使用 npm ci 保证依赖稳定
+RUN npm ci
+
+# 复制前端源码
 COPY build-frontend.js ./
 COPY static/js/cad/ ./static/js/cad/
 
-# 构建 React 前端组件
+# 构建前端
 RUN npm run build:frontend
 
-# 复制剩余项目文件
+
+# =========================================================
+# Stage 2: Python Runtime
+# =========================================================
+FROM python:3.11-slim
+
+LABEL maintainer="fabric-calculator"
+LABEL description="Fabric Consumption Quick Calculator"
+
+# =========================================================
+# 环境变量
+# =========================================================
+ENV TZ=Asia/Shanghai \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# =========================================================
+# 设置工作目录
+# =========================================================
+WORKDIR /app
+
+# =========================================================
+# 更换 Debian 镜像源（腾讯云）
+# =========================================================
+RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources
+
+# =========================================================
+# 安装系统依赖
+# =========================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libgl1 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# =========================================================
+# 先复制 requirements（利用 Docker 缓存）
+# =========================================================
+COPY requirements.txt .
+
+# =========================================================
+# 安装 Python 依赖
+# =========================================================
+RUN pip install \
+    -r requirements.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# =========================================================
+# 安装 Gunicorn
+# =========================================================
+RUN pip install gunicorn \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# =========================================================
+# 复制项目文件
+# =========================================================
 COPY . .
 
-# 创建数据目录（持久化数据通过Docker卷挂载到外部路径）
+# =========================================================
+# 从前端构建阶段复制静态资源
+# =========================================================
+COPY --from=frontend-builder /frontend/static/js/cad/dist ./static/js/cad/dist
+
+# =========================================================
+# 创建上传目录
+# =========================================================
 RUN mkdir -p /opt/fabric-data/uploads
 
+# =========================================================
+# 创建非 root 用户
+# =========================================================
+RUN useradd -m appuser
+
+# 目录权限
+RUN chown -R appuser:appuser /app /opt/fabric-data
+
+# 切换用户
+USER appuser
+
+# =========================================================
 # 暴露端口
+# =========================================================
 EXPOSE 5000
 
+# =========================================================
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/')" || exit 1
+# 必须确保 Flask 存在 /health 接口
+# =========================================================
+HEALTHCHECK --interval=30s \
+            --timeout=10s \
+            --start-period=10s \
+            --retries=3 \
+CMD curl -f http://localhost:5000/health || exit 1
 
-# 使用 gunicorn 作为生产服务器
-RUN pip install --no-cache-dir gunicorn -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "120", "--limit-request-line", "8190", "app:app"]
+# =========================================================
+# Gunicorn 启动参数
+# =========================================================
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:5000", \
+     "--workers", "3", \
+     "--threads", "2", \
+     "--timeout", "120", \
+     "--keep-alive", "5", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "app:app"]

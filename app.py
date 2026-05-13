@@ -462,9 +462,15 @@ def calculate_curved():
 # 健康检查 API
 # ============================================================
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Docker 健康检查"""
+    return {"status": "ok"}
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """健康检查"""
+    """健康检查（含数据库状态）"""
     db_health = db_manager.check_health()
     return jsonify({
         "success": True,
