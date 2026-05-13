@@ -248,13 +248,12 @@ function renderPiecePreviews(result) {
         const canvasId = `piece-canvas-${index}`;
 
         return `
-            <div class="card" style="padding:12px;text-align:center;">
-                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${piece.name}</div>
-                <div style="background:#f8f9fa;border-radius:6px;padding:8px;min-height:150px;display:flex;align-items:center;justify-content:center;">
-                    <canvas id="${canvasId}" width="180" height="180" style="max-width:100%;height:auto;"></canvas>
+            <div class="card" style="padding:16px;text-align:center;">
+                <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">${piece.name}${piece.cutCount > 1 ? ' ×' + piece.cutCount : ''}</div>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:380px;display:flex;align-items:center;justify-content:center;">
+                    <canvas id="${canvasId}" width="320" height="400" style="max-width:100%;height:auto;"></canvas>
                 </div>
-                <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
-                    ${pathOps.length} 个路径操作
+                <div id="${canvasId}-info" style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.5;">
                 </div>
             </div>
         `;
@@ -268,7 +267,7 @@ function renderPiecePreviews(result) {
             const canvas = document.getElementById(`piece-canvas-${index}`);
             if (!canvas) return;
 
-            convertSVGToCanvas(canvas, pathOps, piece.name);
+            convertSVGToCanvas(canvas, pathOps, piece.name, piece);
         });
     }, 100);
 }
@@ -320,7 +319,7 @@ function generatePieceSVG(pathOps, pieceName) {
     </svg>`;
 }
 
-function convertSVGToCanvas(canvas, pathOps, pieceName) {
+function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -347,14 +346,18 @@ function convertSVGToCanvas(canvas, pathOps, pieceName) {
         }
     }
 
-    const padding = 15;
+    const padding = 40;
     const srcWidth = maxX - minX || 100;
     const srcHeight = maxY - minY || 100;
-    const scale = Math.min((canvas.width - padding * 2) / srcWidth, (canvas.height - padding * 2) / srcHeight);
+    const scale = Math.min((canvas.width - padding * 2) / srcWidth, (canvas.height - padding * 2 - 60) / srcHeight);
     const offsetX = (canvas.width - srcWidth * scale) / 2 - minX * scale;
-    const offsetY = (canvas.height - srcHeight * scale) / 2 - minY * scale;
+    const offsetY = (canvas.height - srcHeight * scale) / 2 - minY * scale + 20;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
@@ -367,19 +370,25 @@ function convertSVGToCanvas(canvas, pathOps, pieceName) {
 
     ctx.beginPath();
 
+    const keyPoints = [];
+
     for (const op of pathOps) {
         switch (op.type) {
             case 'move':
                 ctx.moveTo(op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'start' });
                 break;
             case 'line':
                 ctx.lineTo(op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'vertex' });
                 break;
             case 'quad':
                 ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'curve-end' });
                 break;
             case 'curve':
                 ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'curve-end' });
                 break;
             case 'close':
                 ctx.closePath();
@@ -389,7 +398,91 @@ function convertSVGToCanvas(canvas, pathOps, pieceName) {
 
     ctx.fill();
     ctx.stroke();
+
+    ctx.fillStyle = '#dc2626';
+    keyPoints.forEach((pt, i) => {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 1.5 / scale, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
     ctx.restore();
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 0.8 / scale;
+    ctx.setLineDash([2 / scale, 2 / scale]);
+
+    drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
+    drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
+
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    ctx.fillStyle = '#374151';
+    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+
+    const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 10);
+
+    if (pieceData && pieceData.bbox) {
+        const area = pieceData.area || 0;
+        const infoDiv = document.getElementById(`${canvas.id}-info`);
+        if (infoDiv) {
+            infoDiv.innerHTML = `
+                <div><strong>宽度:</strong> ${srcWidth.toFixed(1)} cm</div>
+                <div><strong>高度:</strong> ${srcHeight.toFixed(1)} cm</div>
+                <div><strong>面积:</strong> ${area.toFixed(1)} cm²</div>
+                ${pieceData.onFold ? '<div style="color:#059669;">● 对折裁片</div>' : ''}
+            `;
+        }
+    }
+}
+
+function drawDimensionLine(ctx, x1, y1, x2, y2, text, position) {
+    const offset = 8;
+    const tickSize = 3;
+
+    let ox1, oy1, ox2, oy2, tx, ty;
+
+    if (position === 'bottom') {
+        ox1 = x1; oy1 = y1 + offset;
+        ox2 = x2; oy2 = y2 + offset;
+        tx = (x1 + x2) / 2; ty = y1 + offset + 4;
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1); ctx.lineTo(ox1, oy1);
+        ctx.moveTo(x2, y2); ctx.lineTo(ox2, oy2);
+        ctx.moveTo(ox1, oy1); ctx.lineTo(ox2, oy2);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.scale(1, -1);
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+    } else if (position === 'left') {
+        ox1 = x1 - offset; oy1 = y1;
+        ox2 = x2 - offset; oy2 = y2;
+        tx = x1 - offset - 4; ty = (y1 + y2) / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1); ctx.lineTo(ox1, oy1);
+        ctx.moveTo(x2, y2); ctx.lineTo(ox2, oy2);
+        ctx.moveTo(ox1, oy1); ctx.lineTo(ox2, oy2);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(-Math.PI / 2);
+        ctx.scale(1, -1);
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+    }
 }
 
 function renderNestingWithReact(result, fabricWidth) {
