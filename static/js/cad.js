@@ -206,6 +206,7 @@ function renderResult(result) {
         </div>
     `).join('');
 
+    renderPiecePreviews(result);
     renderNestingWithReact(result, params.fabric_width);
 
     const piecesTbody = document.getElementById('result-pieces-tbody');
@@ -220,6 +221,175 @@ function renderResult(result) {
             <td>${p.on_fold ? '是' : '否'}</td>
         </tr>
     `).join('');
+}
+
+function renderPiecePreviews(result) {
+    const container = document.getElementById('piece-previews-container');
+    if (!container) return;
+
+    const pieces = result.pieces || [];
+    if (pieces.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无裁片数据</p>';
+        return;
+    }
+
+    container.innerHTML = pieces.map((piece, index) => {
+        const pathOps = piece.pathOps || [];
+        if (pathOps.length === 0) {
+            return `
+                <div class="card" style="padding:12px;text-align:center;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${piece.name}</div>
+                    <div style="color:var(--text-secondary);font-size:12px;">缺少路径数据</div>
+                </div>
+            `;
+        }
+
+        const svgContent = generatePieceSVG(pathOps, piece.name);
+        const canvasId = `piece-canvas-${index}`;
+
+        return `
+            <div class="card" style="padding:12px;text-align:center;">
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${piece.name}</div>
+                <div style="background:#f8f9fa;border-radius:6px;padding:8px;min-height:150px;display:flex;align-items:center;justify-content:center;">
+                    <canvas id="${canvasId}" width="180" height="180" style="max-width:100%;height:auto;"></canvas>
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">
+                    ${pathOps.length} 个路径操作
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    setTimeout(() => {
+        pieces.forEach((piece, index) => {
+            const pathOps = piece.pathOps || [];
+            if (pathOps.length === 0) return;
+
+            const canvas = document.getElementById(`piece-canvas-${index}`);
+            if (!canvas) return;
+
+            convertSVGToCanvas(canvas, pathOps, piece.name);
+        });
+    }, 100);
+}
+
+function generatePieceSVG(pathOps, pieceName) {
+    let d = '';
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const op of pathOps) {
+        switch (op.type) {
+            case 'move':
+                d += `M ${op.to.x} ${op.to.y} `;
+                updateBounds(op.to.x, op.to.y);
+                break;
+            case 'line':
+                d += `L ${op.to.x} ${op.to.y} `;
+                updateBounds(op.to.x, op.to.y);
+                break;
+            case 'quad':
+                d += `Q ${op.cp1.x} ${op.cp1.y} ${op.to.x} ${op.to.y} `;
+                updateBounds(op.cp1.x, op.cp1.y);
+                updateBounds(op.to.x, op.to.y);
+                break;
+            case 'curve':
+                d += `C ${op.cp1.x} ${op.cp1.y} ${op.cp2.x} ${op.cp2.y} ${op.to.x} ${op.to.y} `;
+                updateBounds(op.cp1.x, op.cp1.y);
+                updateBounds(op.cp2.x, op.cp2.y);
+                updateBounds(op.to.x, op.to.y);
+                break;
+            case 'close':
+                d += 'Z ';
+                break;
+        }
+    }
+
+    function updateBounds(x, y) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+    }
+
+    const padding = 10;
+    const width = maxX - minX + padding * 2;
+    const height = maxY - minY + padding * 2;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX - padding} ${minY - padding} ${width} ${height}" width="${width}" height="${height}">
+        <path d="${d.trim()}" fill="#e3f2fd" stroke="#1976d2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`;
+}
+
+function convertSVGToCanvas(canvas, pathOps, pieceName) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    for (const op of pathOps) {
+        if (op.to) {
+            minX = Math.min(minX, op.to.x);
+            minY = Math.min(minY, op.to.y);
+            maxX = Math.max(maxX, op.to.x);
+            maxY = Math.max(maxY, op.to.y);
+        }
+        if (op.cp1) {
+            minX = Math.min(minX, op.cp1.x);
+            minY = Math.min(minY, op.cp1.y);
+            maxX = Math.max(maxX, op.cp1.x);
+            maxY = Math.max(maxY, op.cp1.y);
+        }
+        if (op.cp2) {
+            minX = Math.min(minX, op.cp2.x);
+            minY = Math.min(minY, op.cp2.y);
+            maxX = Math.max(maxX, op.cp2.x);
+            maxY = Math.max(maxY, op.cp2.y);
+        }
+    }
+
+    const padding = 15;
+    const srcWidth = maxX - minX || 100;
+    const srcHeight = maxY - minY || 100;
+    const scale = Math.min((canvas.width - padding * 2) / srcWidth, (canvas.height - padding * 2) / srcHeight);
+    const offsetX = (canvas.width - srcWidth * scale) / 2 - minX * scale;
+    const offsetY = (canvas.height - srcHeight * scale) / 2 - minY * scale;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = '#e3f2fd';
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 1.5 / scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+
+    for (const op of pathOps) {
+        switch (op.type) {
+            case 'move':
+                ctx.moveTo(op.to.x, op.to.y);
+                break;
+            case 'line':
+                ctx.lineTo(op.to.x, op.to.y);
+                break;
+            case 'quad':
+                ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                break;
+            case 'curve':
+                ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                break;
+            case 'close':
+                ctx.closePath();
+                break;
+        }
+    }
+
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
 }
 
 function renderNestingWithReact(result, fabricWidth) {
