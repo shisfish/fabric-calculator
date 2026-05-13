@@ -151,12 +151,12 @@ export class TshirtPatternGenerator {
     points.hemCp = new Point(W * 0.48, L + 1);
 
     // 4. 袖窿核心计算 (抛弃三段式，改为极简平滑的两段式)
-    const armholeW = W - shoulderW;
+    const armholeW = W - shoulderX;
     const armholeH = armholeD - shoulderDrop;
 
     // Pitch 点：定位在袖窿上 1/3 处
     points.armholePitch = new Point(
-      shoulderW + armholeW * 0.15,
+      shoulderX + armholeW * 0.15,
       shoulderDrop + armholeH * 0.35
     );
 
