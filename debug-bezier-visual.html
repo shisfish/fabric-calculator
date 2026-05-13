@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bezier曲线调试 - 前片</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .svg-container {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .info-panel {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 15px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+        }
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        pre {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Bezier曲线渲染诊断</h1>
+        
+        <div class="info-panel">
+            <strong>诊断目标：</strong> 确认三次Bezier(C)和二次Bezier(Q)是否真正渲染为曲线
+        </div>
+
+        <h2>1️⃣ 完整可视化（含控制点和辅助线）</h2>
+        <div class="svg-container" id="svg-debug"></div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background:#e74c3c;"></div> 起点(MOVE)</div>
+            <div class="legend-item"><div class="dot" style="background:#3498db;"></div> 直线(LINE)</div>
+            <div class="legend-item"><div class="dot" style="background:#9b59b6;"></div> 二次Bezier(QUAD)</div>
+            <div class="legend-item"><div class="dot" style="background:#27ae60;"></div> 三次Bezier(CURVE)</div>
+            <div class="legend-item"><div class="dot" style="background:#f39c12;"></div> Q控制点</div>
+            <div class="legend-item"><div class="dot" style="background:#e74c3c;"></div> C控制点1</div>
+            <div class="legend-item"><div class="dot" style="background:#c0392b;"></div> C控制点2</div>
+        </div>
+
+        <h2>2️⃣ 纯裁片轮廓（无辅助线）</h2>
+        <div class="svg-container" id="svg-clean"></div>
+
+        <h2>3️⃣ Path操作详情</h2>
+        <pre id="ops-detail"></pre>
+
+        <h2>4️⃣ SVG d属性</h2>
+        <pre id="d-attribute"></pre>
+    </div>
+
+    <script>
+        // 模拟Tshirt.ts生成的前片数据
+        const frontPanelData = {
+            ops: [
+                { type: 'move', to: { x: 0, y: 0 } },
+                { type: 'quad', cp1: { x: 3.78, y: 0 }, to: { x: 9, y: 5.1 } },
+                { type: 'line', to: { x: 12.5, y: 8.207216411918145 } },
+                { type: 'curve', cp1: { x: 14.166, y: 8.242350442487968 }, cp2: { x: 27.553, y: 21.25 }, to: { x: 29.5, y: 25 } },
+                { type: 'line', to: { x: 29.5, y: 71 } },
+                { type: 'line', to: { x: 0, y: 71 } },
+                { type: 'close' }
+            ]
+        };
+
+        // 生成带调试信息的SVG
+        function generateDebugSVG() {
+            let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 50 90" width="100%" height="600">
+  <defs>
+    <pattern id="grid" width="5" height="5" patternUnits="userSpaceOnUse">
+      <path d="M 5 0 L 0 0 0 5" fill="none" stroke="#eee" stroke-width="0.3"/>
+    </pattern>
+  </defs>
+  
+  <!-- 背景 -->
+  <rect x="-10" y="-10" width="50" height="90" fill="url(#grid)" />
+  
+  <!-- 前中折线 -->
+  <line x1="0" y1="-5" x2="0" y2="80" stroke="#999" stroke-dasharray="2 2" stroke-width="0.5"/>
+`;
+
+            let currentPoint = null;
+
+            for (let i = 0; i < frontPanelData.ops.length; i++) {
+                const op = frontPanelData.ops[i];
+                
+                switch (op.type) {
+                    case 'move':
+                        if (op.to) {
+                            currentPoint = op.to;
+                            svg += `
+  <!-- [${i}] MOVE -->
+  <circle cx="${op.to.x}" cy="${op.to.y}" r="1.5" fill="#e74c3c" />
+  <text x="${op.to.x - 3}" y="${op.to.y - 3}" font-size="3" fill="#e74c3c">M${i}</text>
+`;
+                        }
+                        break;
+                        
+                    case 'line':
+                        if (op.to && currentPoint) {
+                            svg += `
+  <!-- [${i}] LINE -->
+  <line x1="${currentPoint.x}" y1="${currentPoint.y}" x2="${op.to.x}" y2="${op.to.y}" 
+        stroke="#3498db" stroke-width="0.8" />
+  <circle cx="${op.to.x}" cy="${op.to.y}" r="1.2" fill="#3498db" />
+`;
+                            currentPoint = op.to;
+                        }
+                        break;
+                        
+                    case 'quad':
+                        if (op.cp1 && op.to && currentPoint) {
+                            svg += `
+  <!-- [${i}] QUAD BEZIER -->
+  <line x1="${currentPoint.x}" y1="${currentPoint.y}" x2="${op.cp1.x}" y2="${op.cp1.y}" 
+        stroke="#f39c12" stroke-width="0.3" stroke-dasharray="1 1" opacity="0.7"/>
+  <line x1="${op.cp1.x}" y1="${op.cp1.y}" x2="${op.to.x}" y2="${op.to.y}" 
+        stroke="#f39c12" stroke-width="0.3" stroke-dasharray="1 1" opacity="0.7"/>
+  <circle cx="${op.cp1.x}" cy="${op.cp1.y}" r="1.5" fill="#f39c12" />
+  <text x="${op.cp1.x + 2}" y="${op.cp1.y - 1}" font-size="2.5" fill="#f39c12">Q-CP</text>
+  <path d="M ${currentPoint.x} ${currentPoint.y} Q ${op.cp1.x} ${op.cp1.y} ${op.to.x} ${op.to.y}" 
+        fill="none" stroke="#9b59b6" stroke-width="1.2" />
+  <circle cx="${op.to.x}" cy="${op.to.y}" r="1.2" fill="#9b59b6" />
+`;
+                            currentPoint = op.to;
+                        }
+                        break;
+                        
+                    case 'curve':
+                        if (op.cp1 && op.cp2 && op.to && currentPoint) {
+                            svg += `
+  <!-- [${i}] CUBIC BEZIER *** 袖窿 *** -->
+  <line x1="${currentPoint.x}" y1="${currentPoint.y}" x2="${op.cp1.x}" y2="${op.cp1.y}" 
+        stroke="#e74c3c" stroke-width="0.4" stroke-dasharray="1 1" opacity="0.8"/>
+  <line x1="${op.cp1.x}" y1="${op.cp1.y}" x2="${op.cp2.x}" y2="${op.cp2.y}" 
+        stroke="#c0392b" stroke-width="0.4" stroke-dasharray="1 1" opacity="0.8"/>
+  <line x1="${op.cp2.x}" y1="${op.cp2.y}" x2="${op.to.x}" y2="${op.to.y}" 
+        stroke="#e74c3c" stroke-width="0.4" stroke-dasharray="1 1" opacity="0.8"/>
+  <circle cx="${op.cp1.x}" cy="${op.cp1.y}" r="2" fill="#e74c3c" />
+  <text x="${op.cp1.x + 2}" y="${op.cp1.y - 1}" font-size="2.5" fill="#e74c3c">CP1</text>
+  <circle cx="${op.cp2.x}" cy="${op.cp2.y}" r="2" fill="#c0392b" />
+  <text x="${op.cp2.x + 2}" y="${op.cp2.y - 1}" font-size="2.5" fill="#c0392b">CP2</text>
+  <path d="M ${currentPoint.x} ${currentPoint.y} C ${op.cp1.x} ${op.cp1.y}, ${op.cp2.x} ${op.cp2.y}, ${op.to.x} ${op.to.y}" 
+        fill="none" stroke="#27ae60" stroke-width="2" />
+  <circle cx="${op.to.x}" cy="${op.to.y}" r="1.5" fill="#27ae60" />
+  <text x="${op.to.x + 2}" y="${op.to.y + 3}" font-size="2.5" fill="#27ae60">腋下</text>
+`;
+                            currentPoint = op.to;
+                        }
+                        break;
+                        
+                    case 'close':
+                        svg += `
+  <!-- [${i}] CLOSE -->
+  <line x1="${currentPoint?.x || 0}" y1="${currentPoint?.y || 0}" 
+        x2="${frontPanelData.ops[0]?.to?.x || 0}" y2="${frontPanelData.ops[0]?.to?.y || 0}" 
+        stroke="#3498db" stroke-width="0.8" />
+`;
+                        break;
+                }
+            }
+
+            svg += `
+</svg>`;
+            
+            return svg;
+        }
+
+        // 生成纯净的裁片SVG
+        function generateCleanSVG() {
+            let d = '';
+            for (const op of frontPanelData.ops) {
+                switch (op.type) {
+                    case 'move':
+                        d += `M ${op.to.x} ${op.to.y} `;
+                        break;
+                    case 'line':
+                        d += `L ${op.to.x} ${op.to.y} `;
+                        break;
+                    case 'quad':
+                        d += `Q ${op.cp1.x} ${op.cp1.y} ${op.to.x} ${op.to.y} `;
+                        break;
+                    case 'curve':
+                        d += `C ${op.cp1.x} ${op.cp1.y}, ${op.cp2.x} ${op.cp2.y}, ${op.to.x} ${op.to.y} `;
+                        break;
+                    case 'close':
+                        d += 'Z';
+                        break;
+                }
+            }
+
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 -5 40 80" width="100%" height="500">
+  <rect width="100%" height="100%" fill="#f8f9fa"/>
+  
+  <!-- 裁片填充 -->
+  <path d="${d.trim()}" 
+        fill="rgba(0,120,255,0.08)" 
+        stroke="#0066cc" 
+        stroke-width="0.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+        
+  <!-- 标注关键点 -->
+  <circle cx="0" cy="0" r="1.5" fill="#e74c3c"/>
+  <text x="-5" y="-3" font-size="4" fill="#e74c3c">前中领</text>
+  
+  <circle cx="29.5" cy="25" r="1.5" fill="#27ae60"/>
+  <text x="31" y="28" font-size="4" fill="#27ae60">腋下</text>
+  
+  <circle cx="12.5" cy="8.2" r="1.5" fill="#3498db"/>
+  <text x="14" y="8" font-size="4" fill="#3498db">肩点</text>
+</svg>`;
+        }
+
+        // 显示详细信息
+        function showDetails() {
+            let opsText = 'Path操作数组:\n\n';
+            let hasCurve = false;
+            let hasQuad = false;
+            
+            frontPanelData.ops.forEach((op, i) => {
+                opsText += `[${i}] type: "${op.type}"\n`;
+                
+                switch (op.type) {
+                    case 'move':
+                        opsText += `    → to: (${op.to.x.toFixed(4)}, ${op.to.y.toFixed(4)})\n`;
+                        break;
+                    case 'line':
+                        opsText += `    → to: (${op.to.x.toFixed(4)}, ${op.to.y.toFixed(4)})\n`;
+                        break;
+                    case 'quad':
+                        hasQuad = true;
+                        opsText += `    → cp1: (${op.cp1.x.toFixed(4)}, ${op.cp1.y.toFixed(4)})\n`;
+                        opsText += `    → to:  (${op.to.x.toFixed(4)}, ${op.to.y.toFixed(4)})\n`;
+                        opsText += `    ⚠️ 这是二次Bezier曲线(Q)，应该显示弧形！\n`;
+                        break;
+                    case 'curve':
+                        hasCurve = true;
+                        opsText += `    → cp1: (${op.cp1.x.toFixed(4)}, ${op.cp1.y.toFixed(4)})\n`;
+                        opsText += `    → cp2: (${op.cp2.x.toFixed(4)}, ${op.cp2.y.toFixed(4)})\n`;
+                        opsText += `    → to:  (${op.to.x.toFixed(4)}, ${op.to.y.toFixed(4)})\n`;
+                        opsText += `    🎯 这是三次Bezier曲线(C)，这是袖窿！\n`;
+                        break;
+                    case 'close':
+                        opsText += `    → (闭合路径)\n`;
+                        break;
+                }
+                opsText += '\n';
+            });
+            
+            opsText += `\n统计:\n`;
+            opsText += `- 包含三次Bezier(C): ${hasCurve ? '✅ YES' : '❌ NO'}\n`;
+            opsText += `- 包含二次Bezier(Q): ${hasQuad ? '✅ YES' : '❌ NO'}\n`;
+            opsText += `- 如果看到直线而不是曲线，说明浏览器或渲染有问题！\n`;
+
+            document.getElementById('ops-detail').textContent = opsText;
+
+            // 显示d属性
+            let d = '';
+            for (const op of frontPanelData.ops) {
+                switch (op.type) {
+                    case 'move': d += `M ${op.to.x},${op.to.y} `; break;
+                    case 'line': d += `L ${op.to.x},${op.to.y} `; break;
+                    case 'quad': d += `Q ${op.cp1.x},${op.cp1.y} ${op.to.x},${op.to.y} `; break;
+                    case 'curve': d += `C ${op.cp1.x},${op.cp1.y} ${op.cp2.x},${op.cp2.y} ${op.to.x},${op.to.y} `; break;
+                    case 'close': d += 'Z '; break;
+                }
+            }
+            
+            document.getElementById('d-attribute').textContent = `SVG path d属性:\n\n${d.trim()}\n\n检查要点:\n- 是否包含 "C " (三次Bezier)? ${d.includes('C ') ? '✅ YES' : '❌ NO'}\n- 是否包含 "Q " (二次Bezier)? ${d.includes('Q ') ? '✅ YES' : '❌ NO'}\n- 如果都有，但图形还是直线，请刷新页面或清除缓存！`;
+        }
+
+        // 初始化
+        document.getElementById('svg-debug').innerHTML = generateDebugSVG();
+        document.getElementById('svg-clean').innerHTML = generateCleanSVG();
+        showDetails();
+
+        console.log('%c🔍 Bezier调试信息:', 'font-size:16px; font-weight:bold; color:#007bff;');
+        console.log('Path操作数组:', frontPanelData.ops);
+        console.log('如果上方SVG显示的是曲线而不是直线，说明Bezier生效了！');
+        console.log('如果还是直线，请截图给我看！');
+    </script>
+</body>
+</html>
