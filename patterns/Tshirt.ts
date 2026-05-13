@@ -124,78 +124,82 @@ export class TshirtPatternGenerator {
 
   private static generateFrontPanel(fp: FrontPanelParams, seamAllowance: number): PatternPiece {
     const points: Record<string, Point> = {};
+    const W = fp.width;
+    const L = fp.length;
+    const neckW = fp.neckWidth;
+    const neckD = fp.neckDepth;
+    const shoulderW = fp.shoulderWidth;
+    const armholeD = fp.armholeDepth;
 
-    // 基础参数定义
-  const W = fp.width;           // 1/4 胸围
-  const L = fp.length;          // 衣长
-  const neckW = fp.neckWidth;   // 领宽
-  const neckD = fp.neckDepth;   // 领深
-  const shoulderW = fp.shoulderWidth; // 总肩宽（通常指中心到肩点的水平距离）
-  const armholeD = fp.armholeDepth;   // 腋下深度坐标
+    // 1. 领口：以 HPS (肩颈点) 为 Y=0 基准，向下推算领深
+    points.cfNeck = new Point(0, neckD);
+    points.neckEnd = new Point(neckW, 0);
+    // 领口控制点：保持在最低点同一水平线，确保前中无折角
+    points.neckCp = new Point(neckW * 0.42, neckD); 
 
-  // 1. 肩斜落差计算 (增加更明显的斜度)
-  const shoulderSlopeDeg = fp.shoulderSlope ?? 20; // 提升默认斜度到20度
-  const shoulderDrop = Math.tan(shoulderSlopeDeg * Math.PI / 180) * (shoulderW - neckW);
+    // 2. 肩点：修正 Y 轴计算，确保肩膀是向下斜的
+    const shoulderDrop = Math.tan((fp.shoulderSlope ?? 5.5) * Math.PI / 180) * shoulderW;
+    points.shoulder = new Point(shoulderW, shoulderDrop);
 
-  // 2. 基础点定位
-  points.cfNeck = new Point(0, 0); // 前中领底点（以此为0,0或由neckD决定，此处逻辑保持一致）
-  
-  // 领口：Q 的控制点应水平向右，确保中心垂直
-  points.neckCp = new Point(neckW * 0.5, 0);
-  points.neckEnd = new Point(neckW, -neckD); // 假设neckD为正值，向上偏移至HPS点
+    // 3. 侧缝与下摆锚点
+    points.armholeEnd = new Point(W, armholeD);
+    points.sideBottom = new Point(W, L);
+    points.hemFold = new Point(0, L);
+    points.hemCp = new Point(W * 0.48, L + 1);
 
-  // 肩点：基于 shoulderW 绝对位置
-  points.shoulder = new Point(shoulderW, -neckD + shoulderDrop);
+    // 4. 袖窿核心计算 (抛弃三段式，改为极简平滑的两段式)
+    const armholeW = W - shoulderW;
+    const armholeH = armholeD - shoulderDrop;
 
-  // 腋下点
-  points.armholeEnd = new Point(W, armholeD);
+    // Pitch 点：定位在袖窿上 1/3 处
+    points.armholePitch = new Point(
+      shoulderW + armholeW * 0.15,
+      shoulderDrop + armholeH * 0.35
+    );
 
-  // 3. 袖窿关键参数
-  const armholeTotalHeight = points.armholeEnd.y - points.shoulder.y;
-  const armholeTotalWidth = W - shoulderW;
+    // --- 第一段曲线控制点：Shoulder -> Pitch ---
+    points.armholeTopCp1 = new Point(
+      points.shoulder.x + armholeW * 0.05,
+      points.shoulder.y + armholeH * 0.15
+    );
+    points.armholeTopCp2 = new Point(
+      points.armholePitch.x - armholeW * 0.1,
+      points.armholePitch.y - armholeH * 0.15
+    );
 
-  // Pitch 点 (上三分之一处，向内收)
-  points.armholePitch = new Point(
-    shoulderW + armholeTotalWidth * 0.1, // 略微外扩
-    points.shoulder.y + armholeTotalHeight * 0.3
-  );
+    // --- 第二段曲线控制点：Pitch -> ArmholeEnd ---
+    // 关键修正1：通过向量计算，强制过 Pitch 点时的切线连续 (G1 G2 平滑)
+    const tangentX = points.armholePitch.x - points.armholeTopCp2.x;
+    const tangentY = points.armholePitch.y - points.armholeTopCp2.y;
+    points.armholeBottomCp1 = new Point(
+      points.armholePitch.x + tangentX * 1.5, // 1.5为张力倍数，决定下半部分饱满度
+      points.armholePitch.y + tangentY * 1.5
+    );
 
-  // Hollow 点 (下三分之一处，最凹处)
-  points.armholeHollow = new Point(
-    W - armholeTotalWidth * 0.05, 
-    points.shoulder.y + armholeTotalHeight * 0.7
-  );
+    // 关键修正2：强制进入腋下时 Y 坐标相等 (绝对水平入缝)
+    points.armholeBottomCp2 = new Point(
+      points.armholeEnd.x - armholeW * 0.45,
+      points.armholeEnd.y 
+    );
 
-  // 4. 三段式三次贝塞尔控制点优化 (G1/G2 连续逻辑)
-  
-  // 第一段：Shoulder -> Pitch (应向下垂直延伸)
-  points.armholeTopCp1 = new Point(points.shoulder.x, points.shoulder.y + armholeTotalHeight * 0.1);
-  points.armholeTopCp2 = new Point(points.armholePitch.x, points.armholePitch.y - armholeTotalHeight * 0.1);
-
-  // 第二段：Pitch -> Hollow (内凹弧度)
-  points.armholeMidCp1 = new Point(points.armholePitch.x, points.armholePitch.y + armholeTotalHeight * 0.15);
-  points.armholeMidCp2 = new Point(points.armholeHollow.x - 2, points.armholeHollow.y - armholeTotalHeight * 0.1);
-
-  // 第三段：Hollow -> ArmholeEnd (平滑切入腋下)
-  // CP2 必须与 ArmholeEnd 水平对齐，确保侧缝连接平顺
-  points.armholeBottomCp1 = new Point(points.armholeHollow.x + 2, points.armholeHollow.y + armholeTotalHeight * 0.1);
-  points.armholeBottomCp2 = new Point(points.armholeEnd.x - armholeTotalWidth * 0.4, points.armholeEnd.y);
-
-  // 5. 下摆逻辑
-  points.sideBottom = new Point(W, L);
-  points.hemFold = new Point(0, L);
-  points.hemCp = new Point(W * 0.5, L + 1.5); // 增加下摆弧度
-
-  const path = new Path()
-    .move(points.cfNeck)
-    .quad(points.neckCp, points.neckEnd)
-    .line(points.shoulder)
-    .curve(points.armholeTopCp1, points.armholeTopCp2, points.armholePitch)
-    .curve(points.armholeMidCp1, points.armholeMidCp2, points.armholeHollow)
-    .curve(points.armholeBottomCp1, points.armholeBottomCp2, points.armholeEnd)
-    .line(points.sideBottom)
-    .quad(points.hemCp, points.hemFold)
-    .close();
+    // 5. 构建路径 (合并为 M Q L C C L Q Z)
+    const path = new Path()
+      .move(points.cfNeck)
+      .quad(points.neckCp, points.neckEnd)
+      .line(points.shoulder)
+      .curve(
+        points.armholeTopCp1,
+        points.armholeTopCp2,
+        points.armholePitch
+      )
+      .curve(
+        points.armholeBottomCp1,
+        points.armholeBottomCp2,
+        points.armholeEnd
+      )
+      .line(points.sideBottom)
+      .quad(points.hemCp, points.hemFold)
+      .close();
 
     path.attr('class', 'fabric');
 

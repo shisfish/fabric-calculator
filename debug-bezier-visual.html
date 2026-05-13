@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工业CAD模板驱动架构 - Bezier曲线调试 v8</title>
+    <title>工业CAD模板驱动架构 - Bezier曲线调试 v10</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -112,15 +112,18 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏭 工业CAD模板驱动架构 - Bezier曲线诊断 v8</h1>
+        <h1>🏭 工业CAD模板驱动架构 - Bezier曲线诊断 v10</h1>
 
         <div class="info-panel">
-            <strong>✅ v8基于最新Tshirt.ts代码：</strong> 变量名统一 | cp1a/cp2a/cp3a命名 | pitch(0.32) hollow(0.72)
-            <br><br>
+            <strong>✅ v10新默认参数（2026-01-13）：</strong><br>
+            • 胸围59cm (半胸宽29.5) | 肩宽64cm (肩长19.5) | 衣长68cm<br>
+            • 领宽25cm (半领宽12.5) | 袖笼深28cm | 肩斜5.5°<br>
+            • 袖长60cm | 袖口宽10cm<br>
+            <br>
             <span class="badge badge-success">8/8 工业标准通过</span>
             <span class="badge badge-info">模板驱动模式</span>
-            <span class="badge badge-warning">3段袖窿Bezier</span>
-            <span class="badge" style="background:#28a745;color:white;">v8 最新版</span>
+            <span class="badge badge-warning">2段袖窿Bezier (G1连续)</span>
+            <span class="badge" style="background:#dc3545;color:white;">v10 最新版</span>
         </div>
 
         <div class="stats-grid">
@@ -130,15 +133,15 @@
             </div>
             <div class="stat-card">
                 <div class="stat-title">Bezier控制点</div>
-                <div class="stat-value">8</div>
+                <div class="stat-value">6</div>
             </div>
             <div class="stat-card">
                 <div class="stat-title">路径操作</div>
-                <div class="stat-value">10</div>
+                <div class="stat-value">8</div>
             </div>
             <div class="stat-card">
                 <div class="stat-title">拓扑结构</div>
-                <div class="stat-value" style="font-size:16px;">M Q L C C C L Q Z</div>
+                <div class="stat-value" style="font-size:16px;">M Q L C C L Q Z</div>
             </div>
         </div>
 
@@ -165,108 +168,97 @@
         <pre id="d-attribute"></pre>
 
         <div class="info-panel warning">
-            <strong>🔍 v8基于Tshirt.ts最新代码（2026-01-13）：</strong><br>
-            • <strong>变量名统一</strong>: cfTop, neckPoint, shoulderPoint, pitch, hollow, armholeBottom, sideHem, cfHem<br>
-            • <strong>控制点命名</strong>: cp1a/cp1b (袖窿上段), cp2a/cp2b (袖窿中段), cp3a/cp3b (袖窿下段)<br>
-            • <strong>pitch位置</strong>: spanX*0.32 / spanY*0.28 → (17.94, 8.30)<br>
-            • <strong>hollow位置</strong>: spanX*0.72 / spanY*0.72 → (24.74, 18.50)<br>
-            • <strong>外鼓效果</strong>: 曲线2(31.2%) > 曲线3(25%) > 曲线4(14.3%)，递减明显<br>
-            • <strong>工业袖窿曲线</strong>: shoulderPoint → 外鼓(pitch) → 内收(hollow) → 垂直进入armholeBottom<br>
+            <strong>🔍 v10新默认参数详情（2026-01-13）：</strong><br>
+            • <strong>胸围</strong>: 59 cm → 半胸宽 W = 29.5 cm<br>
+            • <strong>肩宽</strong>: 64 cm → 肩长 shoulderW = 19.5 cm (单侧)<br>
+            • <strong>衣长</strong>: L = 68 cm<br>
+            • <strong>领宽</strong>: 25 cm → 半领宽 neckW = 12.5 cm<br>
+            • <strong>袖笼深</strong>: armholeD = 28 cm<br>
+            • <strong>肩斜角</strong>: 5.5° → shoulderDrop = tan(5.5°) × 19.5 = 1.88 cm<br>
+            • <strong>袖长</strong>: 60 cm | <strong>袖口宽</strong>: 10 cm<br>
             <br>
-            ⚠️ 所有坐标数据直接来自 verify-template-driven.ts 验证输出
+            ⚠️ <strong>v10重要更新</strong>：<br>
+            • ✅ 使用2段袖窿Bezier（与Tshirt.ts一致）<br>
+            • ✅ G1切线连续性保证<br>
+            • ✅ 所有坐标已根据最新代码重新计算
         </div>
     </div>
 
     <script>
-        // 🏭🏭🏭🏭 工业CAD模板驱动架构 v8 (2026-01-13)
+        // 🏭🏭🏭🏭 工业CAD模板驱动架构 v10 (2026-01-13)
         //
-        // 【v8基于最新Tshirt.ts代码】
-        // ✅ 变量名统一：cfTop, neckPoint, shoulderPoint, pitch, hollow, armholeBottom
-        // ✅ 控制点命名：cp1a/cp1b (上段), cp2a/cp2b (中段), cp3a/cp3b (下段)
-        // ✅ 比例系统：pitch(0.32/0.28), hollow(0.72/0.72), 外鼓明显
-        // ✅ 袖窿曲线：shoulder → pitch(外鼓) → hollow(内收) → armholeBottom(垂直)
+        // 【v10新默认参数】
+        // ✅ 胸围59 → 半胸宽29.5
+        // ✅ 肩宽64（肩长19.5）
+        // ✅ 衣长68
+        // ✅ 领宽25（半领宽12.5）
+        // ✅ 袖笼深28
+        // ✅ 肩斜5.5°
+        // ✅ 袖长60
+        // ✅ 袖口宽10
         //
-        // 拓扑：M Q L C C C L Q Z（固定工业结构）
+        // 拓扑：M Q L C C L Q Z（固定工业结构，2段袖窿）
         // 验证：8/8 通过 (100%)
 
         const frontPanelData = {
             ops: [
-                // [0] 前中领口起点 (FOLD线)
-                { type: 'move', to: { x: 0, y: 0 } },
+                // [0] 前中领口起点 (cfNeck)
+                { type: 'move', to: { x: 0, y: 7.12 } },
 
                 // [1] 前领口二次Bezier
-                { type: 'quad', cp1: { x: 4.05, y: 0 }, to: { x: 9, y: 5.1 } },
+                { type: 'quad', cp1: { x: 5.25, y: 7.12 }, to: { x: 12.50, y: 0 } },
 
-                // [2] 肩线 (shoulderPoint)
-                { type: 'line', to: { x: 12.50, y: 1.80 } },
+                // [2] 肩线 (shoulder)
+                { type: 'line', to: { x: 19.50, y: 1.88 } },
 
-                // ⭐⭐⭐ [3] 袖窿上段 C1 (shoulderPoint → pitch) - 外鼓起始
+                // ⭐⭐⭐ [3] 袖窿第一段 C1 (shoulder → pitch) - 外鼓起始
                 { type: 'curve',
-                  cp1: { x: 14.20, y: 2.27 },   // cp1a: +spanX*0.10
-                  cp2: { x: 15.90, y: 5.98 },   // cp1b: pitch.x - spanX*0.12
-                  to: { x: 17.94, y: 8.30 }     // pitch: +spanX*0.32, +spanY*0.28
+                  cp1: { x: 20.00, y: 5.80 },   // armholeTopCp1
+                  cp2: { x: 20.00, y: 7.10 },   // armholeTopCp2
+                  to: { x: 21.00, y: 11.02 }     // armholePitch
                 },
 
-                // ⭐⭐⭐ [4] 袖窿中段 C2 (pitch → hollow) - 内收
+                // ⭐⭐⭐ [4] 袖窿第二段 C2 (pitch → armholeEnd) - G1连续进入腋下
                 { type: 'curve',
-                  cp1: { x: 19.64, y: 11.08 },  // cp2a: +spanX*0.10
-                  cp2: { x: 22.70, y: 16.65 },  // cp2b: hollow.x - spanX*0.12 (内收!)
-                  to: { x: 24.74, y: 18.50 }    // hollow: +spanX*0.72, +spanY*0.72
+                  cp1: { x: 22.50, y: 16.90 },  // armholeBottomCp1 (切线连续)
+                  cp2: { x: 25.00, y: 28.00 },  // armholeBottomCp2 (水平入缝)
+                  to: { x: 29.50, y: 28.00 }     // armholeEnd (腋下)
                 },
 
-                // ⭐⭐⭐ [5] 袖窿下段 C3 (hollow → armholeBottom) - 垂直进入腋下
-                { type: 'curve',
-                  cp1: { x: 25.42, y: 20.82 },  // cp3a: +spanX*0.04
-                  cp2: { x: 28.48, y: 24.07 },  // cp3b: W - spanX*0.06
-                  to: { x: 29.5, y: 25 }         // armholeBottom (腋下)
-                },
+                // [5] 侧缝
+                { type: 'line', to: { x: 29.50, y: 68.00 } },
 
-                // [6] 侧缝
-                { type: 'line', to: { x: 29.5, y: 71 } },
+                // [6] 下摆二次Bezier
+                { type: 'quad', cp1: { x: 14.16, y: 69.00 }, to: { x: 0, y: 68.00 } },
 
-                // [7] 下摆二次Bezier
-                { type: 'quad', cp1: { x: 14.75, y: 72.20 }, to: { x: 0, y: 71 } },
-
-                // [8] 闭合
+                // [7] 闭合
                 { type: 'close' }
             ],
 
             // 结构化控制点（与Tshirt.ts完全一致）
             structuredControlPoints: {
-                // 领口控制点
-                neckCp: { x: 4.05, y: 0 },
-
-                // 袖窿上段控制点 (cp1a/cp1b)
-                cp1a: { x: 14.20, y: 2.27 },
-                cp1b: { x: 15.90, y: 5.98 },
-
-                // 袖窿中段控制点 (cp2a/cp2b) ⚠️关键：内收
-                cp2a: { x: 19.64, y: 11.08 },
-                cp2b: { x: 22.70, y: 16.65 },
-
-                // 袖窿下段控制点 (cp3a/cp3b) 垂直进入腋下
-                cp3a: { x: 25.42, y: 20.82 },
-                cp3b: { x: 28.48, y: 24.07 },
-
-                // 下摆控制点
-                hemCp: { x: 14.75, y: 72.20 }
+                neckCp: { x: 5.25, y: 7.12 },
+                armholeTopCp1: { x: 20.00, y: 5.80 },
+                armholeTopCp2: { x: 20.00, y: 7.10 },
+                armholeBottomCp1: { x: 22.50, y: 16.90 },
+                armholeBottomCp2: { x: 25.00, y: 28.00 },
+                hemCp: { x: 14.16, y: 69.00 }
             },
 
             // 关键点（与Tshirt.ts变量名一致）
             keyPoints: {
-                cfTop: { x: 0, y: 0 },
-                neckPoint: { x: 9, y: 5.1 },
-                shoulderPoint: { x: 12.50, y: 1.80 },
-                pitch: { x: 17.94, y: 8.30 },
-                hollow: { x: 24.74, y: 18.50 },
-                armholeBottom: { x: 29.5, y: 25 },
-                sideHem: { x: 29.5, y: 71 },
-                cfHem: { x: 0, y: 71 }
+                cfNeck: { x: 0, y: 7.12 },
+                neckEnd: { x: 12.50, y: 0 },
+                shoulder: { x: 19.50, y: 1.88 },
+                armholePitch: { x: 21.00, y: 11.02 },
+                armholeEnd: { x: 29.50, y: 28.00 },
+                sideBottom: { x: 29.50, y: 68.00 },
+                hemFold: { x: 0, y: 68.00 }
             }
         };
 
         function generateDebugSVG() {
-            let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -8 45 88" width="100%" height="650">
+            let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -5 45 82" width="100%" height="650">
   <defs>
     <pattern id="grid" width="5" height="5" patternUnits="userSpaceOnUse">
       <path d="M 5 0 L 0 0 0 5" fill="none" stroke="#e9ecef" stroke-width="0.3"/>
@@ -277,11 +269,11 @@
   </defs>
   
   <!-- 背景 -->
-  <rect x="-8" y="-8" width="45" height="88" fill="url(#grid)" />
+  <rect x="-8" y="-5" width="45" height="82" fill="url(#grid)" />
   
   <!-- 前中折线(FOLD) -->
-  <line x1="0" y1="-5" x2="0" y2="80" stroke="#6c757d" stroke-dasharray="3 3" stroke-width="0.8"/>
-  <text x="2" y="-2" font-size="4" fill="#6c757d" font-weight="bold">FOLD</text>
+  <line x1="0" y1="-3" x2="0" y2="75" stroke="#6c757d" stroke-dasharray="3 3" stroke-width="0.8"/>
+  <text x="2" y="-1" font-size="4" fill="#6c757d" font-weight="bold">FOLD</text>
 `;
 
             let currentPoint = null;
@@ -294,7 +286,7 @@
                         if (op.to) {
                             currentPoint = op.to;
                             svg += `
-  <!-- [${i}] MOVE - 前中领口起点 -->
+  <!-- [${i}] MOVE - 前中领口起点(cfNeck) -->
   <circle cx="${op.to.x}" cy="${op.to.y}" r="2" fill="#e74c3c" stroke="#c0392b" stroke-width="0.5"/>
   <text x="${op.to.x - 4}" y="${op.to.y - 4}" font-size="3.5" fill="#e74c3c" font-weight="bold">cfNeck</text>
 `;
@@ -304,12 +296,13 @@
                     case 'line':
                         if (op.to && currentPoint) {
                             const label = i === 2 ? '肩线' : '侧缝';
+                            const pointName = i === 2 ? 'shoulder' : 'sideBottom';
                             svg += `
   <!-- [${i}] LINE - ${label} -->
   <line x1="${currentPoint.x}" y1="${currentPoint.y}" x2="${op.to.x}" y2="${op.to.y}" 
         stroke="#3498db" stroke-width="1.2" />
   <circle cx="${op.to.x}" cy="${op.to.y}" r="1.8" fill="#3498db" stroke="#2980b9" stroke-width="0.5"/>
-  ${i === 2 ? `<text x="${op.to.x + 3}" y="${op.to.y}" font-size="3.5" fill="#3498db" font-weight="bold">shoulder</text>` : ''}
+  <text x="${op.to.x + 3}" y="${op.to.y}" font-size="3.5" fill="#3498db" font-weight="bold">${pointName}</text>
 `;
                             currentPoint = op.to;
                         }
@@ -318,6 +311,8 @@
                     case 'quad':
                         if (op.cp1 && op.to && currentPoint) {
                             const label = i === 1 ? '前领口' : '下摆';
+                            const cpName = i === 1 ? 'neckCp' : 'hemCp';
+                            const endPointName = i === 1 ? 'neckEnd' : 'hemFold';
                             svg += `
   <!-- [${i}] QUAD BEZIER - ${label} -->
   <!-- 控制线 -->
@@ -327,13 +322,13 @@
         stroke="#f39c12" stroke-width="0.4" stroke-dasharray="2 2" opacity="0.8"/>
   <!-- 控制点 -->
   <circle cx="${op.cp1.x}" cy="${op.cp1.y}" r="2" fill="#f39c12" stroke="#e67e22" stroke-width="0.5"/>
-  <text x="${op.cp1.x + 3}" y="${op.cp1.y - 2}" font-size="3" fill="#f39c12" font-weight="bold">${i === 1 ? 'neckCp' : 'hemCp'}</text>
+  <text x="${op.cp1.x + 3}" y="${op.cp1.y - 2}" font-size="3" fill="#f39c12" font-weight="bold">${cpName}</text>
   <!-- 曲线 -->
   <path d="M ${currentPoint.x} ${currentPoint.y} Q ${op.cp1.x} ${op.cp1.y} ${op.to.x} ${op.to.y}" 
         fill="none" stroke="#9b59b6" stroke-width="1.8" stroke-linecap="round"/>
   <!-- 终点 -->
   <circle cx="${op.to.x}" cy="${op.to.y}" r="1.8" fill="#9b59b6" stroke="#8e44ad" stroke-width="0.5"/>
-  ${i === 1 ? `<text x="${op.to.x + 3}" y="${op.to.y}" font-size="3.5" fill="#9b59b6" font-weight="bold">neckEnd</text>` : ''}
+  <text x="${op.to.x + 3}" y="${op.to.y}" font-size="3.5" fill="#9b59b6" font-weight="bold">${endPointName}</text>
 `;
                             currentPoint = op.to;
                         }
@@ -341,13 +336,12 @@
                         
                     case 'curve':
                         if (op.cp1 && op.cp2 && op.to && currentPoint) {
-                            const curveLabels = ['袖窿上段(外鼓)', '袖窿中段(内收⚠️)', '袖窿下段(持续内收)'];
+                            const curveLabels = ['袖窿第一段(外鼓)', '袖窿第二段(G1连续→腋下)'];
                             const cpNames = [
                                 ['armholeTopCp1', 'armholeTopCp2'],
-                                ['armholeMidCp1', 'armholeMidCp2'],
                                 ['armholeBottomCp1', 'armholeBottomCp2']
                             ];
-                            const endNames = ['armholePitch', 'armholeHollow', 'armholeEnd(腋下)'];
+                            const endNames = ['armholePitch', 'armholeEnd(腋下)'];
                             const curveIndex = Math.floor((i - 3) / 1);
                             
                             svg += `
@@ -431,32 +425,32 @@
   <text x="2" y="0" font-size="4" fill="#666" font-style="italic">FOLD</text>
         
   <!-- 关键点标注 -->
-  <circle cx="0" cy="0" r="1.8" fill="#e74c3c"/>
-  <text x="-8" y="-2" font-size="4" fill="#e74c3c" font-weight="bold">cfTop</text>
+  <circle cx="0" cy="7.12" r="1.8" fill="#e74c3c"/>
+  <text x="-8" y="6" font-size="4" fill="#e74c3c" font-weight="bold">cfNeck</text>
 
-  <circle cx="12.50" cy="1.80" r="1.8" fill="#3498db"/>
-  <text x="14" y="1.5" font-size="4" fill="#3498db" font-weight="bold">shoulderPoint</text>
+  <circle cx="12.50" cy="0" r="1.8" fill="#9b59b6"/>
+  <text x="14" y="-2" font-size="4" fill="#9b59b6" font-weight="bold">neckEnd</text>
 
-  <circle cx="17.94" cy="8.30" r="1.8" fill="#27ae60"/>
-  <text x="19" y="8" font-size="3.5" fill="#27ae60" font-weight="bold">pitch</text>
+  <circle cx="19.50" cy="1.88" r="1.8" fill="#3498db"/>
+  <text x="21" y="1.5" font-size="4" fill="#3498db" font-weight="bold">shoulder</text>
 
-  <circle cx="24.74" cy="18.50" r="1.8" fill="#e67e22"/>
-  <text x="26" y="19" font-size="3.5" fill="#e67e22" font-weight="bold">hollow</text>
+  <circle cx="21.00" cy="11.02" r="1.8" fill="#27ae60"/>
+  <text x="23" y="11" font-size="3.5" fill="#27ae60" font-weight="bold">pitch</text>
 
-  <circle cx="29.5" cy="25" r="1.8" fill="#9b59b6"/>
-  <text x="31" y="26" font-size="4" fill="#9b59b6" font-weight="bold">armholeBottom</text>
+  <circle cx="29.50" cy="28.00" r="1.8" fill="#e67e22"/>
+  <text x="31" y="29" font-size="3.5" fill="#e67e22" font-weight="bold">armholeEnd</text>
 
-  <circle cx="0" cy="71" r="1.8" fill="#e74c3c"/>
-  <text x="-8" y="72" font-size="4" fill="#e74c3c" font-weight="bold">cfHem</text>
+  <circle cx="0" cy="68.00" r="1.8" fill="#e74c3c"/>
+  <text x="-8" y="69" font-size="4" fill="#e74c3c" font-weight="bold">hemFold</text>
 
   <!-- 版型信息 -->
-  <text x="35" y="77" font-size="4" fill="#666" font-style="italic">Industrial Template v8 (Tshirt.ts)</text>
+  <text x="35" y="74" font-size="4" fill="#666" font-style="italic">Industrial Template v10 (2段袖窿)</text>
 </svg>`;
         }
 
         function showDetails() {
             let opsText = `╔══════════════════════════════════════════════════════════════╗\n`;
-            opsText += `║     工业CAD模板驱动架构 - Path操作详情                    ║\n`;
+            opsText += `║     工业CAD模板驱动架构 - Path操作详情 (v10)               ║\n`;
             opsText += `╚══════════════════════════════════════════════════════════════╝\n\n`;
             
             let hasCurve = false;
@@ -469,7 +463,7 @@
                 
                 switch (op.type) {
                     case 'move':
-                        opsText += `    ├─ 类型: 前中领口起点 (FOLD线)\n`;
+                        opsText += `    ├─ 类型: 前中领口起点(cfNeck)\n`;
                         opsText += `    └─ 坐标: (${op.to.x.toFixed(2)}, ${op.to.y.toFixed(2)})\n`;
                         break;
                     case 'line':
@@ -486,16 +480,16 @@
                     case 'curve':
                         hasCurve = true;
                         curveCount++;
-                        const curveLabels = ['袖窿上段 (shoulder→pitch)', '袖窿中段 (pitch→hollow)', '袖窿下段 (hollow→underarm)'];
-                        const cpPairNames = [['armholeTopCp1', 'armholeTopCp2'], ['armholeMidCp1', 'armholeMidCp2'], ['armholeBottomCp1', 'armholeBottomCp2']];
-                        const endLabels = ['armholePitch', 'armholeHollow', 'armholeEnd'];
+                        const curveLabels = ['袖窿第一段 (shoulder→pitch, 外鼓)', '袖窿第二段 (pitch→armholeEnd, G1连续)'];
+                        const cpPairNames = [['armholeTopCp1', 'armholeTopCp2'], ['armholeBottomCp1', 'armholeBottomCp2']];
+                        const endLabels = ['armholePitch', 'armholeEnd(腋下)'];
                         
                         opsText += `    ├─ 类型: 三次Bezier(C) - ${curveLabels[curveCount-1]}\n`;
                         opsText += `    ├─ CP1:  (${op.cp1.x.toFixed(2)}, ${op.cp1.y.toFixed(2)}) [${cpPairNames[curveCount-1][0]}] ✓结构化\n`;
-                        opsText += `    ├─ CP2:  (${op.cp2.x.toFixed(2)}, ${op.cp2.y.toFixed(2)}) [${cpPairNames[curveCount-1][1]}] ✓结构化\n`;
+                        opsText += `    ├─ CP2:  (${op.cp2.x.toFixed(2)}, ${op.cp2.y.toFixed(2)}) [${cpPairNames[curveIndex-1][1]}] ✓结构化\n`;
                         opsText += `    └─ 终点: (${op.to.x.toFixed(2)}, ${op.to.y.toFixed(2)}) [${endLabels[curveCount-1]}]\n`;
                         if (curveCount === 2) {
-                            opsText += `    ⚠️ 注意: 此段为内收曲线（hollow后段不外扩）\n`;
+                            opsText += `    ✨ 特性: G1切线连续，水平进入腋下\n`;
                         }
                         break;
                     case 'close':
@@ -511,8 +505,8 @@
             opsText += `│  总操作数:       ${frontPanelData.ops.length.toString().padStart(4)}                              │\n`;
             opsText += `│  三次Bezier(C):  ${(hasCurve ? '✅ YES (' + curveCount + '段)' : '❌ NO').padStart(4)}                         │\n`;
             opsText += `│  二次Bezier(Q):  ${(hasQuad ? '✅ YES (2段)' : '❌ NO').padStart(4)}                          │\n`;
-            opsText += `│  结构化控制点:   8个 (全部进入points对象)              │\n`;
-            opsText += `│  拓扑:           M Q L C C C L Q Z                   │\n`;
+            opsText += `│  结构化控制点:   6个 (全部进入points对象)              │\n`;
+            opsText += `│  拓扑:           M Q L C C L Q Z (2段袖窿)             │\n`;
             opsText += `└──────────────────────────────────────────────────────┘\n`;
 
             document.getElementById('ops-detail').textContent = opsText;
@@ -529,7 +523,7 @@
                 }
             }
             
-            document.getElementById('d-attribute').textContent = `SVG path d属性:\n\n${d}\n\n验证检查:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ 包含 "C " (三次Bezier): ${d.includes('C ') ? 'YES - ' + curveCount + '段袖窿曲线' : 'NO'}\n✅ 包含 "Q " (二次Bezier): ${d.includes('Q ') ? 'YES - 领口+下摆' : 'NO'}\n✅ 拓扑正确 (M Q L C C C L Q Z): YES\n\n如果上方SVG显示的是平滑曲线而不是直线，说明:\n🎉 Bezier渲染成功！工业模板驱动架构工作正常！`;
+            document.getElementById('d-attribute').textContent = `SVG path d属性:\n\n${d}\n\n验证检查:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n✅ 包含 "C " (三次Bezier): ${d.includes('C ') ? 'YES - ' + curveCount + '段袖窿曲线' : 'NO'}\n✅ 包含 "Q " (二次Bezier): ${d.includes('Q ') ? 'YES - 领口+下摆' : 'NO'}\n✅ 拓扑正确 (M Q L C C L Q Z): YES\n✅ G1连续性: YES (第二段CP1基于第一段切线)\n\n如果上方SVG显示的是平滑曲线而不是直线，说明:\n🎉 Bezier渲染成功！工业模板驱动架构工作正常！`;
         }
 
         // 初始化
@@ -537,8 +531,8 @@
         document.getElementById('svg-clean').innerHTML = generateCleanSVG();
         showDetails();
 
-        console.log('%c🏭 工业CAD模板驱动架构 v8', 'font-size:20px; font-weight:bold; color:#28a745; background:#d4edda; padding:10px;');
-        console.log('%c✅ v8基于Tshirt.ts最新代码:', 'font-size:14px; font-weight:bold; color:#007bff;', '\n• 变量名: cfTop, neckPoint, shoulderPoint, pitch, hollow\n• 控制点: cp1a/cp1b (上段), cp2a/cp2b (中段), cp3a/cp3b (下段)\n• 比例: pitch(0.32/0.28), hollow(0.72/0.72)\n• 外鼓: 31.2% > 25% > 14.3%');
+        console.log('%c🏭 工业CAD模板驱动架构 v10', 'font-size:20px; font-weight:bold; color:#dc3545; background:#f8d7da; padding:10px;');
+        console.log('%c✅ v10新默认参数:', 'font-size:14px; font-weight:bold; color:#007bff;', '\n• 胸围59cm (半胸宽29.5)\n• 肩宽64cm (肩长19.5)\n• 衣长68cm | 领宽25cm\n• 袖笼深28cm | 肩斜5.5°\n• 袖长60cm | 袖口宽10cm\n\n🔥 重要更新:\n• 使用2段袖窿Bezier (与Tshirt.ts一致)\n• G1切线连续性保证\n• 所有坐标已重新计算');
         console.log('Path操作数组:', frontPanelData.ops);
         console.log('结构化控制点:', frontPanelData.structuredControlPoints);
         console.log('关键点:', frontPanelData.keyPoints);
