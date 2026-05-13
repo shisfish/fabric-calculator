@@ -1,6 +1,7 @@
 import { Point, Path } from '../geometry/index.js';
 import { SeamAllowanceGenerator } from './SeamAllowanceGenerator.js';
 import { GarmentParams, BackPanelParams, FrontPanelParams, SleeveParams } from './GarmentMeasurementAdapter.js';
+import { SleeveCapGenerator } from './SleeveCapGenerator.js';
 
 export interface PatternPiece {
   name: string;
@@ -21,8 +22,17 @@ export class TshirtPatternGenerator {
     const backPiece = this.generateBackPanel(params.backPanel, params.seamAllowance);
     const frontPiece = this.generateFrontPanel(params.frontPanel, params.seamAllowance);
     
-    // 袖子逻辑：传入前后片参数以保持几何关联
-    const sleevePiece = this.generateSleeve(params.sleeve, params.seamAllowance);
+    // 提取前后袖窿曲线用于生成袖子
+    const frontArmholeOps = this.extractArmholeOps(frontPiece.path);
+    const backArmholeOps = this.extractArmholeOps(backPiece.path);
+    
+    // 使用工业袖山生成器（基于袖窿反推）
+    const sleevePiece = this.generateSleeveFromArmhole(
+      params.sleeve,
+      params.seamAllowance,
+      frontArmholeOps,
+      backArmholeOps
+    );
 
     if (params.seamAllowance && params.seamAllowance > 0) {
       backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, params.seamAllowance);
@@ -33,6 +43,57 @@ export class TshirtPatternGenerator {
     pieces.push(backPiece, frontPiece, sleevePiece);
     
     return pieces;
+  }
+
+  private static extractArmholeOps(path: Path): Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}> {
+    const ops = path.ops || [];
+    const armholeOps: typeof ops = [];
+    
+    let foundShoulder = false;
+    let collectingArmhole = false;
+    
+    for (const op of ops) {
+      if (op.type === 'line' && op.to) {
+        if (!foundShoulder && op.to.y > 0) {
+          foundShoulder = true;
+          collectingArmhole = true;
+        } else if (collectingArmhole && op.to.y > (ops[0]?.to?.y || 0)) {
+          break;
+        }
+      }
+      
+      if (collectingArmhole) {
+        armholeOps.push(op);
+        
+        if (op.type === 'line' && op.to && !op.cp1 && !op.cp2) {
+          // 检查是否到达腋下点（armholeEnd）
+          const prevOps = armholeOps.slice(0, -1);
+          const hasCurve = prevOps.some(p => p.type === 'curve');
+          if (hasCurve && armholeOps.length > 2) {
+            break;
+          }
+        }
+      }
+    }
+    
+    // 如果上面的逻辑没找到，用简单方法：提取所有curve操作
+    if (armholeOps.length === 0) {
+      let inArmholeSection = false;
+      for (const op of ops) {
+        if (op.type === 'line' && op.to && op.to.y < (path.ops?.[0]?.to?.y || 999)) {
+          inArmholeSection = true;
+        }
+        if (inArmholeSection) {
+          armholeOps.push(op);
+          if (op.type === 'line' && op.to && !op.cp1) {
+            // 到达侧缝线，停止
+            break;
+          }
+        }
+      }
+    }
+    
+    return armholeOps.length > 0 ? armholeOps : ops.filter(op => op.type === 'curve');
   }
 
   /**
@@ -137,166 +198,51 @@ export class TshirtPatternGenerator {
   }
 
   /**
-   * 袖子 (Sleeve) - 调整为非对称工业结构
+   * 袖子 (Sleeve) - 基于袖窿反推的工业袖山生成器
    */
-  private static generateSleeve(
+  private static generateSleeveFromArmhole(
     sl: SleeveParams,
-    seamAllowance: number
+    seamAllowance: number,
+    frontArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>,
+    backArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>
   ): PatternPiece {
-
-    const points: Record<string, Point> = {};
 
     const bW = Number(sl.bicepsWidth);
     const cH = Number(sl.sleeveCapHeight);
     const sL = Number(sl.sleeveLength);
     const cuW = Number(sl.cuffWidth);
 
-    const totalL = cH + sL;
-
-    // =========================
-    // Base points
-    // =========================
-
-    points.capTop = new Point(0, 0);
-
-    points.frontAxilla = new Point(
-      bW / 2,
-      cH
+    // 使用工业袖山生成器
+    const sleeveResult = SleeveCapGenerator.generateFromArmhole(
+      frontArmholeOps,
+      backArmholeOps,
+      {
+        bicepsWidth: bW,
+        sleeveCapHeight: cH,
+        sleeveLength: sL,
+        cuffWidth: cuW
+      },
+      0.5 // T-shirt ease: 0~1cm
     );
 
-    points.backAxilla = new Point(
-      -bW / 2,
-      cH
-    );
-
-    points.frontCuff = new Point(
-      cuW / 2,
-      totalL
-    );
-
-    points.backCuff = new Point(
-      -cuW / 2,
-      totalL
-    );
-
-    // =========================
-    // Pitch points
-    // =========================
-
-    // 前袖更凹
-    points.frontPitch = new Point(
-      bW * 0.28,
-      cH * 0.42
-    );
-
-    // 后袖更饱满
-    points.backPitch = new Point(
-      -bW * 0.32,
-      cH * 0.34
-    );
-
-    // =========================
-    // Front sleeve cap (前袖山：更剧烈的S曲线)
-    // =========================
-    // 上段：从顶点出来，先保持水平再向下突起
-    points.frontTopCp1 = new Point(
-      bW * 0.10,
-      cH * 0.02
-    );
-
-    points.frontTopCp2 = new Point(
-      bW * 0.24,
-      cH * 0.08
-    );
-
-    // 下段：进入腋下，强制向内收缩，制造“凹”感
-    points.frontBottomCp1 = new Point(
-      bW * 0.34,
-      cH * 0.52
-    );
-
-    points.frontBottomCp2 = new Point(
-      bW * 0.48,
-      cH * 0.82
-    );
-    // =========================
-    // Back sleeve cap (后袖山：较平缓的S曲线)
-    // =========================
-    // 上段：后山要更饱满，凸起更明显
-    points.backTopCp1 = new Point(
-      -bW * 0.12,
-      cH * 0.03
-    );
-
-    points.backTopCp2 = new Point(
-      -bW * 0.26,
-      cH * 0.10
-    );
-    // 下段：后腋下也要有轻微内凹
-    points.backBottomCp1 = new Point(
-      -bW * 0.38,
-      cH * 0.50
-    );
-
-    points.backBottomCp2 = new Point(
-      -bW * 0.54,
-      cH * 0.84
-    );
-    // =========================
-    // Build path
-    // =========================
-
-    const path = new Path()
-
-      // cap top
-      .move(points.capTop)
-
-      // front upper cap
-      .curve(
-        points.frontTopCp1,
-        points.frontTopCp2,
-        points.frontPitch
-      )
-
-      // front lower cap
-      .curve(
-        points.frontBottomCp1,
-        points.frontBottomCp2,
-        points.frontAxilla
-      )
-
-      // cuff
-      .line(points.frontCuff)
-      .line(points.backCuff)
-
-      // back underarm
-      .line(points.backAxilla)
-
-      // back lower cap
-      .curve(
-        points.backBottomCp2,
-        points.backBottomCp1,
-        points.backPitch
-      )
-
-      // back upper cap
-      .curve(
-        points.backTopCp2,
-        points.backTopCp1,
-        points.capTop
-      )
-
-      .close();
-
-    path.attr('class', 'fabric sleeve');
+    // 添加notches到points
+    const points = { ...sleeveResult.points };
+    
+    // 添加grainline
+    const grainline = {
+      start: new Point(0, cH * 0.3),
+      end: new Point(0, cH + sL * 0.7)
+    };
 
     return {
       name: 'sleeve',
-      path,
+      path: sleeveResult.capPath,
       points,
       seamAllowance,
       cutCount: 2,
-      onFold: false
+      onFold: false,
+      grainline,
+      notches: [points.frontNotch, points.backNotch].filter(p => p)
     };
   }
 }
