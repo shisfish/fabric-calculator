@@ -49,6 +49,13 @@ if (input.mode === 'preview') {
             cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
             cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
         })),
+        seamAllowance: piece.seamAllowance || 0,
+        seamAllowancePathOps: (piece.seamAllowancePath?.ops || []).map((op: any) => ({
+            type: op.type,
+            to: op.to ? { x: op.to.x, y: op.to.y } : null,
+            cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+            cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+        })),
         cutCount: piece.cutCount,
         onFold: piece.onFold
     }));

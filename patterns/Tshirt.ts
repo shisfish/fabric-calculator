@@ -1,4 +1,5 @@
 import { Point, Path } from '../geometry/index.js';
+import { SeamAllowanceGenerator } from './SeamAllowanceGenerator.js';
 import { GarmentParams, BackPanelParams, FrontPanelParams, SleeveParams } from './GarmentMeasurementAdapter.js';
 
 export interface PatternPiece {
@@ -6,6 +7,7 @@ export interface PatternPiece {
   path: Path;
   points: Record<string, Point>;
   seamAllowance?: number;
+  seamAllowancePath?: Path;
   grainline?: { start: Point; end: Point };
   notches?: Point[];
   cutCount: number;
@@ -16,11 +18,19 @@ export class TshirtPatternGenerator {
   static generatePattern(params: GarmentParams): PatternPiece[] {
     const pieces: PatternPiece[] = [];
     
-    pieces.push(this.generateBackPanel(params.backPanel, params.seamAllowance));
-    pieces.push(this.generateFrontPanel(params.frontPanel, params.seamAllowance));
+    const backPiece = this.generateBackPanel(params.backPanel, params.seamAllowance);
+    const frontPiece = this.generateFrontPanel(params.frontPanel, params.seamAllowance);
     
     // 袖子逻辑：传入前后片参数以保持几何关联
-    pieces.push(this.generateSleeve(params.sleeve, params.seamAllowance));
+    const sleevePiece = this.generateSleeve(params.sleeve, params.seamAllowance);
+
+    if (params.seamAllowance && params.seamAllowance > 0) {
+      backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, params.seamAllowance);
+      frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, params.seamAllowance);
+      sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, params.seamAllowance);
+    }
+
+    pieces.push(backPiece, frontPiece, sleevePiece);
     
     return pieces;
   }
@@ -129,49 +139,165 @@ export class TshirtPatternGenerator {
   /**
    * 袖子 (Sleeve) - 调整为非对称工业结构
    */
-  private static generateSleeve(sl: SleeveParams, seamAllowance: number): PatternPiece {
+  private static generateSleeve(
+    sl: SleeveParams,
+    seamAllowance: number
+  ): PatternPiece {
+
     const points: Record<string, Point> = {};
+
     const bW = Number(sl.bicepsWidth);
     const cH = Number(sl.sleeveCapHeight);
     const sL = Number(sl.sleeveLength);
     const cuW = Number(sl.cuffWidth);
+
     const totalL = cH + sL;
 
-    // 以袖山顶点为原点 (0,0)
+    // =========================
+    // Base points
+    // =========================
+
     points.capTop = new Point(0, 0);
-    points.frontAxilla = new Point(bW / 2, cH);
-    points.backAxilla = new Point(-bW / 2, cH);
-    points.frontCuff = new Point(cuW / 2, totalL);
-    points.backCuff = new Point(-cuW / 2, totalL);
 
-    // --- 前袖山曲线 (更凹，配合前袖窿) ---
-    points.fCp1 = new Point(bW * 0.2, 0);
-    points.fCp2 = new Point(bW * 0.4, cH * 0.1);
-    points.fPitch = new Point(bW * 0.35, cH * 0.5);
-    points.fCp3 = new Point(bW * 0.3, cH * 0.9);
+    points.frontAxilla = new Point(
+      bW / 2,
+      cH
+    );
 
-    // --- 后袖山曲线 (更饱满，配合后袖窿) ---
-    points.bCp1 = new Point(-bW * 0.15, 0);
-    points.bCp2 = new Point(-bW * 0.45, cH * 0.2);
-    points.bCp3 = new Point(-bW * 0.4, cH * 0.8);
+    points.backAxilla = new Point(
+      -bW / 2,
+      cH
+    );
+
+    points.frontCuff = new Point(
+      cuW / 2,
+      totalL
+    );
+
+    points.backCuff = new Point(
+      -cuW / 2,
+      totalL
+    );
+
+    // =========================
+    // Pitch points
+    // =========================
+
+    // 前袖更凹
+    points.frontPitch = new Point(
+      bW * 0.28,
+      cH * 0.42
+    );
+
+    // 后袖更饱满
+    points.backPitch = new Point(
+      -bW * 0.32,
+      cH * 0.34
+    );
+
+    // =========================
+    // Front sleeve cap
+    // =========================
+
+    points.frontTopCp1 = new Point(
+      bW * 0.10,
+      cH * 0.02
+    );
+
+    points.frontTopCp2 = new Point(
+      bW * 0.22,
+      cH * 0.18
+    );
+
+    points.frontBottomCp1 = new Point(
+      bW * 0.36,
+      cH * 0.62
+    );
+
+    points.frontBottomCp2 = new Point(
+      bW * 0.48,
+      cH * 0.82
+    );
+
+    // =========================
+    // Back sleeve cap
+    // =========================
+
+    points.backTopCp1 = new Point(
+      -bW * 0.12,
+      cH * 0.04
+    );
+
+    points.backTopCp2 = new Point(
+      -bW * 0.24,
+      cH * 0.14
+    );
+
+    points.backBottomCp1 = new Point(
+      -bW * 0.40,
+      cH * 0.54
+    );
+
+    points.backBottomCp2 = new Point(
+      -bW * 0.52,
+      cH * 0.82
+    );
+
+    // =========================
+    // Build path
+    // =========================
 
     const path = new Path()
+
+      // cap top
       .move(points.capTop)
-      .curve(points.fCp1, points.fCp2, points.fPitch)
-      .curve(points.fCp3, new Point(bW / 2, cH), points.frontAxilla)
+
+      // front upper cap
+      .curve(
+        points.frontTopCp1,
+        points.frontTopCp2,
+        points.frontPitch
+      )
+
+      // front lower cap
+      .curve(
+        points.frontBottomCp1,
+        points.frontBottomCp2,
+        points.frontAxilla
+      )
+
+      // cuff
       .line(points.frontCuff)
       .line(points.backCuff)
+
+      // back underarm
       .line(points.backAxilla)
-      .curve(points.bCp3, points.bCp2, points.capTop)
+
+      // back lower cap
+      .curve(
+        points.backBottomCp2,
+        points.backBottomCp1,
+        points.backPitch
+      )
+
+      // back upper cap
+      .curve(
+        points.backTopCp2,
+        points.backTopCp1,
+        points.capTop
+      )
+
       .close();
 
-    return { 
-      name: 'sleeve', 
-      path, 
-      points, 
-      seamAllowance, 
-      cutCount: 2, 
-      onFold: false 
+    path.attr('class', 'fabric sleeve');
+
+    return {
+      name: 'sleeve',
+      path,
+      points,
+      seamAllowance,
+      cutCount: 2,
+      onFold: false
     };
   }
 }

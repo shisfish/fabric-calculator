@@ -207,6 +207,7 @@ function renderResult(result) {
     `).join('');
 
     renderPiecePreviews(result);
+    renderSeamAllowancePreviews(result);
     renderNestingWithReact(result, params.fabric_width);
 
     const piecesTbody = document.getElementById('result-pieces-tbody');
@@ -482,6 +483,281 @@ function drawDimensionLine(ctx, x1, y1, x2, y2, text, position) {
         ctx.scale(1, -1);
         ctx.fillText(text, 0, 0);
         ctx.restore();
+    }
+}
+
+function renderSeamAllowancePreviews(result) {
+    const container = document.getElementById('seam-allowance-container');
+    if (!container) return;
+
+    const pieces = result.pieces || [];
+    if (pieces.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无缝份数据</p>';
+        return;
+    }
+
+    container.innerHTML = pieces.map((piece, index) => {
+        const pathOps = piece.pathOps || [];
+        const seamAllowanceOps = piece.seamAllowancePathOps || [];
+        
+        if (pathOps.length === 0) {
+            return `
+                <div class="card" style="padding:16px;text-align:center;">
+                    <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">${piece.name}</div>
+                    <div style="color:var(--text-secondary);font-size:12px;">缺少路径数据</div>
+                </div>
+            `;
+        }
+
+        const canvasId = `seam-canvas-${index}`;
+
+        return `
+            <div class="card" style="padding:16px;text-align:center;">
+                <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">
+                    ${piece.name} - 缝份预览
+                </div>
+                <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:8px;padding:10px;min-height:400px;display:flex;align-items:center;justify-content:center;">
+                    <canvas id="${canvasId}" width="340" height="440" style="max-width:100%;height:auto;"></canvas>
+                </div>
+                <div id="${canvasId}-info" style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.6;">
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    setTimeout(() => {
+        pieces.forEach((piece, index) => {
+            const pathOps = piece.pathOps || [];
+            const seamAllowanceOps = piece.seamAllowancePathOps || [];
+            
+            if (pathOps.length === 0) return;
+
+            const canvas = document.getElementById(`seam-canvas-${index}`);
+            if (!canvas) return;
+
+            renderSeamAllowanceCanvas(canvas, pathOps, seamAllowanceOps, piece.name, piece);
+        });
+    }, 150);
+}
+
+function renderSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, pieceData) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    const allOps = [...outlineOps, ...seamOps];
+    
+    for (const op of allOps) {
+        if (op.to) {
+            minX = Math.min(minX, op.to.x);
+            minY = Math.min(minY, op.to.y);
+            maxX = Math.max(maxX, op.to.x);
+            maxY = Math.max(maxY, op.to.y);
+        }
+        if (op.cp1) {
+            minX = Math.min(minX, op.cp1.x);
+            minY = Math.min(minY, op.cp1.y);
+            maxX = Math.max(maxX, op.cp1.x);
+            maxY = Math.max(maxY, op.cp1.y);
+        }
+        if (op.cp2) {
+            minX = Math.min(minX, op.cp2.x);
+            minY = Math.min(minY, op.cp2.y);
+            maxX = Math.max(maxX, op.cp2.x);
+            maxY = Math.max(maxY, op.cp2.y);
+        }
+    }
+
+    const padding = 50;
+    const srcWidth = maxX - minX || 100;
+    const srcHeight = maxY - minY || 100;
+    const scale = Math.min((canvas.width - padding * 2) / srcWidth, (canvas.height - padding * 2 - 80) / srcHeight);
+    const offsetX = (canvas.width - srcWidth * scale) / 2 - minX * scale;
+    const offsetY = (canvas.height - srcHeight * scale) / 2 - minY * scale + 30;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    // 绘制缝份区域（黄色填充）
+    if (seamOps.length > 0) {
+        ctx.fillStyle = '#fef3c7';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5 / scale;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        for (const op of seamOps) {
+            switch (op.type) {
+                case 'move':
+                    ctx.moveTo(op.to.x, op.to.y);
+                    break;
+                case 'line':
+                    ctx.lineTo(op.to.x, op.to.y);
+                    break;
+                case 'curve':
+                    ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                    break;
+                case 'quad':
+                    ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                    break;
+                case 'close':
+                    ctx.closePath();
+                    break;
+            }
+        }
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // 绘制原始轮廓（蓝色填充）
+    ctx.fillStyle = '#dbeafe';
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2.0 / scale;
+
+    ctx.beginPath();
+    for (const op of outlineOps) {
+        switch (op.type) {
+            case 'move':
+                ctx.moveTo(op.to.x, op.to.y);
+                break;
+            case 'line':
+                ctx.lineTo(op.to.x, op.to.y);
+                break;
+            case 'curve':
+                ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                break;
+            case 'quad':
+                ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                break;
+            case 'close':
+                ctx.closePath();
+                break;
+        }
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // 绘制关键点
+    ctx.fillStyle = '#dc2626';
+    for (const op of outlineOps) {
+        if (op.to) {
+            ctx.beginPath();
+            ctx.arc(op.to.x, op.to.y, 1.5 / scale, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    ctx.restore();
+
+    // 绘制尺寸线和标注
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 0.8 / scale;
+    ctx.setLineDash([3 / scale, 3 / scale]);
+
+    drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
+    drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
+
+    // 绘制缝份宽度标注
+    if (seamOps.length > 0 && pieceData && pieceData.seamAllowance) {
+        const seamDist = pieceData.seamAllowance;
+        const midY = (minY + maxY) / 2;
+        
+        ctx.strokeStyle = '#dc2626';
+        ctx.setLineDash([2 / scale, 2 / scale]);
+        
+        // 在右侧绘制缝份宽度
+        ctx.beginPath();
+        ctx.moveTo(maxX, midY);
+        ctx.lineTo(maxX + seamDist, midY);
+        ctx.stroke();
+
+        // 绘制箭头和文字
+        ctx.save();
+        ctx.translate(maxX + seamDist / 2, midY - 5 / scale);
+        ctx.scale(1, -1);
+        ctx.fillStyle = '#dc2626';
+        ctx.font = `${10 / scale}px system-ui`;
+        ctx.fillText(`${seamDist}cm`, 0, 0);
+        ctx.restore();
+
+        // 绘制连接线
+        ctx.setLineDash([]);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 0.5 / scale;
+        
+        [minY, midY, maxY].forEach(y => {
+            ctx.beginPath();
+            ctx.moveTo(maxX, y);
+            ctx.lineTo(maxX + seamDist, y);
+            ctx.stroke();
+        });
+    }
+
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // 底部信息文字
+    ctx.fillStyle = '#374151';
+    ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+
+    const infoText = `轮廓: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm | 缝份: ${pieceData?.seamAllowance || 0} cm`;
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 12);
+
+    // 图例
+    ctx.textAlign = 'left';
+    ctx.font = '10px system-ui, -apple-system, sans-serif';
+    
+    let legendX = 10;
+    const legendY = 18;
+
+    // 轮廓图例
+    ctx.fillStyle = '#dbeafe';
+    ctx.fillRect(legendX, legendY - 8, 12, 12);
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(legendX, legendY - 8, 12, 12);
+    ctx.fillStyle = '#374151';
+    ctx.fillText('裁片轮廓', legendX + 16, legendY);
+
+    // 缝份图例
+    legendX += 80;
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(legendX, legendY - 8, 12, 12);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.strokeRect(legendX, legendY - 8, 12, 12);
+    ctx.fillStyle = '#374151';
+    ctx.fillText('缝份区域', legendX + 16, legendY);
+
+    // 更新详细信息卡片
+    if (pieceData) {
+        const infoDiv = document.getElementById(`${canvas.id}-info`);
+        if (infoDiv) {
+            infoDiv.innerHTML = `
+                <div><strong>轮廓尺寸:</strong> ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm</div>
+                <div><strong>缝份宽度:</strong> <span style="color:#dc2626;font-weight:600;">${pieceData.seamAllowance || 0} cm</span></div>
+                <div><strong>含缝份总尺寸:</strong> ${(srcWidth + (pieceData.seamAllowance || 0) * 2).toFixed(1)} × ${(srcHeight + (pieceData.seamAllowance || 0) * 2).toFixed(1)} cm</div>
+                <div style="margin-top:4px;padding-top:4px;border-top:1px solid #e5e7eb;">
+                    <span style="display:inline-block;width:10px;height:10px;background:#dbeafe;border:1px solid #2563eb;margin-right:4px;vertical-align:middle;"></span>
+                    <span style="font-size:10px;">净样（缝合线）</span>
+                    &nbsp;&nbsp;
+                    <span style="display:inline-block;width:10px;height:10px;background:#fef3c7;border:1px solid #f59e0b;margin-right:4px;vertical-align:middle;"></span>
+                    <span style="font-size:10px;">毛样（裁剪线）</span>
+                </div>
+            `;
+        }
     }
 }
 

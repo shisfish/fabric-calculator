@@ -8,3 +8,4 @@ export {
   type SleeveParams,
 } from './GarmentMeasurementAdapter.js';
 export { FrontPatternGenerator, type FrontPatternParams } from './FrontPatternGenerator.js';
+export { SeamAllowanceGenerator } from './SeamAllowanceGenerator.js';
