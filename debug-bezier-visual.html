@@ -96,13 +96,15 @@
     </div>
 
     <script>
-        // 模拟Tshirt.ts生成的前片数据
+        // 🎯 最新修复后的Tshirt.ts前片数据（2026-01-12）
+        // 袖窿Bezier已优化为"S"形工业曲线：CP1外鼓 + CP2内收
         const frontPanelData = {
             ops: [
                 { type: 'move', to: { x: 0, y: 0 } },
                 { type: 'quad', cp1: { x: 3.78, y: 0 }, to: { x: 9, y: 5.1 } },
                 { type: 'line', to: { x: 12.5, y: 8.207216411918145 } },
-                { type: 'curve', cp1: { x: 14.166, y: 8.242350442487968 }, cp2: { x: 27.553, y: 21.25 }, to: { x: 29.5, y: 25 } },
+                // ⭐ 修复后：CP1外鼓(15.90, 9.55) + CP2内收(26.10, 23.66)
+                { type: 'curve', cp1: { x: 15.90, y: 9.55 }, cp2: { x: 26.10, y: 23.66 }, to: { x: 29.5, y: 25 } },
                 { type: 'line', to: { x: 29.5, y: 71 } },
                 { type: 'line', to: { x: 0, y: 71 } },
                 { type: 'close' }

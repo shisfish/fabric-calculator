@@ -151,14 +151,17 @@ export class TshirtPatternGenerator {
 
     points.armholeEnd = new Point(W, armholeD);
 
+    const armholeSpanX = W - shoulderW;
+    const armholeSpanY = armholeD - shoulderDrop;
+
     points.armholeCp1 = new Point(
-      shoulderW + (points.armholePitch.x - shoulderW) * 0.35,
-      shoulderDrop + (points.armholePitch.y - shoulderDrop) * 0.12
+      shoulderW + 6,
+      armholeD * 0.22
     );
 
     points.armholeCp2 = new Point(
-      points.armholeHollow.x + (points.armholeEnd.x - points.armholeHollow.x) * 0.45,
-      armholeD * 0.85
+      W - 2,
+      armholeD * 0.68
     );
 
     points.sideBottom = new Point(W, L);
