@@ -128,46 +128,41 @@ export class TshirtPatternGenerator {
     const neckD = fp.neckDepth;
     const shoulderW = fp.shoulderWidth;
     const armholeD = fp.armholeDepth;
-    const hemW = fp.hemWidth || W * 0.98;
 
-    points.cfNeck = new Point(0, neckD);
-    
-    points.neckEnd = new Point(neckW, 0);
-    
-    const shoulderSlopeRad = (fp.shoulderSlope || 12) * Math.PI / 180;
-    const shoulderDrop = Math.tan(shoulderSlopeRad) * (shoulderW - neckW);
+    const halfChest = W;
+    const shoulderDrop = 3;
+
+    points.cfNeck = new Point(0, 0);
+
+    points.neckCp = new Point(neckW * 0.45, 0);
+
+    points.neckEnd = new Point(neckW, neckD);
+
     points.shoulder = new Point(shoulderW, shoulderDrop);
-    
-    points.armholeEnd = new Point(W, shoulderDrop + armholeD);
-    
-    points.sideBottom = new Point(W, L + (fp.hemExtension || 0));
-    
-    points.hemEnd = new Point(hemW, L);
 
-    const neckCpX = neckW * 0.5;
-    const neckCpY = -neckD * 0.625;
-    points.neckCp = new Point(neckCpX, neckCpY);
-    
-    const armholeCpX = W - (W - shoulderW) * 0.35;
-    const armholeCpY = shoulderDrop + armholeD * 0.38;
-    points.armholeCp = new Point(armholeCpX, armholeCpY);
-    
-    const hemCpX = hemW * 0.75;
-    const hemCpY = L + (fp.hemExtension || 0) * 1.5;
-    points.hemCp = new Point(hemCpX, hemCpY);
+    points.armholeCp1 = new Point(
+      shoulderW + (halfChest - shoulderW) * 0.15,
+      armholeD * 0.18
+    );
 
-    points.cfHem = new Point(0, L);
-    points.hps = new Point(neckW, 0);
-    points.cfHps = new Point(0, 0);
+    points.armholeCp2 = new Point(
+      halfChest + 1.5,
+      armholeD * 0.72
+    );
+
+    points.armholeEnd = new Point(halfChest, armholeD);
+
+    points.sideBottom = new Point(halfChest, L);
+
+    points.hemFold = new Point(0, L);
 
     const path = new Path()
       .move(points.cfNeck)
       .quad(points.neckCp, points.neckEnd)
       .line(points.shoulder)
-      .quad(points.armholeCp, points.armholeEnd)
+      .curve(points.armholeCp1, points.armholeCp2, points.armholeEnd)
       .line(points.sideBottom)
-      .quad(points.hemCp, points.hemEnd)
-      .line(points.cfNeck)
+      .line(points.hemFold)
       .close();
 
     path.attr('class', 'fabric');
@@ -179,7 +174,7 @@ export class TshirtPatternGenerator {
       seamAllowance,
       grainline: {
         start: new Point(8, points.cfNeck.y + 10),
-        end: new Point(8, points.cfHem.y - 10),
+        end: new Point(8, points.hemFold.y - 10),
       },
       notches: [points.shoulder],
       cutCount: 1,
