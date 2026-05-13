@@ -6,7 +6,7 @@ FROM node:20-slim AS frontend-builder
 WORKDIR /frontend
 
 COPY package.json package-lock.json ./
-RUN npm ci --prefer-offline
+RUN npm install
 
 COPY build-frontend.js ./
 COPY static/js/cad/ ./static/js/cad/
