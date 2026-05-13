@@ -423,12 +423,25 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     ctx.setLineDash([]);
     ctx.restore();
 
-    ctx.fillStyle = '#374151';
-    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
 
     const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
-    ctx.fillText(infoText, canvas.width / 2, canvas.height - 10);
+    
+    // 底部文字背景
+    const textMetrics = ctx.measureText(infoText);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillRect(
+        canvas.width / 2 - textMetrics.width / 2 - 8,
+        canvas.height - 24,
+        textMetrics.width + 16,
+        22
+    );
+    
+    // 红色文字
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 8);
 
     if (pieceData && pieceData.bbox) {
         const area = pieceData.area || 0;
@@ -445,43 +458,95 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
 }
 
 function drawDimensionLine(ctx, x1, y1, x2, y2, text, position) {
-    const offset = 8;
-    const tickSize = 3;
-
+    const offset = 15;
+    
     let ox1, oy1, ox2, oy2, tx, ty;
 
     if (position === 'bottom') {
         ox1 = x1; oy1 = y1 + offset;
         ox2 = x2; oy2 = y2 + offset;
-        tx = (x1 + x2) / 2; ty = y1 + offset + 4;
+        tx = (x1 + x2) / 2; ty = y1 + offset + 8;
+        
+        // 主尺寸线 - 更粗更醒目
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 2.5 / (ctx.getTransform().a || 1);
+        ctx.setLineDash([]);
         
         ctx.beginPath();
-        ctx.moveTo(x1, y1); ctx.lineTo(ox1, oy1);
-        ctx.moveTo(x2, y2); ctx.lineTo(ox2, oy2);
         ctx.moveTo(ox1, oy1); ctx.lineTo(ox2, oy2);
         ctx.stroke();
+        
+        // 端点标记 - 竖线
+        const tickSize = 6;
+        ctx.lineWidth = 2.0 / (ctx.getTransform().a || 1);
+        
+        ctx.beginPath();
+        ctx.moveTo(x1, y1 - tickSize/2); ctx.lineTo(x1, y1 + offset + tickSize/2);
+        ctx.moveTo(x2, y2 - tickSize/2); ctx.lineTo(x2, y2 + offset + tickSize/2);
+        ctx.stroke();
 
+        // 文字标签 - 带背景
         ctx.save();
         ctx.translate(tx, ty);
         ctx.scale(1, -1);
-        ctx.fillText(text, 0, 0);
+        
+        const fontSize = Math.max(14, 14 / (ctx.getTransform().a || 1));
+        ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+        const textWidth = ctx.measureText(text).width;
+        
+        // 白色背景
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(-textWidth/2 - 4, -fontSize + 2, textWidth + 8, fontSize + 4);
+        
+        // 红色文字
+        ctx.fillStyle = '#dc2626';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(text, 0, 2);
         ctx.restore();
+        
     } else if (position === 'left') {
         ox1 = x1 - offset; oy1 = y1;
         ox2 = x2 - offset; oy2 = y2;
-        tx = x1 - offset - 4; ty = (y1 + y2) / 2;
+        tx = x1 - offset - 8; ty = (y1 + y2) / 2;
 
+        // 主尺寸线
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 2.5 / (ctx.getTransform().a || 1);
+        ctx.setLineDash([]);
+        
         ctx.beginPath();
-        ctx.moveTo(x1, y1); ctx.lineTo(ox1, oy1);
-        ctx.moveTo(x2, y2); ctx.lineTo(ox2, oy2);
         ctx.moveTo(ox1, oy1); ctx.lineTo(ox2, oy2);
         ctx.stroke();
+        
+        // 端点标记
+        const tickSize = 6;
+        ctx.lineWidth = 2.0 / (ctx.getTransform().a || 1);
+        
+        ctx.beginPath();
+        ctx.moveTo(x1 - tickSize/2, y1); ctx.lineTo(x1 + offset + tickSize/2, y1);
+        ctx.moveTo(x2 - tickSize/2, y2); ctx.lineTo(x2 + offset + tickSize/2, y2);
+        ctx.stroke();
 
+        // 文字标签
         ctx.save();
         ctx.translate(tx, ty);
         ctx.rotate(-Math.PI / 2);
         ctx.scale(1, -1);
-        ctx.fillText(text, 0, 0);
+        
+        const fontSize = Math.max(14, 14 / (ctx.getTransform().a || 1));
+        ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
+        const textWidth = ctx.measureText(text).width;
+        
+        // 背景
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(-textWidth/2 - 4, -fontSize + 2, textWidth + 8, fontSize + 4);
+        
+        // 文字
+        ctx.fillStyle = '#dc2626';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(text, 0, 2);
         ctx.restore();
     }
 }
@@ -675,50 +740,71 @@ function renderSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, piece
         const midY = (minY + maxY) / 2;
         
         ctx.strokeStyle = '#dc2626';
-        ctx.setLineDash([2 / scale, 2 / scale]);
+        ctx.lineWidth = 3 / scale;
+        ctx.setLineDash([]);
         
-        // 在右侧绘制缝份宽度
+        // 在右侧绘制缝份宽度 - 更粗更醒目
         ctx.beginPath();
         ctx.moveTo(maxX, midY);
         ctx.lineTo(maxX + seamDist, midY);
         ctx.stroke();
-
-        // 绘制箭头和文字
-        ctx.save();
-        ctx.translate(maxX + seamDist / 2, midY - 5 / scale);
-        ctx.scale(1, -1);
-        ctx.fillStyle = '#dc2626';
-        ctx.font = `${10 / scale}px system-ui`;
-        ctx.fillText(`${seamDist}cm`, 0, 0);
-        ctx.restore();
-
-        // 绘制连接线
-        ctx.setLineDash([]);
-        ctx.strokeStyle = '#94a3b8';
-        ctx.lineWidth = 0.5 / scale;
         
-        [minY, midY, maxY].forEach(y => {
-            ctx.beginPath();
-            ctx.moveTo(maxX, y);
-            ctx.lineTo(maxX + seamDist, y);
-            ctx.stroke();
-        });
+        // 端点竖线
+        ctx.lineWidth = 2 / scale;
+        ctx.beginPath();
+        ctx.moveTo(maxX, minY); ctx.lineTo(maxX + seamDist, minY);
+        ctx.moveTo(maxX, maxY); ctx.lineTo(maxX + seamDist, maxY);
+        ctx.stroke();
+
+        // 缝份宽度文字 - 带背景
+        ctx.save();
+        ctx.translate(maxX + seamDist / 2, midY - 10 / scale);
+        ctx.scale(1, -1);
+        
+        const seamFontSize = Math.max(14, 14 / scale);
+        ctx.font = `bold ${seamFontSize}px system-ui`;
+        const seamText = `${seamDist} cm`;
+        const seamTextWidth = ctx.measureText(seamText).width;
+        
+        // 白色背景
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fillRect(-seamTextWidth/2 - 4, -seamFontSize + 2, seamTextWidth + 8, seamFontSize + 4);
+        
+        // 红色文字
+        ctx.fillStyle = '#dc2626';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(seamText, 0, 2);
+        ctx.restore();
     }
 
     ctx.setLineDash([]);
     ctx.restore();
 
-    // 底部信息文字
-    ctx.fillStyle = '#374151';
-    ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
+    // 底部信息文字 - 更大更醒目
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
 
     const infoText = `轮廓: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm | 缝份: ${pieceData?.seamAllowance || 0} cm`;
-    ctx.fillText(infoText, canvas.width / 2, canvas.height - 12);
+    
+    // 背景
+    const infoMetrics = ctx.measureText(infoText);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillRect(
+        canvas.width / 2 - infoMetrics.width / 2 - 8,
+        canvas.height - 26,
+        infoMetrics.width + 16,
+        24
+    );
+    
+    // 红色文字
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 8);
 
-    // 图例
+    // 图例 - 更大更清晰
     ctx.textAlign = 'left';
-    ctx.font = '10px system-ui, -apple-system, sans-serif';
+    ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
     
     let legendX = 10;
     const legendY = 18;
