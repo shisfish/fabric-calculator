@@ -6,7 +6,7 @@ FROM node:20-slim AS frontend-builder
 WORKDIR /frontend
 
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci --prefer-offline
 
 COPY build-frontend.js ./
 COPY static/js/cad/ ./static/js/cad/
@@ -37,6 +37,8 @@ RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.
     apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgl1 \
+        nodejs \
+        npm \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY requirements.txt .
@@ -45,6 +47,10 @@ RUN pip install \
     -r requirements.txt \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --no-compile
+
+RUN npm install -g tsx \
+    && npm cache clean --force \
+    && rm -rf /root/.npm
 
 COPY . .
 
