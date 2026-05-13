@@ -28,10 +28,7 @@ example/
 # 🔴 1.4G 参考资料目录 - 必须排除
 reference/
 
-# 前端源码 (Docker 中从 builder stage 复制 dist)
-static/js/cad/*.tsx
-static/js/cad/*.ts
-static/js/cad/tsconfig.json
+# 旧 bundle.js (builder 会重新生成)
 static/js/cad/bundle.js
 
 # Python 缓存
