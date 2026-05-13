@@ -196,52 +196,26 @@ export class TshirtPatternGenerator {
     );
 
     // =========================
-    // Front sleeve cap
+    // Front sleeve cap (前袖山：更剧烈的S曲线)
     // =========================
+    // 上段：从顶点出来，先保持水平再向下突起
+    points.frontTopCp1 = new Point(bW * 0.18, 0);            // 顶点处保持水平
+    points.frontTopCp2 = new Point(bW * 0.35, -cH * 0.05);   // 向上微弹，制造“凸”感
 
-    points.frontTopCp1 = new Point(
-      bW * 0.10,
-      cH * 0.02
-    );
-
-    points.frontTopCp2 = new Point(
-      bW * 0.22,
-      cH * 0.18
-    );
-
-    points.frontBottomCp1 = new Point(
-      bW * 0.36,
-      cH * 0.62
-    );
-
-    points.frontBottomCp2 = new Point(
-      bW * 0.48,
-      cH * 0.82
-    );
+    // 下段：进入腋下，强制向内收缩，制造“凹”感
+    points.frontBottomCp1 = new Point(bW * 0.25, cH * 0.75); // 向内压，制造凹陷
+    points.frontBottomCp2 = new Point(bW * 0.40, cH);        // 水平进入腋下点
 
     // =========================
-    // Back sleeve cap
+    // Back sleeve cap (后袖山：较平缓的S曲线)
     // =========================
+    // 上段：后山要更饱满，凸起更明显
+    points.backTopCp1 = new Point(-bW * 0.18, 0);
+    points.backTopCp2 = new Point(-bW * 0.38, -cH * 0.02);   // 微隆起
 
-    points.backTopCp1 = new Point(
-      -bW * 0.12,
-      cH * 0.04
-    );
-
-    points.backTopCp2 = new Point(
-      -bW * 0.24,
-      cH * 0.14
-    );
-
-    points.backBottomCp1 = new Point(
-      -bW * 0.40,
-      cH * 0.54
-    );
-
-    points.backBottomCp2 = new Point(
-      -bW * 0.52,
-      cH * 0.82
-    );
+    // 下段：后腋下也要有轻微内凹
+    points.backBottomCp1 = new Point(-bW * 0.30, cH * 0.70); // 向内收
+    points.backBottomCp2 = new Point(-bW * 0.45, cH);        // 水平进入腋下
 
     // =========================
     // Build path
