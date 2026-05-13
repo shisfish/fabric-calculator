@@ -128,69 +128,46 @@ export class TshirtPatternGenerator {
     const neckD = fp.neckDepth;
     const shoulderW = fp.shoulderWidth;
     const armholeD = fp.armholeDepth;
+    const hemW = fp.hemWidth || W * 0.98;
 
-    points.cfHps = new Point(0, 0);
     points.cfNeck = new Point(0, neckD);
-    points.cfWaist = new Point(0, L * 0.58);
-    points.cfHem = new Point(0, L + fp.hemExtension);
+    
+    points.neckEnd = new Point(neckW, 0);
+    
+    const shoulderSlopeRad = (fp.shoulderSlope || 12) * Math.PI / 180;
+    const shoulderDrop = Math.tan(shoulderSlopeRad) * (shoulderW - neckW);
+    points.shoulder = new Point(shoulderW, shoulderDrop);
+    
+    points.armholeEnd = new Point(W, shoulderDrop + armholeD);
+    
+    points.sideBottom = new Point(W, L + (fp.hemExtension || 0));
+    
+    points.hemEnd = new Point(hemW, L);
 
-    points.neck = new Point(neckW, 0);
+    const neckCpX = neckW * 0.5;
+    const neckCpY = -neckD * 0.625;
+    points.neckCp = new Point(neckCpX, neckCpY);
+    
+    const armholeCpX = W - (W - shoulderW) * 0.35;
+    const armholeCpY = shoulderDrop + armholeD * 0.38;
+    points.armholeCp = new Point(armholeCpX, armholeCpY);
+    
+    const hemCpX = hemW * 0.75;
+    const hemCpY = L + (fp.hemExtension || 0) * 1.5;
+    points.hemCp = new Point(hemCpX, hemCpY);
+
+    points.cfHem = new Point(0, L);
     points.hps = new Point(neckW, 0);
-
-    const shoulderDrop = Math.tan((fp.shoulderSlope || 12) * Math.PI / 180) * shoulderW;
-    points.shoulder = new Point(shoulderW, -shoulderDrop);
-
-    points.cfArmhole = new Point(0, shoulderDrop + armholeD);
-    points.armhole = new Point(W, shoulderDrop + armholeD);
-
-    points.armholePitch = new Point(
-      fp.armholePitchX || shoulderW * 0.58,
-      shoulderDrop + armholeD * 0.38
-    );
-
-    points.waist = new Point(W, L * 0.56);
-    points.hem = new Point(W, L + fp.hemExtension);
-
-    const frontNeckCp1X = neckW * 0.5;
-    points.neckCp2 = new Point(neckW * 0.9, neckD * 0.65);
-    points.cfNeckCp1 = new Point(frontNeckCp1X, neckD * 0.9);
-
-    points.shoulderCp1 = new Point(
-      shoulderW * 0.88,
-      -shoulderDrop * 0.8
-    );
-    points.armholePitchCp1 = new Point(
-      points.armholePitch.x,
-      points.armholePitch.y + (points.armhole.y - points.armholePitch.y) * 0.35
-    );
-    points.armholePitchCp2 = new Point(
-      points.armholePitch.x,
-      points.shoulder.y + (points.armholePitch.y - points.shoulder.y) * 0.28
-    );
-
-    const armholeMidX = points.armholePitch.x + (points.armhole.x - points.armholePitch.x) * 0.42;
-    const armholeMidY = points.armhole.y - (points.armhole.y - points.armholePitch.y) * 0.12;
-    points.armholeHollow = new Point(armholeMidX, armholeMidY);
-    points.armholeCp2 = new Point(points.armhole.x - W * 0.07, points.armhole.y);
-    points.armholeHollowCp1 = new Point(
-      points.armholeHollow.x + 2,
-      points.armholeHollow.y - (points.armhole.y - points.armholeHollow.y) * 0.45
-    );
-    points.armholeHollowCp2 = new Point(
-      points.armholeHollow.x - (points.armholeHollow.x - points.armholePitch.x) * 0.32,
-      points.armholeHollow.y + (points.armholeHollow.y - points.armholePitch.y) * 0.38
-    );
+    points.cfHps = new Point(0, 0);
 
     const path = new Path()
-      .move(points.cfHem)
-      .line(points.hem)
-      .line(points.armhole)
-      .curve(points.armholeCp2, points.armholeHollowCp1, points.armholeHollow)
-      .curve(points.armholeHollowCp2, points.armholePitchCp1, points.armholePitch)
-      .curve(points.armholePitchCp2, points.shoulderCp1, points.shoulder)
-      .line(points.neck)
-      .curve(points.neckCp2, points.cfNeckCp1, points.cfNeck)
-      .line(points.cfHem)
+      .move(points.cfNeck)
+      .quad(points.neckCp, points.neckEnd)
+      .line(points.shoulder)
+      .quad(points.armholeCp, points.armholeEnd)
+      .line(points.sideBottom)
+      .quad(points.hemCp, points.hemEnd)
+      .line(points.cfNeck)
       .close();
 
     path.attr('class', 'fabric');
@@ -204,7 +181,7 @@ export class TshirtPatternGenerator {
         start: new Point(8, points.cfNeck.y + 10),
         end: new Point(8, points.cfHem.y - 10),
       },
-      notches: [points.armholePitch],
+      notches: [points.shoulder],
       cutCount: 1,
       onFold: false,
     };

@@ -8,9 +8,9 @@ const params = GarmentMeasurementAdapter.adapt({
   front: {
     chestWidth: 59,
     bodyLength: 72,
-    shoulderWidth: 25,
+    shoulderWidth: 24,
     neckWidth: 18,
-    neckDrop: 8.5,
+    neckDrop: 8,
     armholeDepth: 26
   },
   back: {

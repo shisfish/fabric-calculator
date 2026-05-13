@@ -52,6 +52,7 @@ export interface FrontPanelParams {
   armholeDepth: number;
   armholePitchX: number;
   hemExtension: number;
+  hemWidth?: number;
 }
 
 export interface SleeveParams {
