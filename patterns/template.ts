@@ -1,13 +1,44 @@
 import { Point, Path } from '../geometry/index.js';
 
 export interface FrontPatternParams {
-  chestWidth: number;
-  bodyLength: number;
-  shoulderWidth: number;
-  neckWidth: number;
-  armholeDepth?: number;
-  frontNeckDepth?: number;
+  chestWidth: number;       // 成衣平铺胸宽
+  bodyLength: number;       // 衣长
+  shoulderWidth: number;    // 单边肩宽（半肩）
+  neckWidth: number;        // 领宽
+  armholeDepth?: number;    // 袖窿深
+  frontNeckDepth?: number;  // 前领深
 }
+
+/**
+ * 工业T恤前片（半片）
+ *
+ * 结构：
+ *
+ * 前中领口
+ *   ↓
+ * 领口Bezier
+ *   ↓
+ * 肩线
+ *   ↓
+ * 袖窿Bezier
+ *   ↓
+ * 侧缝
+ *   ↓
+ * 下摆
+ *   ↓
+ * 前中线
+ *   ↓
+ * 闭合
+ *
+ * 固定拓扑：
+ *
+ * M Q L C L L Z
+ *
+ * 注意：
+ * - 这是“半片”
+ * - x=0 永远是前中折线(FOLD)
+ * - 不允许左右对称乱闭合
+ */
 
 export class FrontPatternGenerator {
 
@@ -22,25 +53,51 @@ export class FrontPatternGenerator {
       frontNeckDepth = neckWidth * 0.45
     } = params;
 
+    /**
+     * 半胸宽
+     */
     const halfChest = chestWidth / 2;
+
+    /**
+     * 肩斜
+     * 工业T恤常见：2cm ~ 4cm
+     */
     const shoulderDrop = 3;
 
+    /**
+     * =========================
+     * 关键点
+     * =========================
+     */
+
+    // 前中领点
     const neckStart = new Point(0, 0);
 
+    // 领口Bezier控制点
     const neckCp = new Point(
       neckWidth * 0.45,
       0
     );
 
+    // 领肩点
     const neckEnd = new Point(
       neckWidth,
       frontNeckDepth
     );
 
+    // 肩点
     const shoulderEnd = new Point(
       shoulderWidth,
       shoulderDrop
     );
+
+    /**
+     * 袖窿
+     *
+     * 核心：
+     * - 先外扩
+     * - 再下收
+     */
 
     const armholeCp1 = new Point(
       shoulderWidth + (halfChest - shoulderWidth) * 0.15,
@@ -52,28 +109,54 @@ export class FrontPatternGenerator {
       armholeDepth * 0.72
     );
 
+    // 腋下点
     const armholeBottom = new Point(
       halfChest,
       armholeDepth
     );
 
+    // 侧缝底部
     const sideBottom = new Point(
       halfChest,
       bodyLength
     );
 
+    // 前中下摆
     const hemFold = new Point(
       0,
       bodyLength
     );
 
+    /**
+     * =========================
+     * Path
+     * =========================
+     */
+
     const path = new Path()
+      // 前中领口
       .move(neckStart)
+
+      // 前领口Bezier
       .quad(neckCp, neckEnd)
+
+      // 肩线
       .line(shoulderEnd)
-      .curve(armholeCp1, armholeCp2, armholeBottom)
+
+      // 袖窿Bezier
+      .curve(
+        armholeCp1,
+        armholeCp2,
+        armholeBottom
+      )
+
+      // 侧缝
       .line(sideBottom)
+
+      // 下摆
       .line(hemFold)
+
+      // 闭合
       .close();
 
     path.attr('class', 'fabric front-panel');
@@ -88,27 +171,36 @@ export class FrontPatternGenerator {
     let d = '';
 
     for (const op of path.ops) {
+
       switch (op.type) {
+
         case 'move':
           d += `M ${op.to!.x} ${op.to!.y} `;
           break;
+
         case 'line':
           d += `L ${op.to!.x} ${op.to!.y} `;
           break;
+
         case 'quad':
           d += `Q ${op.cp1!.x} ${op.cp1!.y} ${op.to!.x} ${op.to!.y} `;
           break;
+
         case 'curve':
           d += `C ${op.cp1!.x} ${op.cp1!.y},
                   ${op.cp2!.x} ${op.cp2!.y},
                   ${op.to!.x} ${op.to!.y} `;
           break;
+
         case 'close':
           d += `Z`;
           break;
       }
     }
 
+    /**
+     * 留白
+     */
     const width = params.chestWidth;
     const height = params.bodyLength + 10;
 
@@ -117,6 +209,7 @@ export class FrontPatternGenerator {
   xmlns="http://www.w3.org/2000/svg"
   viewBox="-5 -5 ${width + 15} ${height + 15}"
 >
+  <!-- 网格 -->
   <defs>
     <pattern
       id="grid"
@@ -139,6 +232,7 @@ export class FrontPatternGenerator {
     fill="url(#grid)"
   />
 
+  <!-- 前中折线 -->
   <line
     x1="0"
     y1="0"
@@ -149,6 +243,7 @@ export class FrontPatternGenerator {
     stroke-width="0.5"
   />
 
+  <!-- 裁片 -->
   <path
     d="${d}"
     fill="rgba(0,120,255,0.08)"
@@ -157,45 +252,6 @@ export class FrontPatternGenerator {
   />
 
 </svg>
-    `;
-  }
-
-  static getTemplateStructure(): string {
-    return `
-工业服装前片（半片结构）
-
-固定拓扑: M Q L C L L Z (7段)
-
-结构说明:
-┌─────────────────────────────────────────────┐
-│ [0] M neckStart         (前中领点)          │ ← x=0, 前中折线起点
-│ [1] Q neckCp → neckEnd   (领口Bezier)       │ ← 二次曲线
-│ [2] L shoulderEnd        (肩线)             │ ← 直线
-│ [3] C cp1+cp2 → bottom   (袖窿三次Bezier)   │ ← 三次曲线
-│ [4] L sideBottom         (侧缝)             │ ← 直线(垂直/微斜)
-│ [5] L hemFold            (下摆)             │ ← 直线(回到x=0)
-│ [6] Z                    (闭合)             │ ← 回到neckStart
-└─────────────────────────────────────────────┘
-
-半片规则:
-- x=0 永远是前中折线(FOLD LINE)
-- 下摆左侧必须在 x=0 (hemFold)
-- 不允许下摆Bezier向中间收缩
-- 只绘制右半边轮廓
-
-参数缩放:
-- chestWidth → 影响halfChest, armholeBottom.x, sideBottom.x
-- bodyLength → 影响sideBottom.y, hemFold.y
-- shoulderWidth → 影响shoulderEnd.x
-- neckWidth → 影响neckEnd.x, neckCp.x
-- armholeDepth → 影响袖窿Y坐标
-- frontNeckDepth → 影响neckEnd.y
-
-禁止:
-- 左右混合结构
-- 中间收缩下摆
-- 对称假闭合
-- 矩形模拟裁片
     `;
   }
 }
