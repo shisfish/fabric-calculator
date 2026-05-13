@@ -3,197 +3,156 @@ import { Point, Path } from '../geometry/index.js';
 export interface FrontPatternParams {
   chestWidth: number;
   bodyLength: number;
+  shoulderWidth: number;
   neckWidth: number;
-  armholeDepth: number;
-  hemWidth?: number;
+  armholeDepth?: number;
   frontNeckDepth?: number;
-  shoulderWidth?: number;
-  shoulderSlope?: number;
 }
 
 interface TemplatePoint {
   x: number;
   y: number;
-  name: string;
-  type: 'anchor' | 'control';
 }
 
-const FRONT_TEMPLATE: TemplatePoint[] = [
-  { name: 'cfNeck', x: 0, y: 0, type: 'anchor' },
-  { name: 'neckCp1', x: 0.43, y: -0.35, type: 'control' },
-  { name: 'neckEnd', x: 0.43, y: -0.26, type: 'anchor' },
-  { name: 'shoulderCp1', x: 0.78, y: -0.15, type: 'control' },
-  { name: 'shoulderEnd', x: 0.41, y: 0.28, type: 'anchor' },
-  { name: 'armholeCp', x: 0.27, y: 0.47, type: 'control' },
-  { name: 'armholeBottom', x: 1.0, y: 2.5, type: 'anchor' },
-  { name: 'sideBottom', x: 1.0, y: 7.78, type: 'anchor' },
-  { name: 'hemCp1', x: 0.86, y: 8.05, type: 'control' },
-  { name: 'hemMid', x: 0.52, y: 8.05, type: 'anchor' },
-  { name: 'hemCp2', x: 0.17, y: 8.05, type: 'control' },
-  { name: 'leftBottom', x: 0, y: 7.78, type: 'anchor' }
-];
+interface ScaledPoints {
+  neckLeft: Point;
+  neckCurveControl: Point;
+  neckCenter: Point;
+  shoulderEnd: Point;
+  armholeControl1: Point;
+  armholeControl2: Point;
+  armholeBottom: Point;
+  sideBottom: Point;
+  hemCurveControl: Point;
+  hemCenter: Point;
+  hemLeftControl: Point;
+  leftBottom: Point;
+}
+
+const BASE_TEMPLATE = {
+  chestWidth: 58,
+  bodyLength: 72,
+  shoulderWidth: 24,
+  neckWidth: 18,
+  armholeDepth: 26,
+  frontNeckDepth: 8.5
+};
+
+const BASE_POINTS: Record<string, TemplatePoint> = {
+  neckLeft: { x: 0, y: 8.5 },
+  neckCurveControl: { x: 4.5, y: 4.2 },
+  neckCenter: { x: 9, y: 5 },
+  shoulderEnd: { x: 12, y: 3 },
+  armholeControl1: { x: 16, y: 10 },
+  armholeControl2: { x: 22, y: 18 },
+  armholeBottom: { x: 29, y: 26 },
+  sideBottom: { x: 29, y: 72 },
+  hemCurveControl: { x: 22, y: 73.5 },
+  hemCenter: { x: 15, y: 74 },
+  hemLeftControl: { x: 7, y: 72.5 },
+  leftBottom: { x: 0, y: 72 }
+};
 
 export class FrontPatternGenerator {
   static generate(params: FrontPatternParams): Path {
-    const {
-      chestWidth,
-      bodyLength,
-      neckWidth,
-      armholeDepth,
-      hemWidth = chestWidth,
-      frontNeckDepth = neckWidth * 0.47,
-      shoulderWidth = chestWidth * 0.41,
-      shoulderSlope = 3
-    } = params;
-
-    const scaleX = chestWidth / 58;
-    const scaleY = bodyLength / 72;
-    const scaleNeck = neckWidth / 18;
-    const scaleArmhole = armholeDepth / 26;
-
-    const points = this.interpolateTemplate(FRONT_TEMPLATE, {
-      scaleX,
-      scaleY,
-      scaleNeck,
-      scaleArmhole,
-      chestWidth,
-      bodyLength,
-      neckWidth,
-      armholeDepth,
-      hemWidth,
-      frontNeckDepth,
-      shoulderWidth,
-      shoulderSlope
-    });
+    const points = this.scalePoints(params);
 
     const path = new Path()
-      .move(points.cfNeck)
-      .quad(points.neckCp1, points.neckEnd)
-      .quad(points.shoulderCp1, points.shoulderEnd)
-      .quad(points.armholeCp, points.armholeBottom)
+      .move(points.neckLeft)
+      .quad(points.neckCurveControl, points.neckCenter)
+      .line(points.shoulderEnd)
+      .curve(points.armholeControl1, points.armholeControl2, points.armholeBottom)
       .line(points.sideBottom)
-      .quad(points.hemCp1, points.hemMid)
-      .quad(points.hemCp2, points.leftBottom)
-      .line(points.cfNeck)
+      .quad(points.hemCurveControl, points.hemCenter)
+      .quad(points.hemLeftControl, points.leftBottom)
       .close();
 
     path.attr('class', 'fabric front-panel');
     return path;
   }
 
-  private static interpolateTemplate(
-    template: TemplatePoint[],
-    scales: {
-      scaleX: number;
-      scaleY: number;
-      scaleNeck: number;
-      scaleArmhole: number;
-      chestWidth: number;
-      bodyLength: number;
-      neckWidth: number;
-      armholeDepth: number;
-      hemWidth: number;
-      frontNeckDepth: number;
-      shoulderWidth: number;
-      shoulderSlope: number;
-    }
-  ): Record<string, Point> {
-    const points: Record<string, Point> = {};
+  private static scalePoints(params: FrontPatternParams): ScaledPoints {
     const {
-      scaleX,
-      scaleY,
-      scaleNeck,
-      scaleArmhole,
-      chestWidth,
-      bodyLength,
-      neckWidth,
-      armholeDepth,
-      hemWidth,
-      frontNeckDepth,
-      shoulderWidth,
-      shoulderSlope
-    } = scales;
+      chestWidth = BASE_TEMPLATE.chestWidth,
+      bodyLength = BASE_TEMPLATE.bodyLength,
+      shoulderWidth = BASE_TEMPLATE.shoulderWidth,
+      neckWidth = BASE_TEMPLATE.neckWidth,
+      armholeDepth = BASE_TEMPLATE.armholeDepth,
+      frontNeckDepth = BASE_TEMPLATE.frontNeckDepth
+    } = params;
+
+    const scaleX = chestWidth / BASE_TEMPLATE.chestWidth;
+    const scaleY = bodyLength / BASE_TEMPLATE.bodyLength;
+    const scaleShoulder = shoulderWidth / BASE_TEMPLATE.shoulderWidth;
+    const scaleNeck = neckWidth / BASE_TEMPLATE.neckWidth;
+    const scaleArmhole = armholeDepth / BASE_TEMPLATE.armholeDepth;
+    const scaleNeckDepth = frontNeckDepth / BASE_TEMPLATE.frontNeckDepth;
 
     const halfChest = chestWidth / 2;
-    const halfNeck = neckWidth / 2;
     const halfShoulder = shoulderWidth / 2;
-    const halfHem = hemWidth / 2;
+    const halfNeck = neckWidth / 2;
 
-    const shoulderDrop = Math.tan(shoulderSlope * Math.PI / 180) * (halfShoulder - halfNeck);
+    return {
+      neckLeft: new Point(
+        0,
+        frontNeckDepth
+      ),
 
-    for (const tp of template) {
-      let x: number, y: number;
+      neckCurveControl: new Point(
+        halfNeck * 0.5,
+        frontNeckDepth - frontNeckDepth * 0.5
+      ),
 
-      switch (tp.name) {
-        case 'cfNeck':
-          x = 0;
-          y = frontNeckDepth;
-          break;
+      neckCenter: new Point(
+        halfNeck,
+        frontNeckDepth * 0.6
+      ),
 
-        case 'neckCp1':
-          x = halfNeck * 0.5;
-          y = frontNeckDepth - frontNeckDepth * 0.35;
-          break;
+      shoulderEnd: new Point(
+        halfShoulder,
+        Math.tan(3 * Math.PI / 180) * (halfShoulder - halfNeck)
+      ),
 
-        case 'neckEnd':
-          x = halfNeck;
-          y = frontNeckDepth * 0.26;
-          break;
+      armholeControl1: new Point(
+        halfNeck + (halfChest - halfNeck) * 0.35,
+        Math.tan(3 * Math.PI / 180) * (halfShoulder - halfNeck) + armholeDepth * 0.28
+      ),
 
-        case 'shoulderCp1':
-          x = halfNeck + (halfShoulder - halfNeck) * 0.7;
-          y = frontNeckDepth * 0.15;
-          break;
+      armholeControl2: new Point(
+        halfChest - (halfChest - halfShoulder) * 0.15,
+        Math.tan(3 * Math.PI / 180) * (halfShoulder - halfNeck) + armholeDepth * 0.62
+      ),
 
-        case 'shoulderEnd':
-          x = halfShoulder;
-          y = shoulderDrop;
-          break;
+      armholeBottom: new Point(
+        halfChest,
+        Math.tan(3 * Math.PI / 180) * (halfShoulder - halfNeck) + armholeDepth
+      ),
 
-        case 'armholeCp':
-          x = halfChest - (halfChest - halfShoulder) * 0.27;
-          y = shoulderDrop + armholeDepth * 0.47;
-          break;
+      sideBottom: new Point(
+        halfChest,
+        bodyLength
+      ),
 
-        case 'armholeBottom':
-          x = halfChest;
-          y = shoulderDrop + armholeDepth;
-          break;
+      hemCurveControl: new Point(
+        halfChest * 0.76,
+        bodyLength + bodyLength * 0.02
+      ),
 
-        case 'sideBottom':
-          x = halfChest;
-          y = bodyLength;
-          break;
+      hemCenter: new Point(
+        halfChest * 0.52,
+        bodyLength + bodyLength * 0.028
+      ),
 
-        case 'hemCp1':
-          x = halfHem * 0.86;
-          y = bodyLength + bodyLength * 0.004;
-          break;
+      hemLeftControl: new Point(
+        halfChest * 0.24,
+        bodyLength + bodyLength * 0.007
+      ),
 
-        case 'hemMid':
-          x = halfHem * 0.52;
-          y = bodyLength + bodyLength * 0.004;
-          break;
-
-        case 'hemCp2':
-          x = halfHem * 0.17;
-          y = bodyLength + bodyLength * 0.004;
-          break;
-
-        case 'leftBottom':
-          x = 0;
-          y = bodyLength;
-          break;
-
-        default:
-          x = tp.x * chestWidth * scaleX;
-          y = tp.y * bodyLength * scaleY;
-      }
-
-      points[tp.name] = new Point(x, y);
-    }
-
-    return points;
+      leftBottom: new Point(
+        0,
+        bodyLength
+      )
+    };
   }
 
   static generateSVG(params: FrontPatternParams): string {
@@ -214,6 +173,11 @@ export class FrontPatternGenerator {
             d += `Q ${op.cp1.x.toFixed(2)} ${op.cp1.y.toFixed(2)} ${op.to.x.toFixed(2)} ${op.to.y.toFixed(2)} `;
           }
           break;
+        case 'curve':
+          if (op.cp1 && op.cp2 && op.to) {
+            d += `C ${op.cp1.x.toFixed(2)} ${op.cp1.y.toFixed(2)} ${op.cp2.x.toFixed(2)} ${op.cp2.y.toFixed(2)} ${op.to.x.toFixed(2)} ${op.to.y.toFixed(2)} `;
+          }
+          break;
         case 'close':
           d += 'Z ';
           break;
@@ -227,43 +191,39 @@ export class FrontPatternGenerator {
 
   static getTemplateStructure(): string {
     return `
-前片模板结构 (5段):
+前片模板结构 (基于 example/front_template_point.ts):
 
-1. 领口曲线 (neckLeft → neckCenter)
-   Q neckCp1 neckEnd
-   - 控制点在领口上方
-   - 形成圆弧领口
+固定拓扑: M Q L C L Q Q Z (8段)
 
-2. 肩线过渡 (neckCenter → shoulderEnd)
-   Q shoulderCp1 shoulderEnd
-   - 从领宽点到肩点
-   - 包含肩斜角度
+关键点位 (12个):
+┌─────────────────────────────────────────────┐
+│ [0] M neckLeft                              │ ← 前中领点
+│ [1] Q neckCurveControl → neckCenter         │ ← 领口Bezier (二次)
+│ [2] L shoulderEnd                           │ ← 肩线 (直线)
+│ [3] C armholeControl1+2 → armholeBottom     │ ← 袖窿Bezier (三次)
+│ [4] L sideBottom                            │ ← 侧缝 (直线)
+│ [5] Q hemCurveControl → hemCenter           │ ← 下摆Bezier (右)
+│ [6] Q hemLeftControl → leftBottom           │ ← 下摆Bezier (左)
+│ [7] Z                                       │ ← 闭合
+└─────────────────────────────────────────────┘
 
-3. 袖窿曲线 (shoulderEnd → armholeBottom)
-   Q armholeCp armholeBottom
-   - 外凸的袖窿弧线
-   - 适配袖山曲线
-
-4. 侧缝 (armholeBottom → sideBottom)
-   L sideBottom
-   - 垂直或微斜直线
-   - 连接袖窿和下摆
-
-5. 下摆曲线 (sideBottom → leftBottom)
-   Q hemCp1 hemMid
-   Q hemCp2 leftBottom
-   - 微弧下摆
-   - 自然过渡
+参数缩放规则:
+- chestWidth → 影响armholeBottom.x, sideBottom.x
+- bodyLength → 影响sideBottom.y, hem*.y, leftBottom.y
+- shoulderWidth → 影响shoulderEnd.x
+- neckWidth → 影响neckCenter.x, neckCurveControl.x
 
 禁止:
-- rectangle
-- random polygon
-- fake path
+- 修改path拓扑 (M Q L C L Q Q Z不可变)
+- 新增/删除path段
+- 随机生成Bezier控制点
+- 自由生成polygon
+- 使用矩形模拟裁片
 
 必须:
-- 基于模板点位
-- 仅允许参数缩放
-- 控制点微调
+- 基于模板12个关键点
+- 仅根据尺寸参数等比/比例缩放
+- 保持工业CAD几何结构
     `;
   }
 }
