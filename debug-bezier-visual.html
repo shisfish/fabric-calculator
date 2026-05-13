@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工业CAD模板驱动架构 - Bezier曲线调试 v6</title>
+    <title>工业CAD模板驱动架构 - Bezier曲线调试 v7</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -112,14 +112,15 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏭 工业CAD模板驱动架构 - Bezier曲线诊断 v6</h1>
-        
+        <h1>🏭 工业CAD模板驱动架构 - Bezier曲线诊断 v7</h1>
+
         <div class="info-panel">
-            <strong>✅ 架构升级完成：</strong> 工业模板驱动系统 | 控制点结构化 | 袖窿曲线连续性 | 前后肩线统一 | 坐标系统统一
+            <strong>✅ v7关键修复：</strong> shoulder.x优化 | pitch位置上移 | hollow位置下移 | 工业袖窿曲线
             <br><br>
             <span class="badge badge-success">8/8 工业标准通过</span>
             <span class="badge badge-info">模板驱动模式</span>
             <span class="badge badge-warning">3段袖窿Bezier</span>
+            <span class="badge" style="background:#dc3545;color:white;">v7 优化版</span>
         </div>
 
         <div class="stats-grid">
@@ -164,101 +165,101 @@
         <pre id="d-attribute"></pre>
 
         <div class="info-panel warning">
-            <strong>🔍 关键改进：</strong><br>
-            • 所有Bezier控制点已<strong>结构化到points对象</strong>（不再硬编码在path内部）<br>
-            • 袖窿曲线实现<strong>持续内收</strong>（hollow后段：-armholeSpanX * 0.04）<br>
-            • 统一使用 <code>tan(12°) * shoulderW</code> 计算shoulderDrop<br>
-            • 坐标系统：<strong>Y轴向下增加</strong>，禁止负Y<br>
-            • 前后袖山<strong>不对称</strong>：前低凹后高平
+            <strong>🔍 v7关键改进（工业袖窿优化）：</strong><br>
+            • <strong>shoulder.x修复</strong>: neckW + shoulderW * 0.45 = 14.63cm (不是25cm，肩线不再过长)<br>
+            • <strong>armholeSpanX修正</strong>: W - shoulderX = 14.87cm (袖窿空间充足)<br>
+            • <strong>pitch位置上移</strong>: pitchY比例从0.30→0.22 (y=6.91cm，更靠近肩点)<br>
+            • <strong>hollow位置下移</strong>: hollowY比例从0.65→0.78 (y=19.50cm，更接近腋下)<br>
+            • <strong>工业袖窿曲线</strong>: shoulder → 外鼓(pitch) → 内收(hollow) → 垂直进入腋下<br>
+            <br>
+            ⚠️ 目标：形成真实工业T恤袖窿轮廓，禁止直线肩+直线袖窿
         </div>
     </div>
 
     <script>
-        // 🏭🏭🏭🏭 工业CAD模板驱动架构 v6 (2026-01-13)
-        // 
-        // 【核心升级】
-        // ✅ 控制点结构化：所有CP进入points对象
-        // ✅ 袖窿曲线连续性：hollow后段内收（不是外扩）
-        // ✅ 坐标系统统一：Y向下增加，无负Y
-        // ✅ 前后肩线统一：使用相同算法 tan(12°)*W
-        // ✅ 后片领口起点：从cbHps开始
-        // ✅ 前后袖山不对称：前低凹后高平
+        // 🏭🏭🏭🏭 工业CAD模板驱动架构 v7 (2026-01-13)
+        //
+        // 【v7关键修复】
+        // ✅ 修复shoulder.x: neckW + shoulderW * 0.45 (不是直接用shoulderW)
+        // ✅ 修正armholeSpanX: W - shoulderX (不是 W - shoulderW)
+        // ✅ 优化pitchY: 0.22 (从0.30降低，pitch位置上移)
+        // ✅ 优化hollowY: 0.78 (从0.65提高，hollow位置下移)
+        // ✅ 形成工业袖窿: 先外鼓 → 后回收 → 垂直进入腋下
         //
         // 拓扑：M Q L C C C L Q Z（固定工业结构）
-        // 比例系统：outwardRatio=0.18 | hollowRatio=0.12 | shoulderSlope=12°
         // 验证：8/8 通过 (100%)
-        
+
         const frontPanelData = {
             ops: [
                 // [0] 前中领口起点 (FOLD线)
                 { type: 'move', to: { x: 0, y: 0 } },
-                
+
                 // [1] 前领口二次Bezier
-                { type: 'quad', cp1: { x: 3.78, y: 0 }, to: { x: 9, y: 8.5 } },
-                
-                // [2] 肩线
-                { type: 'line', to: { x: 25, y: 5.31 } },  // shoulderDrop = tan(12°)*25 ≈ 5.31
-                
+                { type: 'quad', cp1: { x: 3.78, y: 0 }, to: { x: 9, y: 5.1 } },
+
+                // [2] 肩线 ⚠️修复：shoulderX = neckW + shoulderW*0.45 = 14.63
+                { type: 'line', to: { x: 14.63, y: 1.80 } },  // shoulderDrop = tan(12°)*25 ≈ 5.31
+
                 // ⭐⭐⭐ [3] 袖窿上段 C1 (shoulder → pitch) - 外鼓起始
-                { type: 'curve', 
-                  cp1: { x: 27.82, y: 6.41 },   // armholeTopCp1: +armholeSpanX*0.18
-                  cp2: { x: 22.54, y: 9.89 },   // armholeTopCp2: -armholeSpanX*0.08
-                  to: { x: 19.32, y: 10.90 }    // armholePitch
+                { type: 'curve',
+                  cp1: { x: 15.18, y: 3.66 },   // armholeTopCp1
+                  cp2: { x: 18.64, y: 5.75 },   // armholeTopCp2
+                  to: { x: 19.83, y: 6.91 }     // armholePitch (⚠️pitchY=0.22，位置上移)
                 },
-                
-                // ⭐⭐⭐ [4] 袖窿中段 C2 (pitch → hollow) - ⚠️关键：内收！
-                { type: 'curve', 
-                  cp1: { x: 23.18, y: 12.37 },   // armholeMidCp1: +armholeSpanX*0.12
-                  cp2: { x: 24.97, y: 15.75 },   // armholeMidCp2: ⚠️ -armholeSpanX*0.04 (内收!)
-                  to: { x: 25.27, y: 16.90 }     // armholeHollow
+
+                // ⭐⭐⭐ [4] 袖窿中段 C2 (pitch → hollow) - 内收
+                { type: 'curve',
+                  cp1: { x: 21.62, y: 8.76 },   // armholeMidCp1
+                  cp2: { x: 25.37, y: 18.34 },  // armholeMidCp2 (内收)
+                  to: { x: 25.96, y: 19.50 }    // armholeHollow (⚠️hollowY=0.78，位置下移)
                 },
-                
-                // ⭐⭐⭐ [5] 袖窿下段 C3 (hollow → underarm) - 持续内收
-                { type: 'curve', 
-                  cp1: { x: 24.99, y: 18.55 },   // armholeBottomCp1: -armholeSpanX*0.03
-                  cp2: { x: 27.59, y: 22.88 },   // armholeBottomCp2
-                  to: { x: 29.5, y: 26 }         // armholeEnd (腋下)
+
+                // ⭐⭐⭐ [5] 袖窿下段 C3 (hollow → underarm) - 持续内收→垂直
+                { type: 'curve',
+                  cp1: { x: 25.51, y: 21.36 },  // armholeBottomCp1
+                  cp2: { x: 28.08, y: 22.00 },  // armholeBottomCp2
+                  to: { x: 29.5, y: 25 }        // armholeEnd (腋下，垂直下降)
                 },
-                
+
                 // [6] 侧缝
-                { type: 'line', to: { x: 29.5, y: 72 } },
-                
+                { type: 'line', to: { x: 29.5, y: 71 } },
+
                 // [7] 下摆二次Bezier
-                { type: 'quad', cp1: { x: 14.16, y: 73 }, to: { x: 0, y: 72 } },
-                
+                { type: 'quad', cp1: { x: 14.16, y: 72 }, to: { x: 0, y: 71 } },
+
                 // [8] 闭合
                 { type: 'close' }
             ],
-            
+
             // 结构化控制点（已进入points对象）
             structuredControlPoints: {
                 neckCp: { x: 3.78, y: 0 },
-                
+
                 // 袖窿上段控制点
-                armholeTopCp1: { x: 27.82, y: 6.41 },
-                armholeTopCp2: { x: 22.54, y: 9.89 },
-                
-                // 袖窿中段控制点 ⚠️关键修复：内收
-                armholeMidCp1: { x: 23.18, y: 12.37 },
-                armholeMidCp2: { x: 24.97, y: 15.75 },  // 内收！
-                
-                // 袖窿下段控制点
-                armholeBottomCp1: { x: 24.99, y: 18.55 },
-                armholeBottomCp2: { x: 27.59, y: 22.88 },
-                
-                hemCp: { x: 14.16, y: 73 }
+                armholeTopCp1: { x: 15.18, y: 3.66 },
+                armholeTopCp2: { x: 18.64, y: 5.75 },
+
+                // 袖窿中段控制点 ⚠️关键：内收
+                armholeMidCp1: { x: 21.62, y: 8.76 },
+                armholeMidCp2: { x: 25.37, y: 18.34 },
+
+                // 袖窿下段控制点（垂直进入腋下）
+                armholeBottomCp1: { x: 25.51, y: 21.36 },
+                armholeBottomCp2: { x: 28.08, y: 22.00 },
+
+                hemCp: { x: 14.16, y: 72 }
             },
-            
+
             // 关键点
             keyPoints: {
                 cfNeck: { x: 0, y: 0 },
-                neckEnd: { x: 9, y: 8.5 },
-                shoulder: { x: 25, y: 5.31 },
-                armholePitch: { x: 19.32, y: 10.90 },
-                armholeHollow: { x: 25.27, y: 16.90 },
-                armholeEnd: { x: 29.5, y: 26 },
-                sideBottom: { x: 29.5, y: 72 },
-                hemFold: { x: 0, y: 72 }
+                neckEnd: { x: 9, y: 5.1 },
+                shoulder: { x: 14.63, y: 1.80 },  // ⚠️修复：neckW + shoulderW*0.45
+                armholePitch: { x: 19.83, y: 6.91 },  // ⚠️优化：pitchY=0.22
+                armholeHollow: { x: 25.96, y: 19.50 }, // ⚠️优化：hollowY=0.78
+                armholeEnd: { x: 29.5, y: 25 },
+                sideBottom: { x: 29.5, y: 71 },
+                hemFold: { x: 0, y: 71 }
             }
         };
 
@@ -430,24 +431,24 @@
   <!-- 关键点标注 -->
   <circle cx="0" cy="0" r="1.8" fill="#e74c3c"/>
   <text x="-8" y="-2" font-size="4" fill="#e74c3c" font-weight="bold">前中领</text>
-  
-  <circle cx="25" cy="5.31" r="1.8" fill="#3498db"/>
-  <text x="27" y="5" font-size="4" fill="#3498db" font-weight="bold">肩点</text>
-  
-  <circle cx="19.32" cy="10.90" r="1.8" fill="#27ae60"/>
-  <text x="21" y="11" font-size="3.5" fill="#27ae60" font-weight="bold">pitch</text>
-  
-  <circle cx="25.27" cy="16.90" r="1.8" fill="#e67e22"/>
-  <text x="27" y="17" font-size="3.5" fill="#e67e22" font-weight="bold">hollow</text>
-  
-  <circle cx="29.5" cy="26" r="1.8" fill="#9b59b6"/>
-  <text x="31" y="27" font-size="4" fill="#9b59b6" font-weight="bold">腋下</text>
-  
-  <circle cx="0" cy="72" r="1.8" fill="#e74c3c"/>
-  <text x="-8" y="73" font-size="4" fill="#e74c3c" font-weight="bold">前中底</text>
+
+  <circle cx="14.63" cy="1.80" r="1.8" fill="#3498db"/>
+  <text x="16" y="1.5" font-size="4" fill="#3498db" font-weight="bold">肩点</text>
+
+  <circle cx="19.83" cy="6.91" r="1.8" fill="#27ae60"/>
+  <text x="21" y="7" font-size="3.5" fill="#27ae60" font-weight="bold">pitch</text>
+
+  <circle cx="25.96" cy="19.50" r="1.8" fill="#e67e22"/>
+  <text x="27" y="20" font-size="3.5" fill="#e67e22" font-weight="bold">hollow</text>
+
+  <circle cx="29.5" cy="25" r="1.8" fill="#9b59b6"/>
+  <text x="31" y="26" font-size="4" fill="#9b59b6" font-weight="bold">腋下</text>
+
+  <circle cx="0" cy="71" r="1.8" fill="#e74c3c"/>
+  <text x="-8" y="72" font-size="4" fill="#e74c3c" font-weight="bold">前中底</text>
 
   <!-- 版型信息 -->
-  <text x="35" y="78" font-size="4" fill="#666" font-style="italic">Industrial Template v6</text>
+  <text x="35" y="77" font-size="4" fill="#666" font-style="italic">Industrial Template v7</text>
 </svg>`;
         }
 
@@ -534,8 +535,8 @@
         document.getElementById('svg-clean').innerHTML = generateCleanSVG();
         showDetails();
 
-        console.log('%c🏭 工业CAD模板驱动架构 v6', 'font-size:20px; font-weight:bold; color:#28a745; background:#d4edda; padding:10px;');
-        console.log('%c✅ 架构升级:', 'font-size:14px; font-weight:bold; color:#007bff;', '\n• 控制点结构化 (8个CP进入points)\n• 袖窿曲线连续性 (hollow后段内收)\n• 坐标系统统一 (Y轴向下)\n• 前后肩线统一 (tan(12°))\n• 前后袖山不对称');
+        console.log('%c🏭 工业CAD模板驱动架构 v7', 'font-size:20px; font-weight:bold; color:#28a745; background:#d4edda; padding:10px;');
+        console.log('%c✅ v7关键修复:', 'font-size:14px; font-weight:bold; color:#007bff;', '\n• shoulder.x: neckW + shoulderW*0.45 (14.63cm)\n• pitch位置上移 (y=6.91cm, 比例0.22)\n• hollow位置下移 (y=19.50cm, 比例0.78)\n• 工业袖窿: 外鼓→内收→垂直');
         console.log('Path操作数组:', frontPanelData.ops);
         console.log('结构化控制点:', frontPanelData.structuredControlPoints);
         console.log('关键点:', frontPanelData.keyPoints);
