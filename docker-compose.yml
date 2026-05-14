@@ -37,6 +37,7 @@ services:
   # 面料计算器应用服务
   fabric-calculator:
     build: .
+    image: fabric-calculator:latest
     container_name: fabric-calculator
     restart: unless-stopped
     ports:
@@ -48,6 +49,8 @@ services:
       - TZ=Asia/Shanghai
       - FLASK_ENV=production
       - FABRIC_DATA_DIR=/opt/fabric-data
+      # CAD日志级别（debug显示完整调试日志，info只显示关键信息）
+      - CAD_LOG_LEVEL=debug
       # MySQL配置
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
