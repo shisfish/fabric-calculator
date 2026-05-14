@@ -2,6 +2,9 @@ import { Point, Path } from '../geometry/index.js';
 import { SeamAllowanceGenerator } from './SeamAllowanceGenerator.js';
 import { GarmentParams, BackPanelParams, FrontPanelParams, SleeveParams } from './GarmentMeasurementAdapter.js';
 import { SleeveCapGenerator } from './SleeveCapGenerator.js';
+import { createLogger } from '../utils/CADLogger.js';
+
+const logger = createLogger('TSHIRT-PATTERN');
 
 export interface PatternPiece {
   name: string;
@@ -218,11 +221,11 @@ export class TshirtPatternGenerator {
     const sL = Number(sl.sleeveLength);
     const cuW = Number(sl.cuffWidth);
 
-    console.error(`\n👕 袖子参数:`);
-    console.error(`   腋下半围(bicepsWidth): ${bW} cm`);
-    console.error(`   袖山高度(capHeight): ${cH} cm`);
-    console.error(`   袖长(sleeveLength): ${sL} cm`);
-    console.error(`   袖口半围(cuffWidth): ${cuW} cm`);
+    logger.debug('\n👕 袖子参数:');
+    logger.debug(`   腋下半围(bicepsWidth): ${bW} cm`);
+    logger.debug(`   袖山高度(capHeight): ${cH} cm`);
+    logger.debug(`   袖长(sleeveLength): ${sL} cm`);
+    logger.debug(`   袖口半围(cuffWidth): ${cuW} cm`);
 
     // 使用SleeveCapGenerator生成基于袖窿的可缝合袖山
     const sleeveResult = SleeveCapGenerator.generateFromArmhole(
@@ -237,19 +240,19 @@ export class TshirtPatternGenerator {
       0.5  // T-shirt ease: 0~1cm
     );
 
-    console.error(`\n📏 袖山长度匹配结果:`);
-    console.error(`   前袖窿长度: ${sleeveResult.frontArmholeLength.toFixed(2)} cm`);
-    console.error(`   后袖窿长度: ${sleeveResult.backArmholeLength.toFixed(2)} cm`);
-    console.error(`   目标袖山长度: ${sleeveResult.totalCapLength.toFixed(2)} cm (含ease=${sleeveResult.ease}cm)`);
-    console.error(`   实际前袖山: ${sleeveResult.frontCapLength.toFixed(2)} cm`);
-    console.error(`   实际后袖山: ${sleeveResult.backCapLength.toFixed(2)} cm`);
+    logger.debug('\n📏 袖山长度匹配结果:');
+    logger.debug(`   前袖窿长度: ${sleeveResult.frontArmholeLength.toFixed(2)} cm`);
+    logger.debug(`   后袖窿长度: ${sleeveResult.backArmholeLength.toFixed(2)} cm`);
+    logger.debug(`   目标袖山长度: ${sleeveResult.totalCapLength.toFixed(2)} cm (含ease=${sleeveResult.ease}cm)`);
+    logger.debug(`   实际前袖山: ${sleeveResult.frontCapLength.toFixed(2)} cm`);
+    logger.debug(`   实际后袖山: ${sleeveResult.backCapLength.toFixed(2)} cm`);
 
     const lengthDiff = Math.abs(sleeveResult.totalCapLength - (sleeveResult.frontArmholeLength + sleeveResult.backArmholeLength + sleeveResult.ease));
     
     if (lengthDiff <= 0.5) {
-      console.error(`   ✅ 长度匹配成功！误差=${lengthDiff.toFixed(2)}cm`);
+      logger.info(`   ✅ 长度匹配成功！误差=${lengthDiff.toFixed(2)}cm`);
     } else {
-      console.error(`   ⚠️ 长度差异: ${lengthDiff.toFixed(2)}cm (可接受范围±0.5cm)`);
+      logger.warn(`   ⚠️ 长度差异: ${lengthDiff.toFixed(2)}cm (可接受范围±0.5cm)`);
     }
 
     // 添加grainline和notches（如果还没有的话）

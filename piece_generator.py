@@ -369,34 +369,11 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
             cwd=base_dir
         )
 
-        # 打印调试信息（仅在出错时）
         if result.returncode != 0:
-            print(f"❌ TypeScript执行错误 (退出码: {result.returncode})")
-            print(f"   STDERR: {result.stderr[:500] if result.stderr else '(空)'}")
-            print(f"   STDOUT: {result.stdout[:200] if result.stdout else '(空)'}")
-            
-            # 尝试从stdout提取错误信息（如果有的话）
-            if result.stdout and result.stdout.strip():
-                try:
-                    error_data = json.loads(result.stdout.strip())
-                    if error_data.get('error'):
-                        raise Exception(f"TypeScript执行失败: {error_data.get('message', '未知错误')}\n详情: {error_data.get('details', '无')}")
-                except json.JSONDecodeError:
-                    pass  # 不是JSON格式的错误，继续使用原始错误
-            
-            raise Exception(f"排料计算失败: {result.stderr or '未知错误'}")
+            print(f"TypeScript执行错误: {result.stderr}")
+            raise Exception(f"排料计算失败: {result.stderr}")
 
-        # 检查输出是否为空
-        stdout_stripped = result.stdout.strip() if result.stdout else ''
-        
-        if not stdout_stripped:
-            raise Exception("TypeScript脚本未输出任何内容（可能存在运行时错误）")
-
-        data = json.loads(stdout_stripped)
-        
-        # 检查是否是错误响应
-        if data.get('error'):
-            raise Exception(f"CAD引擎错误: {data.get('message', '未知错误')}\n{data.get('details', '')}")
+        data = json.loads(result.stdout.strip())
 
         total_area_cm2 = data.get('totalArea', 0)
         used_area_cm2 = data.get('usedArea', 0)

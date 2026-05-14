@@ -1,4 +1,7 @@
 import { Point, Path } from '../geometry/index.js';
+import { createLogger } from '../utils/CADLogger.js';
+
+const logger = createLogger('SLEEVE-CAP');
 
 interface ArmholeCurve {
   start: Point;
@@ -121,11 +124,11 @@ export class SleeveCapGenerator {
     // 计算需要的长度比
     const lengthRatio = totalTargetLen / totalStraightDist;
     
-    console.error(`\n📊 长度分析:`);
-    console.error(`   目标总长度: ${totalTargetLen.toFixed(2)} cm`);
-    console.error(`   直线距离: ${totalStraightDist.toFixed(2)} cm`);
-    console.error(`   长度比: ${lengthRatio.toFixed(3)}`);
-    console.error(`   (需要曲线是直线的${lengthRatio.toFixed(2)}倍)`);
+    logger.debug('\n📊 长度分析:');
+    logger.debug(`   目标总长度: ${totalTargetLen.toFixed(2)} cm`);
+    logger.debug(`   直线距离: ${totalStraightDist.toFixed(2)} cm`);
+    logger.debug(`   长度比: ${lengthRatio.toFixed(3)}`);
+    logger.debug(`   (需要曲线是直线的${lengthRatio.toFixed(2)}倍)`);
 
     let iteration = 0;
     let outwardMultiplier = this.calculateInitialOutward(lengthRatio, bW);
@@ -207,7 +210,7 @@ export class SleeveCapGenerator {
       // 计算误差
       const error = Math.abs(actualTotalLen - totalTargetLen);
 
-      console.error(`  迭代 ${iteration + 1}: 总长度=${actualTotalLen.toFixed(2)}cm, 目标=${totalTargetLen.toFixed(2)}cm, 误差=${error.toFixed(2)}cm, multiplier=${currentOutwardMult.toFixed(3)}`);
+      logger.debug(`  迭代 ${iteration + 1}: 总长度=${actualTotalLen.toFixed(2)}cm, 目标=${totalTargetLen.toFixed(2)}cm, 误差=${error.toFixed(2)}cm, multiplier=${currentOutwardMult.toFixed(3)}`);
 
       if (error < minError) {
         minError = error;
@@ -225,7 +228,7 @@ export class SleeveCapGenerator {
 
       // 检查是否达到精度要求
       if (error <= 0.5) {
-        console.error(`  ✅ 达到精度要求！`);
+        logger.info(`  ✅ 达到精度要求！`);
         break;
       }
 
@@ -295,10 +298,10 @@ export class SleeveCapGenerator {
     // 转换为实际的outward值（相对于bicepWidth的比例）
     const initialOutward = halfBicep * baseOutwardRatio;
     
-    console.error(`\n🎯 初始outward计算:`);
-    console.error(`   长度比: ${lengthRatio}`);
-    console.error(`   基础比例: ${baseOutwardRatio}`);
-    console.error(`   初始outward: ${initialOutward.toFixed(2)} cm`);
+    logger.debug('\n🎯 初始outward计算:');
+    logger.debug(`   长度比: ${lengthRatio}`);
+    logger.debug(`   基础比例: ${baseOutwardRatio}`);
+    logger.debug(`   初始outward: ${initialOutward.toFixed(2)} cm`);
     
     return initialOutward;
   }
