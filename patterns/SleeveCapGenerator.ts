@@ -181,10 +181,10 @@ export class SleeveCapGenerator {
         .line(points.backAxilla)
         
         // 后袖山下段
-        .curve(backCap.lowerCp2, backCap.lowerCp1, backCap.pitchPoint)
-        
+        .curve(backCap.lowerCp1, backCap.lowerCp2, backCap.pitchPoint)
+
         // 后袖山上段
-        .curve(backCap.upperCp2, backCap.upperCp1, points.capTop)
+        .curve(backCap.upperCp1, backCap.upperCp2, points.capTop)
         
         .close();
 
@@ -232,21 +232,33 @@ export class SleeveCapGenerator {
         break;
       }
 
+      // 【自交保护】检测控制点是否越界
+      if (
+        Math.abs(frontCap.upperCp1.x) > (bW / 2) * 0.9 ||
+        Math.abs(backCap.upperCp1.x) > (bW / 2) * 0.9
+      ) {
+        logger.warn(`  ⚠️ 控制点越界，停止迭代以防止曲线自交`);
+        break;
+      }
+
       // 智能调整策略：根据误差大小动态调整步长
       const errorRatio = error / totalTargetLen; // 误差百分比
       
       if (actualTotalLen < totalTargetLen) {
         // 曲线太短，需要增加弯曲度
         if (errorRatio > 0.3) {
-          // 误差很大，大幅增加
-          outwardMultiplier *= 1.5;
+          // 误差很大，大幅增加（但限制增长速度）
+          outwardMultiplier *= 1.18;
         } else if (errorRatio > 0.15) {
           // 误差中等，中幅增加
-          outwardMultiplier *= 1.3;
+          outwardMultiplier *= 1.12;
         } else {
           // 误差较小，小幅增加
-          outwardMultiplier *= 1.15;
+          outwardMultiplier *= 1.08;
         }
+        
+        // 关键：限制outwardMultiplier不超过安全范围
+        outwardMultiplier = Math.min(outwardMultiplier, bW / 2 * 0.45);
       } else {
         // 曲线太长，需要减少弯曲度
         if (errorRatio > 0.3) {
@@ -335,12 +347,16 @@ export class SleeveCapGenerator {
 
     // Pitch point位置（前袖更低 - 工业标准42%）
     const pitchY = capHeight * 0.42;
-    const pitchX = halfBicep * 0.35 + outwardAbs * 0.15; // pitch点也随outward外移
+    const pitchX = Math.min(
+      halfBicep * 0.42,
+      halfBicep * 0.35 + outwardAbs * 0.08
+    ); // 限制pitch不越界
     const pitchPoint = new Point(pitchX, pitchY);
     points.frontPitch = pitchPoint;
 
-    // 使用绝对outward值直接设置控制点
-    const outward = outwardAbs;
+    // 使用绝对outward值，但限制最大值防止曲线翻折
+    const maxOutward = halfBicep * 0.45;
+    const outward = Math.min(outwardAbs, maxOutward);
 
     // 上段控制点（从顶点到pitch）- 更饱满的曲线
     // CP1: 向右上方突出
@@ -412,12 +428,16 @@ export class SleeveCapGenerator {
 
     // Pitch point位置（后袖更高 - 工业标准34%）
     const pitchY = capHeight * 0.34;
-    const pitchX = -halfBicep * 0.32 - outwardAbs * 0.12; // pitch点随outward左移
+    const pitchX = Math.max(
+      -halfBicep * 0.42,
+      -halfBicep * 0.32 - outwardAbs * 0.08
+    ); // 限制pitch不越界
     const pitchPoint = new Point(pitchX, pitchY);
     points.backPitch = pitchPoint;
 
-    // 使用绝对outward值
-    const outward = outwardAbs;
+    // 使用绝对outward值，但限制最大值防止曲线翻折
+    const maxOutward = halfBicep * 0.45;
+    const outward = Math.min(outwardAbs, maxOutward);
 
     // 上段控制点（后山更饱满 - 需要更大弯曲度）
     points.backUpperCp1 = new Point(
