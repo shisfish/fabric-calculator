@@ -413,33 +413,32 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 0.8 / scale;
-    ctx.setLineDash([2 / scale, 2 / scale]);
+    // 暂时禁用尺寸线标注（避免遮挡裁片）
+    // ctx.strokeStyle = '#ef4444';
+    // ctx.lineWidth = 0.8 / scale;
+    // ctx.setLineDash([2 / scale, 2 / scale]);
 
-    drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
-    drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
+    // drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
+    // drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
 
-    ctx.setLineDash([]);
+    // ctx.setLineDash([]);
     ctx.restore();
 
     ctx.fillStyle = '#dc2626';
-    ctx.font = 'bold 13px system-ui, -apple-system, sans-serif'; // 减小底部文字
+    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
 
     const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
-    
-    // 底部文字背景
+
     const textMetrics = ctx.measureText(infoText);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.fillRect(
         canvas.width / 2 - textMetrics.width / 2 - 6,
-        canvas.height - 20,
+        canvas.height - 18,
         textMetrics.width + 12,
-        18
+        16
     );
-    
-    // 红色文字
+
     ctx.fillStyle = '#dc2626';
     ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
 
@@ -741,8 +740,9 @@ function renderSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, piece
     ctx.lineWidth = 0.8 / scale;
     ctx.setLineDash([3 / scale, 3 / scale]);
 
-    drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
-    drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
+    // 暂时禁用缝份预览的尺寸线标注
+    // drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
+    // drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
 
     // 绘制缝份宽度标注
     if (seamOps.length > 0 && pieceData && pieceData.seamAllowance) {
