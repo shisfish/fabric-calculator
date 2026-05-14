@@ -424,24 +424,24 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     ctx.restore();
 
     ctx.fillStyle = '#dc2626';
-    ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
+    ctx.font = 'bold 13px system-ui, -apple-system, sans-serif'; // 减小底部文字
     ctx.textAlign = 'center';
 
     const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
     
     // 底部文字背景
     const textMetrics = ctx.measureText(infoText);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.fillRect(
-        canvas.width / 2 - textMetrics.width / 2 - 8,
-        canvas.height - 24,
-        textMetrics.width + 16,
-        22
+        canvas.width / 2 - textMetrics.width / 2 - 6,
+        canvas.height - 20,
+        textMetrics.width + 12,
+        18
     );
     
     // 红色文字
     ctx.fillStyle = '#dc2626';
-    ctx.fillText(infoText, canvas.width / 2, canvas.height - 8);
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
 
     if (pieceData && pieceData.bbox) {
         const area = pieceData.area || 0;
@@ -485,18 +485,23 @@ function drawDimensionLine(ctx, x1, y1, x2, y2, text, position) {
         ctx.moveTo(x2, y2 - tickSize/2); ctx.lineTo(x2, y2 + offset + tickSize/2);
         ctx.stroke();
 
-        // 文字标签 - 带背景
+        // 文字标签 - 带背景（优化：限制最大字体，避免遮挡裁片）
         ctx.save();
         ctx.translate(tx, ty);
         ctx.scale(1, -1);
         
-        const fontSize = Math.max(14, 14 / (ctx.getTransform().a || 1));
+        // 改进的字体大小计算：设置合理范围 [10px, 18px]
+        const scale = ctx.getTransform().a || 1;
+        const baseFontSize = 12; // 基础字号（减小）
+        const scaledFontSize = baseFontSize / scale;
+        const fontSize = Math.max(10, Math.min(18, scaledFontSize)); // 限制在10-18px之间
+        
         ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
         const textWidth = ctx.measureText(text).width;
         
-        // 白色背景
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillRect(-textWidth/2 - 4, -fontSize + 2, textWidth + 8, fontSize + 4);
+        // 白色背景（半透明）
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillRect(-textWidth/2 - 3, -fontSize + 2, textWidth + 6, fontSize + 3);
         
         // 红色文字
         ctx.fillStyle = '#dc2626';
@@ -528,19 +533,24 @@ function drawDimensionLine(ctx, x1, y1, x2, y2, text, position) {
         ctx.moveTo(x2 - tickSize/2, y2); ctx.lineTo(x2 + offset + tickSize/2, y2);
         ctx.stroke();
 
-        // 文字标签
+        // 文字标签（优化：限制最大字体）
         ctx.save();
         ctx.translate(tx, ty);
         ctx.rotate(-Math.PI / 2);
         ctx.scale(1, -1);
         
-        const fontSize = Math.max(14, 14 / (ctx.getTransform().a || 1));
-        ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
-        const textWidth = ctx.measureText(text).width;
+        // 改进的字体大小计算
+        const scale2 = ctx.getTransform().a || 1;
+        const baseFontSize2 = 12;
+        const scaledFontSize2 = baseFontSize2 / scale2;
+        const fontSize2 = Math.max(10, Math.min(18, scaledFontSize2));
+        
+        ctx.font = `bold ${fontSize2}px system-ui, -apple-system, sans-serif`;
+        const textWidth2 = ctx.measureText(text).width;
         
         // 背景
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillRect(-textWidth/2 - 4, -fontSize + 2, textWidth + 8, fontSize + 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillRect(-textWidth2/2 - 3, -fontSize2 + 2, textWidth2 + 6, fontSize2 + 3);
         
         // 文字
         ctx.fillStyle = '#dc2626';
