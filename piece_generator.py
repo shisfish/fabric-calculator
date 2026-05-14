@@ -313,6 +313,10 @@ def generate_cad_pieces_preview(measurements, options=None):
             print(f"TypeScript执行错误: {result.stderr}")
             return {"pieces": [], "error": result.stderr}
 
+        # 输出TypeScript的调试日志（stderr）
+        if result.stderr:
+            print(result.stderr, end='')
+
         pieces = json.loads(result.stdout.strip())
 
         pieces_with_svg = []
@@ -372,6 +376,10 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         if result.returncode != 0:
             print(f"TypeScript执行错误: {result.stderr}")
             raise Exception(f"排料计算失败: {result.stderr}")
+
+        # 输出TypeScript的调试日志（stderr）
+        if result.stderr:
+            print(result.stderr, end='')
 
         data = json.loads(result.stdout.strip())
 
