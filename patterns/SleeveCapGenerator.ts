@@ -73,7 +73,7 @@ export class SleeveCapGenerator {
       sL,
       cuW,
       ease,
-      5  // 最大迭代次数
+      20  // 最大迭代次数：从5增加到20，确保收敛
     );
 
     return result;
@@ -242,24 +242,27 @@ export class SleeveCapGenerator {
       }
 
       // 智能调整策略：根据误差大小动态调整步长
-      const errorRatio = error / totalTargetLen; // 误差百分比
-      
-      if (actualTotalLen < totalTargetLen) {
-        // 曲线太短，需要增加弯曲度
-        if (errorRatio > 0.3) {
-          // 误差很大，大幅增加（但限制增长速度）
-          outwardMultiplier *= 1.18;
-        } else if (errorRatio > 0.15) {
-          // 误差中等，中幅增加
-          outwardMultiplier *= 1.12;
-        } else {
-          // 误差较小，小幅增加
-          outwardMultiplier *= 1.08;
-        }
+        const errorRatio = error / totalTargetLen; // 误差百分比
         
-        // 关键：限制outwardMultiplier不超过安全范围
-        outwardMultiplier = Math.min(outwardMultiplier, bW / 2 * 0.45);
-      } else {
+        if (actualTotalLen < totalTargetLen) {
+          // 曲线太短，需要增加弯曲度
+          if (errorRatio > 0.3) {
+            // 误差很大，大幅增加（但限制增长速度）
+            outwardMultiplier *= 1.25;
+          } else if (errorRatio > 0.15) {
+            // 误差中等，中幅增加
+            outwardMultiplier *= 1.18;
+          } else {
+            // 误差较小，小幅增加
+            outwardMultiplier *= 1.12;
+          }
+          
+          // 【工业修正】放宽限制以允许达到目标长度
+          // 原限制 bW/2 * 0.45 = 5.06cm 太小，无法生成48cm曲线
+          // 新限制：允许outward达到bicepWidth的80%（18cm），确保能匹配袖窿长度
+          outwardMultiplier = Math.min(outwardMultiplier, bW * 0.80);
+          
+        } else {
         // 曲线太长，需要减少弯曲度
         if (errorRatio > 0.3) {
           outwardMultiplier *= 0.7;
@@ -276,6 +279,26 @@ export class SleeveCapGenerator {
     if (!bestResult) {
       throw new Error('无法生成符合要求的袖山');
     }
+
+    // 🔍 【工业验证】检查最终结果是否符合rule-match.md规范
+    const frontMatchError = Math.abs(bestResult.frontCapLength - frontTargetLen);
+    const backMatchError = Math.abs(bestResult.backCapLength - backTargetLen);
+    const totalMatchError = Math.abs(bestResult.totalCapLength - totalTargetLen);
+    
+    logger.debug('\n🏭 ===== 工业规范验证 (rule-match.md) =====');
+    logger.debug(`   规范要求: sleeveCapLength ≈ frontArmhole + backArmhole + ease`);
+    logger.debug(`   前袖山匹配: ${bestResult.frontCapLength.toFixed(2)} vs ${frontTargetLen.toFixed(2)} (误差${frontMatchError.toFixed(2)}cm)`);
+    logger.debug(`   后袖山匹配: ${bestResult.backCapLength.toFixed(2)} vs ${backTargetLen.toFixed(2)} (误差${backMatchError.toFixed(2)}cm)`);
+    logger.debug(`   总长度匹配: ${bestResult.totalCapLength.toFixed(2)} vs ${totalTargetLen.toFixed(2)} (误差${totalMatchError.toFixed(2)}cm)`);
+    
+    if (totalMatchError <= 1.0) {
+      logger.info(`   ✅ 符合工业规范（误差≤1cm）`);
+    } else if (totalMatchError <= 3.0) {
+      logger.warn(`   ⚠️ 基本符合（误差≤3cm），但建议优化`);
+    } else {
+      logger.error(`   ❌ 不符合工业规范！误差${totalMatchError.toFixed(2)}cm超出可接受范围`);
+    }
+    logger.debug('============================================\n');
 
     // 🔍 【调试日志】SleeveCapGenerator最终输出
     logger.debug('\n🎯 ===== SleeveCapGenerator 最终结果 =====');
@@ -333,21 +356,26 @@ export class SleeveCapGenerator {
   private static calculateInitialOutward(lengthRatio: number, bicepWidth: number): number {
     const halfBicep = bicepWidth / 2;
     
-    // 经验公式：基于长度比计算基础outward比例
+    // 【工业修正】基于长度比计算基础outward比例
+    // 原算法对于lengthRatio=1.379只给出0.7，太小了
+    // 新算法：更激进地匹配袖窿长度
     let baseOutwardRatio;
     
     if (lengthRatio > 2.0) {
       // 需要非常大的弯曲度
-      baseOutwardRatio = 1.8;
+      baseOutwardRatio = 2.2;
     } else if (lengthRatio > 1.7) {
       // 需要较大弯曲度
-      baseOutwardRatio = 1.4;
+      baseOutwardRatio = 1.8;
     } else if (lengthRatio > 1.4) {
-      // 需要中等弯曲度
-      baseOutwardRatio = 1.0;
+      // 需要中等弯曲度（T恤典型范围）
+      baseOutwardRatio = 1.4;  // 从1.0提升到1.4
+    } else if (lengthRatio > 1.3) {
+      // 略微需要弯曲度
+      baseOutwardRatio = 1.1;  // 从0.7提升到1.1
     } else {
       // 需要轻微弯曲度
-      baseOutwardRatio = 0.7;
+      baseOutwardRatio = 0.9;  // 从0.7提升到0.9
     }
     
     // 转换为实际的outward值（相对于bicepWidth的比例）

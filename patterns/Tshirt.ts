@@ -62,13 +62,14 @@ export class TshirtPatternGenerator {
     let collectingArmhole = false;
     let hasCollectedCurve = false;
     
-    for (const op of ops) {
-      // 找到肩线终点（第一个y>0的line）
+      for (const op of ops) {
+      // 找到肩线终点（第一个y>0的line）- 作为袖窿起点
       if (!foundShoulder && op.type === 'line' && op.to && op.to.y > 0) {
         foundShoulder = true;
         collectingArmhole = true;
-        armholeOps.push(op); // 包含shoulder点
-        continue;
+        // 【工业修正】将shoulder点作为move操作添加（提供曲线起始点）
+        armholeOps.push({ type: 'move', to: new Point(op.to.x, op.to.y) });
+        continue; // 不包含shoulder line本身
       }
       
       // 收集袖窿部分的操作

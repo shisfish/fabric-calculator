@@ -38,6 +38,21 @@ if (input.frontOnly && input.frontParams) {
   pieces = TshirtPatternGenerator.generatePattern(params);
 }
 
+// 🔍 【关键验证】检查TshirtPatternGenerator返回的原始pieces
+logger.debug('\n🔍 ===== TshirtPatternGenerator 原始输出验证 =====');
+logger.debug(`   原始pieces数量: ${pieces.length}`);
+logger.debug(`   pieces名称及cutCount:`);
+for (let i = 0; i < pieces.length; i++) {
+  const p = pieces[i];
+  logger.debug(`     [${i}] ${p.name}: cutCount=${p.cutCount}, pathOps数量=${p.path?.ops?.length || 0}`);
+}
+if (pieces.length < 3) {
+  logger.error(`   ❌ 原始pieces数量不足3！期望: [back, front, sleeve], 实际: ${pieces.map(p => p.name)}`);
+} else {
+  logger.info(`   ✅ 原始pieces包含${pieces.length}个裁片（含sleeve）`);
+}
+logger.debug('=============================================\n');
+
 const fabricWidth = input.fabricWidth || 145;
 
 if (input.mode === 'preview') {
