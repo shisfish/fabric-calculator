@@ -218,11 +218,11 @@ export class TshirtPatternGenerator {
     const sL = Number(sl.sleeveLength);
     const cuW = Number(sl.cuffWidth);
 
-    console.log(`\n👕 袖子参数:`);
-    console.log(`   腋下半围(bicepsWidth): ${bW} cm`);
-    console.log(`   袖山高度(capHeight): ${cH} cm`);
-    console.log(`   袖长(sleeveLength): ${sL} cm`);
-    console.log(`   袖口半围(cuffWidth): ${cuW} cm`);
+    console.error(`\n👕 袖子参数:`);
+    console.error(`   腋下半围(bicepsWidth): ${bW} cm`);
+    console.error(`   袖山高度(capHeight): ${cH} cm`);
+    console.error(`   袖长(sleeveLength): ${sL} cm`);
+    console.error(`   袖口半围(cuffWidth): ${cuW} cm`);
 
     // 使用SleeveCapGenerator生成基于袖窿的可缝合袖山
     const sleeveResult = SleeveCapGenerator.generateFromArmhole(
@@ -237,19 +237,19 @@ export class TshirtPatternGenerator {
       0.5  // T-shirt ease: 0~1cm
     );
 
-    console.log(`\n📏 袖山长度匹配结果:`);
-    console.log(`   前袖窿长度: ${sleeveResult.frontArmholeLength.toFixed(2)} cm`);
-    console.log(`   后袖窿长度: ${sleeveResult.backArmholeLength.toFixed(2)} cm`);
-    console.log(`   目标袖山长度: ${sleeveResult.totalCapLength.toFixed(2)} cm (含ease=${sleeveResult.ease}cm)`);
-    console.log(`   实际前袖山: ${sleeveResult.frontCapLength.toFixed(2)} cm`);
-    console.log(`   实际后袖山: ${sleeveResult.backCapLength.toFixed(2)} cm`);
+    console.error(`\n📏 袖山长度匹配结果:`);
+    console.error(`   前袖窿长度: ${sleeveResult.frontArmholeLength.toFixed(2)} cm`);
+    console.error(`   后袖窿长度: ${sleeveResult.backArmholeLength.toFixed(2)} cm`);
+    console.error(`   目标袖山长度: ${sleeveResult.totalCapLength.toFixed(2)} cm (含ease=${sleeveResult.ease}cm)`);
+    console.error(`   实际前袖山: ${sleeveResult.frontCapLength.toFixed(2)} cm`);
+    console.error(`   实际后袖山: ${sleeveResult.backCapLength.toFixed(2)} cm`);
 
     const lengthDiff = Math.abs(sleeveResult.totalCapLength - (sleeveResult.frontArmholeLength + sleeveResult.backArmholeLength + sleeveResult.ease));
     
     if (lengthDiff <= 0.5) {
-      console.log(`   ✅ 长度匹配成功！误差=${lengthDiff.toFixed(2)}cm`);
+      console.error(`   ✅ 长度匹配成功！误差=${lengthDiff.toFixed(2)}cm`);
     } else {
-      console.log(`   ⚠️ 长度差异: ${lengthDiff.toFixed(2)}cm (可接受范围±0.5cm)`);
+      console.error(`   ⚠️ 长度差异: ${lengthDiff.toFixed(2)}cm (可接受范围±0.5cm)`);
     }
 
     // 添加grainline和notches（如果还没有的话）

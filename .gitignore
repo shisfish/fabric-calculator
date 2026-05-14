@@ -73,6 +73,10 @@ logs/
 # Reference code (downloaded for study)
 reference/
 
+# Verification scripts (local only, not for deployment)
+.verify/
+verify-*.ts
+
 # Temporary files
 tmp/
 temp/

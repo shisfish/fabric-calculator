@@ -28,6 +28,10 @@ example/
 # 🔴 1.4G 参考资料目录 - 必须排除
 reference/
 
+# 验证脚本 (仅本地使用，不部署)
+.verify/
+verify-*.ts
+
 # 旧 bundle.js (builder 会重新生成)
 static/js/cad/bundle.js
 
