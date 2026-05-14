@@ -105,7 +105,22 @@ export class GarmentMeasurementAdapter {
     
     const front = merged.front || DEFAULT_INPUT.front;
     const back = merged.back || DEFAULT_INPUT.back;
-    const sleeve = merged.sleeve || DEFAULT_INPUT.sleeve;
+    
+    // 支持两种输入格式：
+    // 1. 嵌套格式: { sleeve: { bicepWidth: 20, ... } }
+    // 2. 扁平格式: { bicepsWidth: 20, sleeveLength: 60, ... }
+    let sleeve = merged.sleeve || DEFAULT_INPUT.sleeve;
+    
+    // 如果是扁平格式（直接包含sleeve相关字段），则转换为嵌套格式
+    const flatInput = input as any;
+    if (flatInput.bicepsWidth !== undefined || flatInput.sleeveLength !== undefined) {
+      sleeve = {
+        bicepWidth: flatInput.bicepsWidth ?? sleeve.bicepWidth,
+        cuffWidth: flatInput.cuffWidth ?? sleeve.cuffWidth,
+        sleeveLength: flatInput.sleeveLength ?? sleeve.sleeveLength,
+        sleeveCapHeight: flatInput.sleeveCapHeight ?? sleeve.sleeveCapHeight
+      };
+    }
 
     const halfChestFront = front.chestWidth / 2;
     const halfChestBack = back.chestWidth / 2;
@@ -140,8 +155,8 @@ export class GarmentMeasurementAdapter {
       },
 
       sleeve: {
-        bicepsWidth: sleeve.bicepWidth * 2,
-        cuffWidth: sleeve.cuffWidth * 2,
+        bicepsWidth: sleeve.bicepWidth,  // 保持原始值，不放大
+        cuffWidth: sleeve.cuffWidth,      // 保持原始值，不放大
         sleeveLength: sleeve.sleeveLength,
         sleeveCapHeight: sleeve.sleeveCapHeight,
         capDepthRatio: 0.65

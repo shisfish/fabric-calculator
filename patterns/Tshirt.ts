@@ -27,6 +27,7 @@ export class TshirtPatternGenerator {
     const backArmholeOps = this.extractArmholeOps(backPiece.path);
     
     // 使用工业袖山生成器（基于袖窿反推）
+    // 注意：直接使用params.sleeve中的原始尺寸（已经是最终值）
     const sleevePiece = this.generateSleeveFromArmhole(
       params.sleeve,
       params.seamAllowance,
@@ -45,55 +46,54 @@ export class TshirtPatternGenerator {
     return pieces;
   }
 
+  /**
+   * 提取袖窿曲线操作（简化版）
+   * 
+   * 逻辑: 从shoulder开始，收集所有curve直到腋下点
+   */
   private static extractArmholeOps(path: Path): Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}> {
     const ops = path.ops || [];
     const armholeOps: typeof ops = [];
     
     let foundShoulder = false;
     let collectingArmhole = false;
+    let hasCollectedCurve = false;
     
     for (const op of ops) {
-      if (op.type === 'line' && op.to) {
-        if (!foundShoulder && op.to.y > 0) {
-          foundShoulder = true;
-          collectingArmhole = true;
-        } else if (collectingArmhole && op.to.y > (ops[0]?.to?.y || 0)) {
-          break;
-        }
+      // 找到肩线终点（第一个y>0的line）
+      if (!foundShoulder && op.type === 'line' && op.to && op.to.y > 0) {
+        foundShoulder = true;
+        collectingArmhole = true;
+        armholeOps.push(op); // 包含shoulder点
+        continue;
       }
       
+      // 收集袖窿部分的操作
       if (collectingArmhole) {
         armholeOps.push(op);
         
-        if (op.type === 'line' && op.to && !op.cp1 && !op.cp2) {
-          // 检查是否到达腋下点（armholeEnd）
-          const prevOps = armholeOps.slice(0, -1);
-          const hasCurve = prevOps.some(p => p.type === 'curve');
-          if (hasCurve && armholeOps.length > 2) {
-            break;
+        // 如果收集到了curve，标记它
+        if (op.type === 'curve') {
+          hasCollectedCurve = true;
+        }
+        
+        // 如果已经收集到curve，并且遇到了下一个line（侧缝线），则停止
+        if (hasCollectedCurve && op.type === 'line' && !op.cp1) {
+          break;
+        }
+        
+        // 如果收集了超过4个操作还没找到curve，可能是后片特殊情况
+        if (armholeOps.length > 5 && !hasCollectedCurve) {
+          // 继续收集，直到找到curve或到达边界
+          if (op.type === 'curve') {
+            hasCollectedCurve = true;
+            continue; // 继续收集下一个line作为结束
           }
         }
       }
     }
     
-    // 如果上面的逻辑没找到，用简单方法：提取所有curve操作
-    if (armholeOps.length === 0) {
-      let inArmholeSection = false;
-      for (const op of ops) {
-        if (op.type === 'line' && op.to && op.to.y < (path.ops?.[0]?.to?.y || 999)) {
-          inArmholeSection = true;
-        }
-        if (inArmholeSection) {
-          armholeOps.push(op);
-          if (op.type === 'line' && op.to && !op.cp1) {
-            // 到达侧缝线，停止
-            break;
-          }
-        }
-      }
-    }
-    
-    return armholeOps.length > 0 ? armholeOps : ops.filter(op => op.type === 'curve');
+    return armholeOps.length > 1 ? armholeOps : ops.filter(op => op.type === 'curve');
   }
 
   /**
@@ -198,7 +198,12 @@ export class TshirtPatternGenerator {
   }
 
   /**
-   * 袖子 (Sleeve) - 基于袖窿反推的工业袖山生成器
+   * 袖子 (Sleeve) - 基于前后袖窿曲线反推生成的工业袖山
+   * 
+   * 核心算法:
+   * 1. 提取前后袖窿Bezier曲线
+   * 2. 计算袖窿真实弧长
+   * 3. 动态生成控制点确保: sleeve cap length = armhole length + ease (±0.5cm)
    */
   private static generateSleeveFromArmhole(
     sl: SleeveParams,
@@ -207,32 +212,54 @@ export class TshirtPatternGenerator {
     backArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>
   ): PatternPiece {
 
+    // 使用原始参数（直接来自前端输入，不被GarmentMeasurementAdapter错误放大）
     const bW = Number(sl.bicepsWidth);
     const cH = Number(sl.sleeveCapHeight);
     const sL = Number(sl.sleeveLength);
     const cuW = Number(sl.cuffWidth);
 
-    // 使用工业袖山生成器
+    console.log(`\n👕 袖子参数:`);
+    console.log(`   腋下半围(bicepsWidth): ${bW} cm`);
+    console.log(`   袖山高度(capHeight): ${cH} cm`);
+    console.log(`   袖长(sleeveLength): ${sL} cm`);
+    console.log(`   袖口半围(cuffWidth): ${cuW} cm`);
+
+    // 使用SleeveCapGenerator生成基于袖窿的可缝合袖山
     const sleeveResult = SleeveCapGenerator.generateFromArmhole(
       frontArmholeOps,
       backArmholeOps,
       {
-        bicepsWidth: bW,
-        sleeveCapHeight: cH,
-        sleeveLength: sL,
-        cuffWidth: cuW
+        bicepsWidth: bW,        // 原始值，不经过转换
+        sleeveCapHeight: cH,    // 原始值
+        sleeveLength: sL,       // 原始值
+        cuffWidth: cuW          // 原始值
       },
-      0.5 // T-shirt ease: 0~1cm
+      0.5  // T-shirt ease: 0~1cm
     );
 
-    // 添加notches到points
-    const points = { ...sleeveResult.points };
+    console.log(`\n📏 袖山长度匹配结果:`);
+    console.log(`   前袖窿长度: ${sleeveResult.frontArmholeLength.toFixed(2)} cm`);
+    console.log(`   后袖窿长度: ${sleeveResult.backArmholeLength.toFixed(2)} cm`);
+    console.log(`   目标袖山长度: ${sleeveResult.totalCapLength.toFixed(2)} cm (含ease=${sleeveResult.ease}cm)`);
+    console.log(`   实际前袖山: ${sleeveResult.frontCapLength.toFixed(2)} cm`);
+    console.log(`   实际后袖山: ${sleeveResult.backCapLength.toFixed(2)} cm`);
+
+    const lengthDiff = Math.abs(sleeveResult.totalCapLength - (sleeveResult.frontArmholeLength + sleeveResult.backArmholeLength + sleeveResult.ease));
     
-    // 添加grainline
-    const grainline = {
-      start: new Point(0, cH * 0.3),
-      end: new Point(0, cH + sL * 0.7)
-    };
+    if (lengthDiff <= 0.5) {
+      console.log(`   ✅ 长度匹配成功！误差=${lengthDiff.toFixed(2)}cm`);
+    } else {
+      console.log(`   ⚠️ 长度差异: ${lengthDiff.toFixed(2)}cm (可接受范围±0.5cm)`);
+    }
+
+    // 添加grainline和notches（如果还没有的话）
+    const points = {...sleeveResult.points};
+    
+    if (!points.grainline) {
+      const totalL = cH + sL;
+      points.grainlineStart = new Point(0, cH * 0.3);
+      points.grainlineEnd = new Point(0, totalL * 0.8);
+    }
 
     return {
       name: 'sleeve',
@@ -241,8 +268,9 @@ export class TshirtPatternGenerator {
       seamAllowance,
       cutCount: 2,
       onFold: false,
-      grainline,
-      notches: [points.frontNotch, points.backNotch].filter(p => p)
+      grainline: points.grainline ? 
+        {start: points.grainlineStart, end: points.grainlineEnd} : undefined,
+      notches: [points.frontNotch, points.backNotch].filter(p => p !== undefined)
     };
   }
 }

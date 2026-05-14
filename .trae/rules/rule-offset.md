@@ -1,53 +1,93 @@
-当前版型 outline 已经稳定。
+当前系统需要实现：
 
-禁止继续修改裁片控制点。
+工业级缝份系统（Seam Allowance System）。
 
-下一步实现：
+禁止：
 
-工业缝份系统（Seam Allowance Engine）。
+* scale path生成缝份
+* 全局统一offset
+* SVG enlarge模拟缝份
 
-目标：
+必须：
 
-输入：
-- outline path
-- seam allowance distance
+基于 path segment 实现分段缝份。
 
-输出：
-- offset cutting path
+真实T-shirt规则：
 
-严格要求：
+shoulder: 1.0cm
+armhole: 1.0cm
+sideSeam: 1.2cm
+neckline: 0.6cm
+hem: 2.5cm
+sleeveHem: 2.5cm
 
-1. 禁止 scale path 生成缝份
-2. 必须使用 geometric offset
-3. Bezier curve 必须先 flatten/sample
-4. 每个采样点计算 tangent
-5. 使用法线 normal outward offset
-6. 最终重建 offset path
+必须修改 Path 系统：
 
-实现结构：
+每个 path segment 必须有：
 
-class SeamAllowanceGenerator {
+* segmentName
+* segmentType
 
-  static generate(
-    outline: Path,
-    distance: number
-  ): Path
+例如：
+
+.move()
+.segment('neckline')
+
+.line()
+.segment('shoulder')
+
+.curve()
+.segment('armhole')
+
+.line()
+.segment('sideSeam')
+
+.quad()
+.segment('hem')
+
+新增：
+
+interface SeamAllowanceRule {
+
+segment: string;
+
+distance: number;
 
 }
 
-步骤：
+新增：
 
-1. flattenBezier(path, segments=50)
-2. computeTangents(points)
-3. computeNormals(tangents)
-4. offsetPoints(points, normals, distance)
-5. rebuildPath(points)
+class SeamAllowanceGenerator {
+
+static generate(
+outline: Path,
+rules: SeamAllowanceRule[]
+): Path
+
+}
+
+算法要求：
+
+1. flatten bezier → polyline
+2. compute tangent
+3. compute normal
+4. outward offset
+5. join corners
+6. rebuild path
 
 目标：
 
-生成真实工业裁剪边界，
+生成真实工业 cutting path，
 用于：
-- 排料
-- SVG输出
-- DXF输出
-- 工业裁床
+
+* 排料
+* DXF
+* SVG
+* 自动裁床
+
+注意：
+
+最终需要同时输出：
+
+1. stitch line（净版）
+2. cutting line（缝份外轮廓）
