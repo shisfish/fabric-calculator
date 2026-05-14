@@ -25233,18 +25233,24 @@ var CADApp = ({ pieces, nestingResult, fabricWidth, mode }) => {
   }
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { style: { padding: 20, color: "#666", textAlign: "center" }, children: "\u6682\u65E0\u6570\u636E" });
 };
+var previewRoot = null;
+var nestingRoot = null;
 window.renderPatternPreview = (pieces) => {
   const container = document.getElementById("cad-pattern-viewer");
   if (container) {
-    const root = (0, import_client.createRoot)(container);
-    root.render(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(CADApp, { pieces, nestingResult: null, fabricWidth: 145, mode: "preview" }));
+    if (!previewRoot) {
+      previewRoot = (0, import_client.createRoot)(container);
+    }
+    previewRoot.render(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(CADApp, { pieces, nestingResult: null, fabricWidth: 145, mode: "preview" }));
   }
 };
 window.renderNestingResult = (pieces, result, fabricWidth) => {
   const container = document.getElementById("cad-nesting-viewer");
   if (container) {
-    const root = (0, import_client.createRoot)(container);
-    root.render(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(CADApp, { pieces, nestingResult: result, fabricWidth, mode: "nesting" }));
+    if (!nestingRoot) {
+      nestingRoot = (0, import_client.createRoot)(container);
+    }
+    nestingRoot.render(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(CADApp, { pieces, nestingResult: result, fabricWidth, mode: "nesting" }));
   }
 };
 export {

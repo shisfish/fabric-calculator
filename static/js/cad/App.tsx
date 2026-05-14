@@ -57,19 +57,27 @@ declare global {
   }
 }
 
+// 缓存root实例，避免重复创建导致React警告
+let previewRoot: any = null;
+let nestingRoot: any = null;
+
 window.renderPatternPreview = (pieces: PatternPiece[]) => {
   const container = document.getElementById('cad-pattern-viewer');
   if (container) {
-    const root = createRoot(container);
-    root.render(<CADApp pieces={pieces} nestingResult={null} fabricWidth={145} mode="preview" />);
+    if (!previewRoot) {
+      previewRoot = createRoot(container);
+    }
+    previewRoot.render(<CADApp pieces={pieces} nestingResult={null} fabricWidth={145} mode="preview" />);
   }
 };
 
 window.renderNestingResult = (pieces: PatternPiece[], result: NestingResult, fabricWidth: number) => {
   const container = document.getElementById('cad-nesting-viewer');
   if (container) {
-    const root = createRoot(container);
-    root.render(<CADApp pieces={pieces} nestingResult={result} fabricWidth={fabricWidth} mode="nesting" />);
+    if (!nestingRoot) {
+      nestingRoot = createRoot(container);
+    }
+    nestingRoot.render(<CADApp pieces={pieces} nestingResult={result} fabricWidth={fabricWidth} mode="nesting" />);
   }
 };
 
