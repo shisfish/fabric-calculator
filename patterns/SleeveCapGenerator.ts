@@ -277,6 +277,49 @@ export class SleeveCapGenerator {
       throw new Error('无法生成符合要求的袖山');
     }
 
+    // 🔍 【调试日志】SleeveCapGenerator最终输出
+    logger.debug('\n🎯 ===== SleeveCapGenerator 最终结果 =====');
+    logger.debug(`   frontCapLength: ${bestResult.frontCapLength.toFixed(2)} cm`);
+    logger.debug(`   backCapLength: ${bestResult.backCapLength.toFixed(2)} cm`);
+    logger.debug(`   totalCapLength: ${bestResult.totalCapLength.toFixed(2)} cm`);
+    logger.debug(`   frontArmholeLength: ${bestResult.frontArmholeLength.toFixed(2)} cm`);
+    logger.debug(`   backArmholeLength: ${bestResult.backArmholeLength.toFixed(2)} cm`);
+    logger.debug(`   ease: ${bestResult.ease} cm`);
+    
+    // 输出所有关键点坐标
+    logger.debug('\n📍 关键点坐标:');
+    const pointNames = ['capTop', 'frontAxilla', 'backAxilla', 'frontCuff', 'backCuff',
+                       'frontPitch', 'backPitch', 'frontNotch', 'backNotch',
+                       'frontUpperCp1', 'frontUpperCp2', 'frontLowerCp1', 'frontLowerCp2',
+                       'backUpperCp1', 'backUpperCp2', 'backLowerCp1', 'backLowerCp2'];
+    
+    for (const name of pointNames) {
+      if (bestResult.points[name]) {
+        const p = bestResult.points[name];
+        logger.debug(`   ${name}: (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`);
+      }
+    }
+    
+    // 检查capPath是否有效
+    logger.debug('\n📐 capPath检查:');
+    logger.debug(`   capPath存在: ${!!bestResult.capPath}`);
+    if (bestResult.capPath && bestResult.capPath.ops) {
+      logger.debug(`   pathOps数量: ${bestResult.capPath.ops.length}`);
+      logger.debug(`   pathOps类型:`);
+      for (let i = 0; i < Math.min(bestResult.capPath.ops.length, 10); i++) {
+        const op = bestResult.capPath.ops[i];
+        if (op.type === 'move' || op.type === 'line') {
+          logger.debug(`     [${i}] ${op.type} → (${op.to?.x?.toFixed(2)}, ${op.to?.y?.toFixed(2)})`);
+        } else if (op.type === 'curve') {
+          logger.debug(`     [${i}] ${op.type} → (${op.to?.x?.toFixed(2)}, ${op.to?.y?.toFixed(2)}) [cp1:(${op.cp1?.x?.toFixed(2)},${op.cp1?.y?.toFixed(2)}) cp2:(${op.cp2?.x?.toFixed(2)},${op.cp2?.y?.toFixed(2)})]`);
+        } else {
+          logger.debug(`     [${i}] ${op.type}`);
+        }
+      }
+    }
+    
+    logger.debug('==========================================\n');
+
     return bestResult;
   }
 

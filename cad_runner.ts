@@ -105,6 +105,61 @@ if (input.mode === 'preview') {
     });
 
     logger.info(`Nesting模式: 排料完成，${piecesData.length}个pieces, 利用率${result.utilization?.toFixed(1)}%`);
+    
+    // 🔍 【调试日志】最终返回数据完整性检查
+    logger.debug('\n🔍 ===== 最终API返回数据检查 =====');
+    logger.debug(`   piecesData数量: ${piecesData.length}`);
+    logger.debug(`   pieces名称列表:`);
+    for (let i = 0; i < piecesData.length; i++) {
+        const piece = piecesData[i];
+        logger.debug(`     [${i}] ${piece.name}:`);
+        logger.debug(`         x: ${piece.x}, y: ${piece.y}`);
+        logger.debug(`         width: ${piece.width?.toFixed(2)}, height: ${piece.height?.toFixed(2)}`);
+        logger.debug(`         area: ${piece.area?.toFixed(2)}`);
+        logger.debug(`         pathOps数量: ${piece.pathOps?.length || 0}`);
+        
+        // 检查sleeve的pathOps详情
+        if (piece.name === 'sleeve') {
+            logger.debug(`         🎯 SLEEVE 详细信息:`);
+            if (piece.pathOps && piece.pathOps.length > 0) {
+                logger.debug(`           pathOps类型:`);
+                for (let j = 0; j < Math.min(piece.pathOps.length, 10); j++) {
+                    const op = piece.pathOps[j];
+                    if (op.type === 'move' || op.type === 'line') {
+                        logger.debug(`             [${j}] ${op.type} → (${op.to?.x?.toFixed(2)}, ${op.to?.y?.toFixed(2)})`);
+                    } else if (op.type === 'curve' || op.type === 'quad') {
+                        logger.debug(`             [${j}] ${op.type} → (${op.to?.x?.toFixed(2)}, ${op.to?.y?.toFixed(2)}) [cp1:(${op.cp1?.x?.toFixed(2)},${op.cp1?.y?.toFixed(2)})]`);
+                    } else {
+                        logger.debug(`             [${j}] ${op.type}`);
+                    }
+                }
+            } else {
+                logger.error(`           ❌ pathOps为空或不存在！`);
+            }
+            
+            // 检查几何尺寸是否合理
+            if (!piece.width || !piece.height || piece.width < 1 || piece.height < 1) {
+                logger.error(`           ❌ 几何尺寸异常！width=${piece.width}, height=${piece.height}`);
+            } else {
+                logger.info(`           ✅ 几何尺寸正常: ${piece.width.toFixed(1)} x ${piece.height.toFixed(1)} cm`);
+            }
+        }
+    }
+    
+    // 统计sleeve数量
+    const sleeveCount = piecesData.filter(p => p.name === 'sleeve').length;
+    logger.debug(`\n📊 袖子统计:`);
+    logger.debug(`   sleeve数量: ${sleeveCount}`);
+    if (sleeveCount === 0) {
+        logger.error(`   ❌ 没有找到sleeve pieces！`);
+    } else if (sleeveCount === 2) {
+        logger.info(`   ✅ 找到2个sleeve（正确）`);
+    } else {
+        logger.warn(`   ⚠️ 找到${sleeveCount}个sleeve（期望2个）`);
+    }
+    
+    logger.debug('=========================================\n');
+    
     console.log(JSON.stringify({ // 唯一的stdout输出点 - API响应
         pieces: piecesData,
         positions: result.positions.map(p => ({

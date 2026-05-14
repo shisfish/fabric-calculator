@@ -215,6 +215,25 @@ export class TshirtPatternGenerator {
     backArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>
   ): PatternPiece {
 
+    // 🔍 【调试日志】输入参数检查
+    logger.debug('\n🔍 ===== generateSleeveFromArmhole 输入检查 =====');
+    logger.debug(`   frontArmholeOps数量: ${frontArmholeOps.length}`);
+    if (frontArmholeOps.length > 0) {
+      logger.debug(`   frontArmholeOps类型:`);
+      for (let i = 0; i < Math.min(frontArmholeOps.length, 5); i++) {
+        const op = frontArmholeOps[i];
+        logger.debug(`     [${i}] ${op.type}`);
+      }
+    }
+    logger.debug(`   backArmholeOps数量: ${backArmholeOps.length}`);
+    if (backArmholeOps.length > 0) {
+      logger.debug(`   backArmholeOps类型:`);
+      for (let i = 0; i < Math.min(backArmholeOps.length, 5); i++) {
+        const op = backArmholeOps[i];
+        logger.debug(`     [${i}] ${op.type}`);
+      }
+    }
+
     // 使用原始参数（直接来自前端输入，不被GarmentMeasurementAdapter错误放大）
     const bW = Number(sl.bicepsWidth);
     const cH = Number(sl.sleeveCapHeight);
@@ -240,6 +259,24 @@ export class TshirtPatternGenerator {
       0.5  // T-shirt ease: 0~1cm
     );
 
+    // 🔍 【调试日志】sleeveResult完整性检查
+    logger.debug('\n🔍 ===== sleeveResult 完整性检查 =====');
+    logger.debug(`   sleeveResult存在: ${!!sleeveResult}`);
+    if (sleeveResult) {
+      logger.debug(`   capPath存在: ${!!sleeveResult.capPath}`);
+      if (sleeveResult.capPath && sleeveResult.capPath.ops) {
+        logger.debug(`   capPath.ops数量: ${sleeveResult.capPath.ops.length}`);
+      }
+      logger.debug(`   points存在: ${!!sleeveResult.points}`);
+      if (sleeveResult.points) {
+        logger.debug(`   points keys数量: ${Object.keys(sleeveResult.points).length}`);
+        logger.debug(`   points keys: ${Object.keys(sleeveResult.points).join(', ')}`);
+      }
+      logger.debug(`   frontCapLength: ${sleeveResult.frontCapLength?.toFixed(2)} cm`);
+      logger.debug(`   backCapLength: ${sleeveResult.backCapLength?.toFixed(2)} cm`);
+      logger.debug(`   totalCapLength: ${sleeveResult.totalCapLength?.toFixed(2)} cm`);
+    }
+
     logger.debug('\n📏 袖山长度匹配结果:');
     logger.debug(`   前袖窿长度: ${sleeveResult.frontArmholeLength.toFixed(2)} cm`);
     logger.debug(`   后袖窿长度: ${sleeveResult.backArmholeLength.toFixed(2)} cm`);
@@ -264,7 +301,7 @@ export class TshirtPatternGenerator {
       points.grainlineEnd = new Point(0, totalL * 0.8);
     }
 
-    return {
+    const sleevePiece = {
       name: 'sleeve',
       path: sleeveResult.capPath,
       points,
@@ -275,5 +312,25 @@ export class TshirtPatternGenerator {
         {start: points.grainlineStart, end: points.grainlineEnd} : undefined,
       notches: [points.frontNotch, points.backNotch].filter(p => p !== undefined)
     };
+
+    // 🔍 【调试日志】最终sleevePiece输出检查
+    logger.debug('\n🎯 ===== 最终 sleevePiece 输出 =====');
+    logger.debug(`   name: ${sleevePiece.name}`);
+    logger.debug(`   path存在: ${!!sleevePiece.path}`);
+    if (sleevePiece.path && sleevePiece.path.ops) {
+      logger.debug(`   path.ops数量: ${sleevePiece.path.ops.length}`);
+    }
+    logger.debug(`   points存在: ${!!sleevePiece.points}`);
+    if (sleevePiece.points) {
+      logger.debug(`   points数量: ${Object.keys(sleevePiece.points).length}`);
+    }
+    logger.debug(`   seamAllowance: ${sleevePiece.seamAllowance}`);
+    logger.debug(`   cutCount: ${sleevePiece.cutCount}`);
+    logger.debug(`   onFold: ${sleevePiece.onFold}`);
+    logger.debug(`   grainline存在: ${!!sleevePiece.grainline}`);
+    logger.debug(`   notches数量: ${sleevePiece.notches?.length || 0}`);
+    logger.debug('=========================================\n');
+
+    return sleevePiece;
   }
 }
