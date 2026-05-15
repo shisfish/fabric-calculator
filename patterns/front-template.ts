@@ -176,7 +176,7 @@ export const FRONT_TEMPLATE: IndustrialTemplate = {
 export function calculateTemplatePoint(
   template: IndustrialTemplate,
   pointName: string,
-  params: {
+  _params: {
     W: number; L: number; neckW: number; neckD: number;
     shoulderW: number; shoulderDrop: number; armholeD: number;
     armholeSpanX: number; pitchX: number; pitchY: number;
@@ -200,7 +200,7 @@ export function calculateTemplatePoint(
 export function calculateTemplateControlPoint(
   template: IndustrialTemplate,
   cpName: string,
-  params: {
+  _params: {
     W: number; L: number; neckW: number; neckD: number;
     shoulderW: number; shoulderDrop: number; armholeD: number;
     armholeSpanX: number; pitchX: number; pitchY: number;

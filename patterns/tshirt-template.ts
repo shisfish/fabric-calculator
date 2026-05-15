@@ -1,7 +1,39 @@
-private static generateFrontPanel(
-  fp: FrontPanelParams,
-  seamAllowance: number
-): PatternPiece {
+import { Point, Path } from '../geometry/index.js';
+
+interface FrontPanelParams {
+  width: number;
+  length: number;
+  neckWidth: number;
+  neckDepth: number;
+  shoulderWidth: number;
+  armholeDepth: number;
+  shoulderSlope?: number;
+}
+
+interface PatternPiece {
+  name: string;
+  path: Path;
+  points: Record<string, Point>;
+  seamAllowance: number;
+  grainline: { start: Point; end: Point };
+  notches: Point[];
+  cutCount: number;
+  onFold?: boolean;
+}
+
+export class TshirtTemplateGenerator {
+  
+  /**
+   * 生成前片裁片（工业T恤模板）
+   */
+  static generateFront(fp: FrontPanelParams, seamAllowance: number = 1.0): PatternPiece {
+    return this.generateFrontPanel(fp, seamAllowance);
+  }
+  
+  private static generateFrontPanel(
+    fp: FrontPanelParams,
+    seamAllowance: number
+  ): PatternPiece {
 
   const points: Record<string, Point> = {};
 
@@ -272,4 +304,5 @@ private static generateFrontPanel(
 
     onFold: true,
   };
+}
 }
