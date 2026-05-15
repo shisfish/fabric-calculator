@@ -22,22 +22,36 @@ interface SleeveCapResult {
 }
 
 /**
- * 工业级袖山生成器 v5.0 - 简化版
+ * 工业级袖山生成器 v6.0 - 完整工业版
  * 
- * 核心设计原则：
- * 1. **简化拓扑**：只用2个curve（前+后），不使用复杂分段
- * 2. **工业比例**：所有控制点基于 halfBicep 和 cH 的百分比
- * 3. **自然形状**：前袖陡、后袖平，顶部圆弧过渡
- * 4. **不硬凑数据**：遵循真实T恤几何逻辑
+ * 核心设计原则（严格遵循 rule-match.md）:
  * 
- * 拓扑结构（固定）：
- * M(capTop) 
- * → C(前袖山: capTop→frontAxilla) 
- * → L(frontAxilla→frontCuff) 
- * → L(frontCuff→backCuff) 
- * → L(backCuff→backAxilla) 
- * → C(后袖山: backAxilla→capTop) 
- * → Z
+ * 1. **固定拓扑结构（4段curve）**：
+ *    M(capTop) 
+ *    → C(upperFront: capTop→frontPitch)     [前袖山上段]
+ *    → C(lowerFront: frontPitch→frontAxilla) [前袖山下段]
+ *    → L(frontAxilla→frontCuff)
+ *    → L(frontCuff→backCuff)
+ *    → L(backCuff→backAxilla)
+ *    → C(lowerBack: backAxilla→backPitch)   [后袖山下段]
+ *    → C(upperBack: backPitch→capTop)      [后袖山上段]
+ *    → Z
+ * 
+ * 2. **前后不对称**：
+ *    - 前袖：更陡、更深、hollow明显
+ *    - 后袖：更长、更平、更饱满（禁止镜像）
+ * 
+ * 3. **capTop切线约束**：
+ *    - 顶部切线必须接近水平（角度<15°）
+ *    - 禁止垂直下冲
+ * 
+ * 4. **Pitch点系统**：
+ *    - 前pitch：较低（40-45%高度），产生陡峭曲线
+ *    - 后pitch：较高（30-35%高度），产生平缓曲线
+ * 
+ * 5. **工业比例系统**：
+ *    - 所有坐标基于 halfBicep 和 cH 的百分比
+ *    - 不使用硬编码数值
  */
 export class SleeveCapGenerator {
 
@@ -61,7 +75,7 @@ export class SleeveCapGenerator {
     const sL = sleeveParams.sleeveLength;
     const cuW = sleeveParams.cuffWidth;
 
-    logger.debug('\n🏭 ===== 工业级袖山生成器 v5.0 (简化版) =====');
+    logger.debug('\n🏭 ===== 工业级袖山生成器 v6.0 (完整工业版) =====');
     logger.debug(`   腋下半围(bW): ${bW} cm`);
     logger.debug(`   袖山高度(cH): ${cH} cm`);
     logger.debug(`   袖长(sL): ${sL} cm`);
@@ -74,8 +88,8 @@ export class SleeveCapGenerator {
     const frontArmholeLength = this.calculateTotalCurveLength(frontCurves);
     const backArmholeLength = this.calculateTotalCurveLength(backCurves);
 
-    // 使用工业比例直接生成袖山几何
-    const result = this.generateSimpleIndustrialSleeve(
+    // 使用完整的工业几何系统生成袖山
+    const result = this.generateIndustrialSleeveV6(
       bW, cH, sL, cuW,
       frontArmholeLength, backArmholeLength, ease
     );
@@ -84,16 +98,15 @@ export class SleeveCapGenerator {
   }
 
   /**
-   * 简化的工业袖山生成（基于明确比例）
+   * 完整工业袖山生成（v6.0）
    * 
-   * 工业T恤袖子的几何特征：
-   * - 袖山高度 ≈ 腋下半围 × 0.6~0.8
-   * - 前袖山弧长 > 后袖山弧长（因为前片袖窿更深）
-   * - 前袖山更陡峭（曲率集中在靠近肩点）
-   * - 后袖山更平缓（曲率分布均匀）
-   * - 顶部形成自然的圆弧形（不是尖角）
+   * 几何结构：
+   * - 4个cubic Bezier curve（前上+前下+后下+后上）
+   * - 2个pitch点（前后不对称）
+   * - 切线方向验证
+   * - 自交检测
    */
-  private static generateSimpleIndustrialSleeve(
+  private static generateIndustrialSleeveV6(
     bW: number,
     cH: number,
     sL: number,
@@ -107,7 +120,7 @@ export class SleeveCapGenerator {
     const halfBicep = bW / 2;
 
     // ========== 关键点定义 ==========
-    
+
     // 袖山顶点（坐标原点）
     const capTop = new Point(0, 0);
 
@@ -123,119 +136,319 @@ export class SleeveCapGenerator {
     // 后袖口
     const backCuff = new Point(-cuW / 2, cH + sL);
 
-    // ========== 前袖山控制点（1段curve）==========
+    // ========== Pitch点计算（基于工业比例）==========
     //
     // 工业规则：
-    // - CP1: 在1/3处向外凸出（形成圆弧顶）
-    // - CP2: 在2/3处略内收（产生轻微hollow）
-    // - 整体形状：从capTop平滑过渡到frontAxilla
+    // - 前袖pitch更低（40-45%高度）：产生更陡峭的上半段
+    // - 后袖pitch更高（30-35%高度）：产生更平缓的下段
     //
 
-    // CP1: 控制顶部圆弧（外凸）
-    // X方向：约halfBicep的50-60%（大幅外凸确保圆弧）
-    // Y方向：约cH的25-35%（向下延伸）
-    const frontCp1 = new Point(
-      halfBicep * 0.55,
-      cH * 0.28
+    const frontPitchY = cH * 0.42;  // 前pitch：较低位置
+    const frontPitchX = halfBicep * 0.38;  // 前pitch：向内收
+    const frontPitch = new Point(frontPitchX, frontPitchY);
+
+    const backPitchY = cH * 0.32;  // 后pitch：较高位置
+    const backPitchX = -halfBicep * 0.36;  // 后pitch：向内收
+    const backPitch = new Point(backPitchX, backPitchY);
+
+    // ========== 前袖山上段控制点 (capTop → frontPitch)==========
+    //
+    // 【关键】capTop处切线必须接近水平！
+    //
+    // 数学原理：
+    // - Cubic Bezier在t=0处的切线方向 = P1 - P0
+    // - 要使切线水平，需要 P1.y ≈ P0.y (= 0)
+    // - 所以 upperFrontCp1 的 Y 值必须很小（< cH 的10%）
+    //
+    // 工业特征：
+    // - 更陡峭
+    // - 曲率集中在上半段
+    // - 外凸明显（产生肩部饱满感）
+    //
+
+    const frontUpperSpanX = frontPitch.x - capTop.x;  // 正值
+    const frontUpperSpanY = frontPitch.y - capTop.y;  // 正值
+
+    // CP1: 控制顶部圆弧和外凸
+    // 【重要】Y值必须小，确保capTop处切线水平！
+    const upperFrontCp1 = new Point(
+      halfBicep * 0.48,           // X: 大幅向外凸出（48% halfBicep）
+      cH * 0.08                   // Y: 很小（8% cH），确保水平切线 ✓
     );
 
-    // CP2: 控制下段弯曲（接近axilla但略有内收）
-    // X方向：比frontAxilla小10-15%
-    // Y方向：接近cH
-    const frontCp2 = new Point(
-      frontAxilla.x - halfBicep * 0.12,
-      cH * 0.82
+    // CP2: 接近frontPitch点
+    const upperFrontCp2 = new Point(
+      frontPitch.x - frontUpperSpanX * 0.18,
+      frontPitch.y - frontUpperSpanY * 0.12
     );
 
-    // Front Notch（在前袖山60%处）
+    // ========== 前袖山下段控制点 (frontPitch → frontAxilla)==========
+    //
+    // 工业特征：
+    // - hollow效果明显
+    // - 从pitch点先内收再外放
+    // - 形成自然的腋下弯曲
+    //
+
+    const frontLowerSpanX = frontAxilla.x - frontPitch.x;
+    const frontLowerSpanY = frontAxilla.y - frontPitch.y;
+
+    // CP1: 从pitch点开始hollow（内收）
+    const lowerFrontCp1 = new Point(
+      frontPitch.x + frontLowerSpanX * 0.25,
+      frontPitch.y + frontLowerSpanY * 0.35 - halfBicep * 0.06
+    );
+
+    // CP2: 接近frontAxilla（外放）
+    const lowerFrontCp2 = new Point(
+      frontAxilla.x - frontLowerSpanX * 0.40,
+      frontAxilla.y - frontLowerSpanY * 0.12
+    );
+
+    // Front Notch（在前袖山下段30%处）
     const frontNotch = new Point(
-      halfBicep * 0.62,
-      cH * 0.65
+      frontPitch.x + frontLowerSpanX * 0.28,
+      frontPitch.y + frontLowerSpanY * 0.30
     );
 
-    // ========== 后袖山控制点（1段curve）==========
+    // ========== 后袖山下段控制点 (backAxilla → backPitch)==========
     //
-    // 工业规则：
-    // - CP1: 从backAxilla开始平缓弯曲
-    // - CP2: 对称于前袖CP1（保证顶部圆弧平衡）
-    // - 整体形状：更平缓、更长
+    // 【关键】后袖特征：更长、更平、更饱满（禁止镜像！）
+    //
+    // 与前袖的区别：
+    // - 曲线更长（span更大）
+    // - 外凸更明显（更饱满）
+    // - 分布更均匀（更平）
     //
 
-    // CP1: 控制下段弯曲（平缓）
-    // X方向：比backAxilla大10-15%
-    // Y方向：接近cH
-    const backCp1 = new Point(
-      backAxilla.x + halfBicep * 0.12,
-      cH * 0.80
+    const backLowerSpanX = backPitch.x - backAxilla.x;  // 正值（因为backPitch.x > backAxilla.x）
+    const backLowerSpanY = backPitch.y - backAxilla.y;  // 负值（因为backPitch.y < backAxilla.y）
+
+    // CP1: 从backAxilla开始大幅外凸（更饱满！）
+    // 比前袖的对应点更向外凸出
+    const lowerBackCp1 = new Point(
+      backAxilla.x + Math.abs(backLowerSpanX) * 0.35,  // 比前袖0.25更大
+      backAxilla.y + Math.abs(backLowerSpanY) * 0.38 - halfBicep * 0.04  // 比前袖更平缓
     );
 
-    // CP2: 控制顶部圆弧（对称于前袖）
-    // X方向：约-halfBicep的50-60%
-    // Y方向：约cH的25-35%
-    const backCp2 = new Point(
-      -halfBicep * 0.55,
-      cH * 0.28
+    // CP2: 接近backPitch（保持平缓）
+    const lowerBackCp2 = new Point(
+      backPitch.x - Math.abs(backLowerSpanX) * 0.22,
+      backPitch.y + Math.abs(backLowerSpanY) * 0.15
     );
 
-    // Back Notch（在后袖山60%处）
+    // Back Notch（在后袖山下段30%处）
     const backNotch = new Point(
-      -halfBicep * 0.62,
-      cH * 0.65
+      backAxilla.x + Math.abs(backLowerSpanX) * 0.32,
+      backAxilla.y + Math.abs(backLowerSpanY) * 0.35
     );
 
-    logger.debug('\n📐 简化版袖山几何:');
-    logger.debug(`   关键点:`);
-    logger.debug(`     capTop: (0, 0)`);
-    logger.debug(`     frontAxilla: (${frontAxilla.x.toFixed(2)}, ${frontAxilla.y.toFixed(2)})`);
-    logger.debug(`     backAxilla: (${backAxilla.x.toFixed(2)}, ${backAxilla.y.toFixed(2)})`);
-    logger.debug(`   前袖山控制点 (1段curve):`);
-    logger.debug(`     CP1: (${frontCp1.x.toFixed(2)}, ${frontCp1.y.toFixed(2)})`);
-    logger.debug(`     CP2: (${frontCp2.x.toFixed(2)}, ${frontCp2.y.toFixed(2)})`);
-    logger.debug(`   后袖山控制点 (1段curve):`);
-    logger.debug(`     CP1: (${backCp1.x.toFixed(2)}, ${backCp1.y.toFixed(2)})`);
-    logger.debug(`     CP2: (${backCp2.x.toFixed(2)}, ${backCp2.y.toFixed(2)})`);
-    logger.debug(`   Notches:`);
-    logger.debug(`     frontNotch: (${frontNotch.x.toFixed(2)}, ${frontNotch.y.toFixed(2)})`);
-    logger.debug(`     backNotch: (${backNotch.x.toFixed(2)}, ${backNotch.y.toFixed(2)})`);
+    // ========== 后袖山上段控制点 (backPitch → capTop)==========
+    //
+    // 【关键】capTop处切线必须接近水平！（同前端）
+    //
+    // 数学原理：
+    // - Cubic Bezier在t=1处的切线方向 = P3 - P2
+    // - 要使切线水平，需要 P2.y ≈ P3.y (= 0)
+    // - 所以 upperBackCp2 的 Y 值必须很小（< cH 的10%）
+    //
+    // 工业特征：
+    // - 更平缓（配合后袖整体特征）
+    // - 过渡自然
+    //
 
-    // ========== 计算实际弧长 ==========
-    const actualFrontLen = this.calculateBezierLength(
-      capTop, frontCp1, frontCp2, frontAxilla
+    const backUpperSpanX = capTop.x - backPitch.x;  // 正值
+    const backUpperSpanY = capTop.y - backPitch.y;  // 负值
+
+    // CP1: 从backPitch开始
+    const upperBackCp1 = new Point(
+      backPitch.x + backUpperSpanX * 0.35,
+      backPitch.y - Math.abs(backUpperSpanY) * 0.25 + halfBicep * 0.08
     );
-    
-    const actualBackLen = this.calculateBezierLength(
-      backAxilla, backCp1, backCp2, capTop
+
+    // CP2: 控制顶部圆弧
+    // 【重要】Y值必须小，确保capTop处切线水平！
+    const upperBackCp2 = new Point(
+      -halfBicep * 0.50,          // X: 大幅向外凸出（50% halfBicep，略大于前袖）
+      cH * 0.06                   // Y: 很小（6% cH），确保水平切线 ✓
     );
 
-    const actualTotalLen = actualFrontLen + actualBackLen;
-
-    logger.debug('\n📏 弧长验证:');
-    logger.debug(`   实际前袖山: ${actualFrontLen.toFixed(2)} cm`);
-    logger.debug(`   实际后袖山: ${actualBackLen.toFixed(2)} cm`);
-    logger.debug(`   实际总长度: ${actualTotalLen.toFixed(2)} cm`);
-
-    // ========== 构建Path（简化拓扑：只有2个curve）==========
+    // ========== 构建所有points对象 ==========
     const points: Record<string, Point> = {
+      // 关键点
       capTop,
+      frontPitch,
       frontAxilla,
+      backPitch,
       backAxilla,
       frontCuff,
       backCuff,
-      frontCp1,
-      frontCp2,
-      backCp1,
-      backCp2,
+
+      // 前袖山控制点
+      upperFrontCp1,
+      upperFrontCp2,
+      lowerFrontCp1,
+      lowerFrontCp2,
+
+      // 后袖山控制点
+      lowerBackCp1,
+      lowerBackCp2,
+      upperBackCp1,
+      upperBackCp2,
+
+      // Notches
       frontNotch,
       backNotch,
+
+      // Grainline
       grainlineStart: new Point(0, cH * 0.3),
       grainlineEnd: new Point(0, cH + sL * 0.8)
     };
 
+    // ========== 计算每段Bezier长度 ==========
+    const lenUpperFront = this.calculateBezierLength(capTop, upperFrontCp1, upperFrontCp2, frontPitch);
+    const lenLowerFront = this.calculateBezierLength(frontPitch, lowerFrontCp1, lowerFrontCp2, frontAxilla);
+    const lenLowerBack = this.calculateBezierLength(backAxilla, lowerBackCp1, lowerBackCp2, backPitch);
+    const lenUpperBack = this.calculateBezierLength(backPitch, upperBackCp1, upperBackCp2, capTop);
+
+    const actualFrontLen = lenUpperFront + lenLowerFront;
+    const actualBackLen = lenLowerBack + lenUpperBack;
+    const actualTotalLen = actualFrontLen + actualBackLen;
+
+    // ========== 验证系统（8项检查）==========
+
+    // 1. 输出pitch坐标
+    logger.debug('\n📐 1. Pitch坐标:');
+    logger.debug(`   frontPitch: (${frontPitch.x.toFixed(2)}, ${frontPitch.y.toFixed(2)})`);
+    logger.debug(`   backPitch: (${backPitch.x.toFixed(2)}, ${backPitch.y.toFixed(2)})`);
+
+    // 2. 输出控制点坐标
+    logger.debug('\n🎯 2. 控制点坐标:');
+    logger.debug(`   前袖山上段:`);
+    logger.debug(`     CP1(upperFrontCp1): (${upperFrontCp1.x.toFixed(2)}, ${upperFrontCp1.y.toFixed(2)})`);
+    logger.debug(`     CP2(upperFrontCp2): (${upperFrontCp2.x.toFixed(2)}, ${upperFrontCp2.y.toFixed(2)})`);
+    logger.debug(`   前袖山下段:`);
+    logger.debug(`     CP1(lowerFrontCp1): (${lowerFrontCp1.x.toFixed(2)}, ${lowerFrontCp1.y.toFixed(2)})`);
+    logger.debug(`     CP2(lowerFrontCp2): (${lowerFrontCp2.x.toFixed(2)}, ${lowerFrontCp2.y.toFixed(2)})`);
+    logger.debug(`   后袖山下段:`);
+    logger.debug(`     CP1(lowerBackCp1): (${lowerBackCp1.x.toFixed(2)}, ${lowerBackCp1.y.toFixed(2)})`);
+    logger.debug(`     CP2(lowerBackCp2): (${lowerBackCp2.x.toFixed(2)}, ${lowerBackCp2.y.toFixed(2)})`);
+    logger.debug(`   后袖山上段:`);
+    logger.debug(`     CP1(upperBackCp1): (${upperBackCp1.x.toFixed(2)}, ${upperBackCp1.y.toFixed(2)})`);
+    logger.debug(`     CP2(upperBackCp2): (${upperBackCp2.x.toFixed(2)}, ${upperBackCp2.y.toFixed(2)})`);
+
+    // 3. 输出每段Bezier长度
+    logger.debug('\n📏 3. 每段Bezier长度:');
+    logger.debug(`   前袖山上段: ${lenUpperFront.toFixed(2)} cm`);
+    logger.debug(`   前袖山下段: ${lenLowerFront.toFixed(2)} cm`);
+    logger.debug(`   后袖山下段: ${lenLowerBack.toFixed(2)} cm`);
+    logger.debug(`   后袖山上段: ${lenUpperBack.toFixed(2)} cm`);
+
+    // 4. 前后袖山长度差
+    const lengthDiff = actualBackLen - actualFrontLen;
+    logger.debug('\n⚖️  4. 前后袖山长度差:');
+    logger.debug(`   前袖山总长: ${actualFrontLen.toFixed(2)} cm`);
+    logger.debug(`   后袖山总长: ${actualBackLen.toFixed(2)} cm`);
+    logger.debug(`   长度差(后-前): ${lengthDiff.toFixed(2)} cm`);
+    if (lengthDiff > 0) {
+      logger.info(`   ✅ 后袖更长（符合工业规范，差异${lengthDiff.toFixed(2)}cm）`);
+    } else {
+      logger.warn(`   ⚠️ 后袖应该更长！当前后袖比前袖短${Math.abs(lengthDiff).toFixed(2)}cm`);
+    }
+
+    // 5. 验证顶部切线方向
+    logger.debug('\n↗️  5. 顶部切线方向验证:');
+    
+    // 前袖山顶部切线 (t=0处)：方向 = CP1 - P0
+    const frontTangentAtTop = {
+      x: upperFrontCp1.x - capTop.x,
+      y: upperFrontCp1.y - capTop.y
+    };
+    const frontTangentAngle = Math.atan2(frontTangentAtTop.y, frontTangentAtTop.x) * 180 / Math.PI;
+    
+    // 后袖山顶部切线 (t=1处)：方向 = P3 - CP2
+    const backTangentAtTop = {
+      x: capTop.x - upperBackCp2.x,
+      y: capTop.y - upperBackCp2.y
+    };
+    const backTangentAngle = Math.atan2(backTangentAtTop.y, backTangentAtTop.x) * 180 / Math.PI;
+
+    logger.debug(`   前袖山顶部切线角度: ${frontTangentAngle.toFixed(1)}°`);
+    logger.debug(`   后袖山顶部切线角度: ${backTangentAngle.toFixed(1)}°`);
+    
+    // 前袖山：t=0处切线应接近水平（|角度| < 15°）
+    // 后袖山：t=1处切线应接近水平（|角度| < 15° 或 |角度-180°| < 15°）
+    const frontIsHorizontal = Math.abs(frontTangentAngle) < 15;
+    const backIsHorizontal = Math.abs(backTangentAngle) < 15 || Math.abs(backTangentAngle - 180) < 15 || Math.abs(backTangentAngle + 180) < 15;
+    
+    if (frontIsHorizontal && backIsHorizontal) {
+      logger.info(`   ✅ 顶部切线接近水平（前${frontTangentAngle.toFixed(1)}°，后${backTangentAngle.toFixed(1)}°）`);
+    } else {
+      logger.warn(`   ⚠️ 顶部切线不够水平！可能存在尖顶`);
+      if (!frontIsHorizontal) {
+        logger.warn(`      前袖切线角度过大: ${frontTangentAngle.toFixed(1)}° (应<15°)`);
+        logger.warn(`      建议: 减小upperFrontCp1.y值`);
+      }
+      if (!backIsHorizontal) {
+        logger.warn(`      后袖切线角度异常: ${backTangentAngle.toFixed(1)}°`);
+        logger.warn(`      建议: 减小upperBackCp2.y值`);
+      }
+    }
+
+    // 6. 检测是否存在自交
+    logger.debug('\n🔄  6. 自交检测:');
+    const hasSelfIntersection = this.checkSelfIntersection([
+      { p0: capTop, p1: upperFrontCp1, p2: upperFrontCp2, p3: frontPitch },
+      { p0: frontPitch, p1: lowerFrontCp1, p2: lowerFrontCp2, p3: frontAxilla },
+      { p0: backAxilla, p1: lowerBackCp1, p2: lowerBackCp2, p3: backPitch },
+      { p0: backPitch, p1: upperBackCp1, p2: upperBackCp2, p3: capTop }
+    ]);
+    
+    if (!hasSelfIntersection) {
+      logger.info(`   ✅ 无自交`);
+    } else {
+      logger.error(`   ❌ 存在自交！曲线形状错误`);
+    }
+
+    // 7. 检查是否存在共线退化
+    logger.debug('\n📏  7. 共线退化检测:');
+    const degenerateCurves = this.checkDegenerateCurves([
+      { name: '前上', p0: capTop, p1: upperFrontCp1, p2: upperFrontCp2, p3: frontPitch },
+      { name: '前下', p0: frontPitch, p1: lowerFrontCp1, p2: lowerFrontCp2, p3: frontAxilla },
+      { name: '后下', p0: backAxilla, p1: lowerBackCp1, p2: lowerBackCp2, p3: backPitch },
+      { name: '后上', p0: backPitch, p1: upperBackCp1, p2: upperBackCp2, p3: capTop }
+    ]);
+    
+    if (degenerateCurves.length === 0) {
+      logger.info(`   ✅ 无共线退化（所有curve都是真实Bezier曲线）`);
+    } else {
+      logger.warn(`   ⚠️ 存在共线退化: ${degenerateCurves.join(', ')}`);
+    }
+
+    // 8. 总体评估
+    logger.debug('\n🎯 8. 总体评估:');
+    logger.debug(`   实际总长度: ${actualTotalLen.toFixed(2)} cm`);
+    logger.debug(`   目标总长度: ${(frontArmholeLen + backArmholeLen + ease).toFixed(2)} cm`);
+    const totalError = Math.abs(actualTotalLen - (frontArmholeLen + backArmholeLen + ease));
+    logger.debug(`   长度误差: ${totalError.toFixed(2)} cm`);
+    
+    if (totalError <= 3.0) {
+      logger.info(`   ✅ 长度匹配可接受（误差≤3cm）`);
+    } else if (totalError <= 5.0) {
+      logger.warn(`   ⚠️ 长度基本匹配（误差≤5cm）`);
+    } else {
+      logger.warn(`   ⚠️ 长度差异较大: ${totalError.toFixed(2)}cm`);
+    }
+
+    // ========== 构建Path（固定拓扑：4段curve）==========
     const capPath = new Path()
       .move(capTop)
       
-      // 前袖山（1段curve）
-      .curve(frontCp1, frontCp2, frontAxilla)
+      // 前袖山上段 (1st curve)
+      .curve(upperFrontCp1, upperFrontCp2, frontPitch)
+      
+      // 前袖山下段 (2nd curve)
+      .curve(lowerFrontCp1, lowerFrontCp2, frontAxilla)
       
       // 前侧缝
       .line(frontCuff)
@@ -246,14 +459,17 @@ export class SleeveCapGenerator {
       // 后侧缝
       .line(backAxilla)
       
-      // 后袖山（1段curve）
-      .curve(backCp1, backCp2, capTop)
+      // 后袖山下段 (3rd curve)
+      .curve(lowerBackCp1, lowerBackCp2, backPitch)
+      
+      // 后袖山上段 (4th curve)
+      .curve(upperBackCp1, upperBackCp2, capTop)
       
       .close();
 
-    logger.debug('\n✅ 简化版袖山生成完成');
-    logger.debug(`   Path操作数: ${capPath.ops.length} (应为7: M + C + L + L + L + C + Z)`);
-    logger.debug('=========================================\n');
+    logger.debug('\n✅ v6.0 工业袖山生成完成');
+    logger.debug(`   Path操作数: ${capPath.ops.length} (应为9: M + C + C + L + L + L + C + C + Z)`);
+    logger.debug('================================================\n');
 
     return {
       capPath,
@@ -265,6 +481,81 @@ export class SleeveCapGenerator {
       backArmholeLength: backArmholeLen,
       ease
     };
+  }
+
+  /**
+   * 检测自交（简化版本）
+   */
+  private static checkSelfIntersection(curves: Array<{
+    p0: Point; p1: Point; p2: Point; p3: Point
+  }>): boolean {
+
+    for (let i = 0; i < curves.length; i++) {
+      for (let j = i + 2; j < curves.length; j++) {
+        if (i === 0 && j === curves.length - 1) continue; // 首尾相连不算自交
+        
+        // 简化检测：检查bounding box是否重叠
+        const curveI = curves[i];
+        const curveJ = curves[j];
+        
+        const boxI = {
+          minX: Math.min(curveI.p0.x, curveI.p1.x, curveI.p2.x, curveI.p3.x),
+          maxX: Math.max(curveI.p0.x, curveI.p1.x, curveI.p2.x, curveI.p3.x),
+          minY: Math.min(curveI.p0.y, curveI.p1.y, curveI.p2.y, curveI.p3.y),
+          maxY: Math.max(curveI.p0.y, curveI.p1.y, curveI.p2.y, curveI.p3.y)
+        };
+        
+        const boxJ = {
+          minX: Math.min(curveJ.p0.x, curveJ.p1.x, curveJ.p2.x, curveJ.p3.x),
+          maxX: Math.max(curveJ.p0.x, curveJ.p1.x, curveJ.p2.x, curveJ.p3.x),
+          minY: Math.min(curveJ.p0.y, curveJ.p1.y, curveJ.p2.y, curveJ.p3.y),
+          maxY: Math.max(curveJ.p0.y, curveJ.p1.y, curveJ.p2.y, curveJ.p3.y)
+        };
+        
+        if (boxI.maxX > boxJ.minX && boxI.minX < boxJ.maxX &&
+            boxI.maxY > boxJ.minY && boxI.minY < boxJ.maxY) {
+          return true; // 可能存在自交
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * 检查共线退化（control points collinear with endpoints）
+   */
+  private static checkDegenerateCurves(curves: Array<{
+    name: string;
+    p0: Point; p1: Point; p2: Point; p3: Point
+  }>): string[] {
+
+    const degenerate: string[] = [];
+    const tolerance = 0.01;
+
+    for (const curve of curves) {
+      // 计算三角形面积（叉积）来检测共线性
+      const area1 = Math.abs(
+        (curve.p1.x - curve.p0.x) * (curve.p2.y - curve.p0.y) -
+        (curve.p1.y - curve.p0.y) * (curve.p2.x - curve.p0.x)
+      );
+      
+      const area2 = Math.abs(
+        (curve.p2.x - curve.p0.x) * (curve.p3.y - curve.p0.y) -
+        (curve.p2.y - curve.p0.y) * (curve.p3.x - curve.p0.x)
+      );
+      
+      const span = Math.sqrt(
+        Math.pow(curve.p3.x - curve.p0.x, 2) +
+        Math.pow(curve.p3.y - curve.p0.y, 2)
+      );
+      
+      if (area1 < tolerance * span || area2 < tolerance * span) {
+        degenerate.push(curve.name);
+      }
+    }
+
+    return degenerate;
   }
 
   /**
