@@ -163,24 +163,26 @@ export class SleeveCapGenerator {
     // ========== 前袖山控制点（更深、更陡）==========
     //
     // 工业特征：
-    // - 上半段：CP1向外凸出明显（产生陡峭感）
+    // - 上半段：CP1向外凸出明显（产生圆弧形顶部）
     // - 下半段：hollow效果明显（CP1内收，CP2再外放）
     // - 曲率集中在上半段
+    //
+    // 【重要修正】T恤袖山顶部必须是圆弧形，不能是尖角！
     //
 
     const frontUpperSpanX = frontPitch.x - capTop.x;
     const frontUpperSpanY = frontPitch.y - capTop.y;
 
-    // 前袖山上段 CP1：向外凸出（基于spanX比例）
+    // 前袖山上段 CP1：大幅向外凸出（产生圆弧形顶部）
     const frontUpperCp1 = new Point(
-      capTop.x + frontUpperSpanX * 0.25,
-      capTop.y + frontUpperSpanY * 0.18 + halfBicep * 0.15
+      halfBicep * 0.58,  // X: 腋下半围的58%（大幅外凸）
+      cH * 0.30          // Y: 袖山高度的30%（向下延伸）
     );
 
     // 前袖山上段 CP2：接近pitch点
     const frontUpperCp2 = new Point(
-      frontPitch.x - frontUpperSpanX * 0.15,
-      frontPitch.y - frontUpperSpanY * 0.12
+      frontPitch.x - frontUpperSpanX * 0.12,
+      frontPitch.y - frontUpperSpanY * 0.10
     );
 
     const frontLowerSpanX = frontAxilla.x - frontPitch.x;
@@ -207,7 +209,7 @@ export class SleeveCapGenerator {
     // ========== 后袖山控制点（更平、更长）==========
     //
     // 工业特征：
-    // - 上半段：较平缓（CP1凸出不明显）
+    // - 上半段：较平缓但仍有明显外凸（保证圆弧形顶部）
     // - 下半段：更长更平（hollow弱）
     // - 曲率分布均匀
     //
@@ -215,16 +217,16 @@ export class SleeveCapGenerator {
     const backUpperSpanX = capTop.x - backPitch.x;
     const backUpperSpanY = backPitch.y - capTop.y;
 
-    // 后袖山上段 CP1：轻微外凸
+    // 后袖山上段 CP1：向外凸出（配合前袖形成圆弧顶）
     const backUpperCp1 = new Point(
-      backPitch.x + backUpperSpanX * 0.30,
-      backPitch.y - backUpperSpanY * 0.22 + halfBicep * 0.10
+      backPitch.x + backUpperSpanX * 0.32,
+      backPitch.y - backUpperSpanY * 0.20 + halfBicep * 0.12
     );
 
-    // 后袖山上段 CP2：接近capTop
+    // 后袖山上段 CP2：大幅向外凸出（对称于前袖CP1）
     const backUpperCp2 = new Point(
-      capTop.x - backUpperSpanX * 0.20,
-      capTop.y + backUpperSpanY * 0.15
+      -halfBicep * 0.58,  // X: 腋下半围的58%（大幅外凸，负方向）
+      cH * 0.30           // Y: 袖山高度的30%（向下延伸）
     );
 
     const backLowerSpanX = backPitch.x - backAxilla.x;
