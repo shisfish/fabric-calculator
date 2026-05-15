@@ -66,16 +66,16 @@ async function main() {
       console.log(`   - cutCount: ${piece.cutCount}`);
       
       if (piece.name === 'sleeve') {
-        console.log(`\n🎯 袖子详细信息:`);
+        console.log(`\n🎯 袖子详细信息 (v5.0 简化版):`);
         
-        // 检查关键点
+        // 检查关键点（简化版）
         const points = piece.points;
         const requiredPoints = [
-          'capTop', 'frontPitch', 'frontAxilla', 'backAxilla', 'backPitch',
+          'capTop', 'frontAxilla', 'backAxilla',
           'frontCuff', 'backCuff',
           'frontNotch', 'backNotch',
-          'frontUpperCp1', 'frontUpperCp2', 'frontLowerCp1', 'frontLowerCp2',
-          'backUpperCp1', 'backUpperCp2', 'backLowerCp1', 'backLowerCp2'
+          'frontCp1', 'frontCp2',
+          'backCp1', 'backCp2'
         ];
         
         let missingPoints = [];
@@ -94,25 +94,19 @@ async function main() {
         // 输出关键点坐标
         console.log('\n📐 关键点坐标:');
         console.log(`   capTop: (${points.capTop?.x?.toFixed(2)}, ${points.capTop?.y?.toFixed(2)})`);
-        console.log(`   frontPitch: (${points.frontPitch?.x?.toFixed(2)}, ${points.frontPitch?.y?.toFixed(2)})`);
         console.log(`   frontAxilla: (${points.frontAxilla?.x?.toFixed(2)}, ${points.frontAxilla?.y?.toFixed(2)})`);
-        console.log(`   backPitch: (${points.backPitch?.x?.toFixed(2)}, ${points.backPitch?.y?.toFixed(2)})`);
         console.log(`   backAxilla: (${points.backAxilla?.x?.toFixed(2)}, ${points.backAxilla?.y?.toFixed(2)})`);
         console.log(`   frontNotch: (${points.frontNotch?.x?.toFixed(2)}, ${points.frontNotch?.y?.toFixed(2)})`);
         console.log(`   backNotch: (${points.backNotch?.x?.toFixed(2)}, ${points.backNotch?.y?.toFixed(2)})`);
         
         // 输出控制点
-        console.log('\n🎨 前袖山控制点:');
-        console.log(`   Upper CP1: (${points.frontUpperCp1?.x?.toFixed(2)}, ${points.frontUpperCp1?.y?.toFixed(2)})`);
-        console.log(`   Upper CP2: (${points.frontUpperCp2?.x?.toFixed(2)}, ${points.frontUpperCp2?.y?.toFixed(2)})`);
-        console.log(`   Lower CP1: (${points.frontLowerCp1?.x?.toFixed(2)}, ${points.frontLowerCp1?.y?.toFixed(2)})`);
-        console.log(`   Lower CP2: (${points.frontLowerCp2?.x?.toFixed(2)}, ${points.frontLowerCp2?.y?.toFixed(2)})`);
+        console.log('\n🎨 前袖山控制点 (1段curve):');
+        console.log(`   CP1: (${points.frontCp1?.x?.toFixed(2)}, ${points.frontCp1?.y?.toFixed(2)})`);
+        console.log(`   CP2: (${points.frontCp2?.x?.toFixed(2)}, ${points.frontCp2?.y?.toFixed(2)})`);
         
-        console.log('\n🎨 后袖山控制点:');
-        console.log(`   Upper CP1: (${points.backUpperCp1?.x?.toFixed(2)}, ${points.backUpperCp1?.y?.toFixed(2)})`);
-        console.log(`   Upper CP2: (${points.backUpperCp2?.x?.toFixed(2)}, ${points.backUpperCp2?.y?.toFixed(2)})`);
-        console.log(`   Lower CP1: (${points.backLowerCp1?.x?.toFixed(2)}, ${points.backLowerCp1?.y?.toFixed(2)})`);
-        console.log(`   Lower CP2: (${points.backLowerCp2?.x?.toFixed(2)}, ${points.backLowerCp2?.y?.toFixed(2)})`);
+        console.log('\n🎨 后袖山控制点 (1段curve):');
+        console.log(`   CP1: (${points.backCp1?.x?.toFixed(2)}, ${points.backCp1?.y?.toFixed(2)})`);
+        console.log(`   CP2: (${points.backCp2?.x?.toFixed(2)}, ${points.backCp2?.y?.toFixed(2)})`);
         
         // 验证Path拓扑
         console.log('\n🔍 Path拓扑验证:');
