@@ -115,9 +115,6 @@ if (input.mode === 'preview') {
         });
     }
 
-    // 🔧 【关键修复】收集所有已放置的piece ID
-    const placedPieceIds = new Set(placedPolygons.map(pp => pp.id));
-    
     // 🔧 【关键修复】为每个原始piece生成数据（包括未排料的）
     const piecesData: any[] = [];
     
