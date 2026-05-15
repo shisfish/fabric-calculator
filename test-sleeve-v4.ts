@@ -66,7 +66,7 @@ async function main() {
       console.log(`   - cutCount: ${piece.cutCount}`);
       
       if (piece.name === 'sleeve') {
-        console.log(`\n🎯 袖子详细信息 (v6.0 完整工业版):`);
+        console.log(`\n🎯 袖子详细信息 (v7.0 G1/G2连续版):`);
         
         // 检查关键点（完整版：包含pitch点和8个控制点）
         const points = piece.points;
@@ -123,8 +123,8 @@ async function main() {
         console.log(`   Upper CP1: (${points.upperBackCp1?.x?.toFixed(2)}, ${points.upperBackCp1?.y?.toFixed(2)})`);
         console.log(`   Upper CP2: (${points.upperBackCp2?.x?.toFixed(2)}, ${points.upperBackCp2?.y?.toFixed(2)})`);
         
-        // 验证Path拓扑（v6.0: 9个操作）
-        console.log('\n🔍 Path拓扑验证 (v6.0):');
+        // 验证Path拓扑（v7.0: 9个操作）
+          console.log('\n🔍 Path拓扑验证 (v7.0):');
         const ops = piece.path.ops;
         console.log(`   操作数: ${ops.length} (应为9: M + C + C + L + L + L + C + C + Z)`);
         
