@@ -3,6 +3,7 @@ import { PatternPiece } from '../patterns/index.js';
 import { Polygon } from './Polygon.js';
 import { PolygonConverter } from './PolygonConverter.js';
 import { SATCollision } from './Collision.js';
+import { logger } from '../utils/CADLogger.js';
 
 export interface NestConfig {
   fabricWidth: number;
@@ -62,16 +63,38 @@ export class NestEngine {
   }
 
   addPiece(piece: PatternPiece): void {
-    const polygon = PolygonConverter.pathToPolygon(piece.path, piece.name);
-    const simplified = PolygonConverter.simplifyPolygon(polygon, 1);
-    const rotations = this.config.rotations.map(angle => simplified.rotate(angle));
+    try {
+      logger.debug(`\n🔧 NestEngine.addPiece: ${piece.name}`);
+      logger.debug(`   cutCount: ${piece.cutCount}`);
+      logger.debug(`   path存在: ${!!piece.path}`);
+      
+      if (piece.path && piece.path.ops) {
+        logger.debug(`   path.ops数量: ${piece.path.ops.length}`);
+        
+        const polygon = PolygonConverter.pathToPolygon(piece.path, piece.name);
+        logger.debug(`   转换后polygon点数: ${polygon.points.length}`);
+        logger.debug(`   polygon面积: ${polygon.getArea().toFixed(2)}`);
+        
+        const simplified = PolygonConverter.simplifyPolygon(polygon, 1);
+        logger.debug(`   简化后polygon点数: ${simplified.points.length}`);
+        
+        const rotations = this.config.rotations.map(angle => simplified.rotate(angle));
+        logger.debug(`   生成${rotations.length}个旋转版本`);
 
-    this.pieces.push({
-      id: piece.name,
-      polygon: simplified,
-      quantity: piece.cutCount,
-      rotations,
-    });
+        this.pieces.push({
+          id: piece.name,
+          polygon: simplified,
+          quantity: piece.cutCount,
+          rotations,
+        });
+        
+        logger.debug(`   ✅ piece "${piece.name}" 添加成功`);
+      } else {
+        logger.error(`   ❌ piece "${piece.name}" 的path无效或不存在！`);
+      }
+    } catch (e) {
+      logger.error(`   ❌ 添加piece "${piece.name}" 时出错:`, e);
+    }
   }
 
   addPieces(pieces: PatternPiece[]): void {
@@ -85,12 +108,32 @@ export class NestEngine {
 
     const sortedPieces = this.sortPiecesByArea();
 
+    logger.debug('\n🏭 ===== NestEngine 开始排料 =====');
+    logger.debug(`   待排料pieces数量: ${sortedPieces.length}`);
+    logger.debug(`   fabricWidth: ${this.config.fabricWidth}, fabricHeight: ${this.config.fabricHeight}`);
+    
     for (const nestingPiece of sortedPieces) {
+      logger.debug(`\n   📦 处理piece: ${nestingPiece.id}, quantity=${nestingPiece.quantity}`);
+      logger.debug(`      polygon面积: ${nestingPiece.polygon.getArea().toFixed(2)}`);
+      logger.debug(`      polygon点数: ${nestingPiece.polygon.points.length}`);
+      
+      const bbox = nestingPiece.polygon.getBoundingBox();
+      logger.debug(`      bounding box: ${bbox.width.toFixed(2)} x ${bbox.height.toFixed(2)}`);
+      
       for (let q = 0; q < nestingPiece.quantity; q++) {
-        this.placePiece(nestingPiece, q);
+        const success = this.placePiece(nestingPiece, q);
+        if (success) {
+          logger.debug(`      ✅ 实例${q+1}: 放置成功`);
+        } else {
+          logger.error(`      ❌ 实例${q+1}: 放置失败！无法找到合适位置`);
+        }
       }
     }
 
+    logger.debug(`\n📊 排料结果: 成功放置${this.placedPieces.length}个实例`);
+    const placedNames = this.placedPieces.map(p => p.pieceId);
+    logger.debug(`   放置的pieces: ${placedNames.join(', ')}`);
+    
     return this.calculateResult();
   }
 

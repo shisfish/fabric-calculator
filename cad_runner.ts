@@ -92,53 +92,141 @@ if (input.mode === 'preview') {
     const result = engine.nest();
     const placedPolygons = engine.getPlacedPolygons();
 
+    // 🔧 【关键修复】构建完整的pathOps映射
     const piecePathMap = new Map<string, any>();
+    const pieceOriginalData = new Map<string, any>();  // 保存原始piece数据
+    
     for (const piece of pieces) {
-        piecePathMap.set(piece.name, (piece.path?.ops || []).map((op: any) => ({
+        const pathOps = (piece.path?.ops || []).map((op: any) => ({
             type: op.type,
             to: op.to ? { x: op.to.x, y: op.to.y } : null,
             cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
             cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-        })));
+        }));
+        
+        piecePathMap.set(piece.name, pathOps);
+        
+        // 保存原始数据用于未排料时的fallback
+        pieceOriginalData.set(piece.name, {
+            cutCount: piece.cutCount || 1,
+            onFold: piece.onFold || false,
+            seamAllowance: piece.seamAllowance || 0,
+            points: piece.points || {}
+        });
     }
 
-    const piecesData = placedPolygons.map(pp => {
-        const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
-        const name = pp.id.replace(/_\d+$/, '');
-        return {
-            name,
-            x: pp.x,
-            y: pp.y,
-            width: bbox.width,
-            height: bbox.height,
-            area: pp.polygon.getArea(),
-            cutCount: 1,
-            onFold: false,
-            rotation: pp.rotation,
-            pathOps: piecePathMap.get(name) || []
-        };
-    });
+    // 🔧 【关键修复】收集所有已放置的piece ID
+    const placedPieceIds = new Set(placedPolygons.map(pp => pp.id));
+    
+    // 🔧 【关键修复】为每个原始piece生成数据（包括未排料的）
+    const piecesData: any[] = [];
+    
+    for (const piece of pieces) {
+        // 查找该piece的所有已放置实例
+        const placedInstances = placedPolygons.filter(pp => 
+            pp.id.startsWith(piece.name + '_')
+        );
+        
+        if (placedInstances.length > 0) {
+            // ✅ 已成功排料：使用实际位置
+            for (const pp of placedInstances) {
+                const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
+                piecesData.push({
+                    name: piece.name,
+                    x: pp.x,
+                    y: pp.y,
+                    width: bbox.width,
+                    height: bbox.height,
+                    area: pp.polygon.getArea(),
+                    cutCount: 1,
+                    onFold: false,
+                    rotation: pp.rotation,
+                    placed: true,  // 标记为已放置
+                    pathOps: piecePathMap.get(piece.name) || []
+                });
+            }
+        } else {
+            // ❌ 未排料成功：强制保留，使用默认位置
+            logger.warn(`⚠️ Piece "${piece.name}" 未成功排料，强制保留到结果中`);
+            
+            const originalPiece = pieceOriginalData.get(piece.name);
+            
+            // 计算bounding box（从pathOps估算）
+            let estimatedWidth = 0;
+            let estimatedHeight = 0;
+            const pathOps = piecePathMap.get(piece.name) || [];
+            
+            if (pathOps.length > 0) {
+                let minX = Infinity, minY = Infinity;
+                let maxX = -Infinity, maxY = -Infinity;
+                
+                for (const op of pathOps) {
+                    if (op.to) {
+                        minX = Math.min(minX, op.to.x);
+                        minY = Math.min(minY, op.to.y);
+                        maxX = Math.max(maxX, op.to.x);
+                        maxY = Math.max(maxY, op.to.y);
+                    }
+                    if (op.cp1) {
+                        minX = Math.min(minX, op.cp1.x);
+                        minY = Math.min(minY, op.cp1.y);
+                        maxX = Math.max(maxX, op.cp1.x);
+                        maxY = Math.max(maxY, op.cp1.y);
+                    }
+                    if (op.cp2) {
+                        minX = Math.min(minX, op.cp2.x);
+                        minY = Math.min(minY, op.cp2.y);
+                        maxX = Math.max(maxX, op.cp2.x);
+                        maxY = Math.max(maxY, op.cp2.y);
+                    }
+                }
+                
+                estimatedWidth = maxX - minX;
+                estimatedHeight = maxY - minY;
+            }
+            
+            // 根据cutCount生成对应数量的实例
+            const count = originalPiece.cutCount || 1;
+            for (let i = 0; i < count; i++) {
+                piecesData.push({
+                    name: piece.name,
+                    x: 0,  // 默认位置
+                    y: 0,
+                    width: estimatedWidth,
+                    height: estimatedHeight,
+                    area: estimatedWidth * estimatedHeight,
+                    cutCount: 1,
+                    onFold: originalPiece.onFold,
+                    rotation: 0,
+                    placed: false,  // 标记为未放置
+                    pathOps: pathOps
+                });
+            }
+        }
+    }
 
-    logger.info(`Nesting模式: 排料完成，${piecesData.length}个pieces, 利用率${result.utilization?.toFixed(1)}%`);
+    logger.info(`Nesting模式: 排料完成，总共${piecesData.length}个pieces（含${placedPolygons.length}个已排料）, 利用率${result.utilization?.toFixed(1)}%`);
     
     // 🔍 【调试日志】最终返回数据完整性检查
     logger.debug('\n🔍 ===== 最终API返回数据检查 =====');
-    logger.debug(`   piecesData数量: ${piecesData.length}`);
+    logger.debug(`   原始pieces数量: ${pieces.length}`);
+    logger.debug(`   已排料pieces数量: ${placedPolygons.length}`);
+    logger.debug(`   返回的piecesData数量: ${piecesData.length}`);
     logger.debug(`   pieces名称列表:`);
     for (let i = 0; i < piecesData.length; i++) {
         const piece = piecesData[i];
-        logger.debug(`     [${i}] ${piece.name}:`);
+        logger.debug(`     [${i}] ${piece.name} (${piece.placed ? '✅已排料' : '❌未排料'}):`);
         logger.debug(`         x: ${piece.x}, y: ${piece.y}`);
         logger.debug(`         width: ${piece.width?.toFixed(2)}, height: ${piece.height?.toFixed(2)}`);
         logger.debug(`         area: ${piece.area?.toFixed(2)}`);
         logger.debug(`         pathOps数量: ${piece.pathOps?.length || 0}`);
         
-        // 检查sleeve的pathOps详情
+        // 检查sleeve的详细信息
         if (piece.name === 'sleeve') {
             logger.debug(`         🎯 SLEEVE 详细信息:`);
             if (piece.pathOps && piece.pathOps.length > 0) {
-                logger.debug(`           pathOps类型:`);
-                for (let j = 0; j < Math.min(piece.pathOps.length, 10); j++) {
+                logger.debug(`           pathOps类型（前5个）:`);
+                for (let j = 0; j < Math.min(piece.pathOps.length, 5); j++) {
                     const op = piece.pathOps[j];
                     if (op.type === 'move' || op.type === 'line') {
                         logger.debug(`             [${j}] ${op.type} → (${op.to?.x?.toFixed(2)}, ${op.to?.y?.toFixed(2)})`);
@@ -147,6 +235,9 @@ if (input.mode === 'preview') {
                     } else {
                         logger.debug(`             [${j}] ${op.type}`);
                     }
+                }
+                if (piece.pathOps.length > 5) {
+                    logger.debug(`             ... 共${piece.pathOps.length}个操作`);
                 }
             } else {
                 logger.error(`           ❌ pathOps为空或不存在！`);
@@ -158,19 +249,28 @@ if (input.mode === 'preview') {
             } else {
                 logger.info(`           ✅ 几何尺寸正常: ${piece.width.toFixed(1)} x ${piece.height.toFixed(1)} cm`);
             }
+            
+            logger.info(`           排料状态: ${piece.placed ? '✅ 成功' : '⚠️ 未排料（但已保留）'}`);
         }
     }
     
     // 统计sleeve数量
     const sleeveCount = piecesData.filter(p => p.name === 'sleeve').length;
+    const placedSleeveCount = piecesData.filter(p => p.name === 'sleeve' && p.placed).length;
     logger.debug(`\n📊 袖子统计:`);
-    logger.debug(`   sleeve数量: ${sleeveCount}`);
-    if (sleeveCount === 0) {
-        logger.error(`   ❌ 没有找到sleeve pieces！`);
-    } else if (sleeveCount === 2) {
-        logger.info(`   ✅ 找到2个sleeve（正确）`);
+    logger.debug(`   sleeve总数: ${sleeveCount} (期望: 2)`);
+    logger.debug(`   已排料sleeve: ${placedSleeveCount}`);
+    logger.debug(`   未排料sleeve: ${sleeveCount - placedSleeveCount}`);
+    
+    if (sleeveCount >= 2) {
+        logger.info(`   ✅ 找到${sleeveCount}个sleeve（符合预期）`);
+        if (placedSleeveCount < sleeveCount) {
+            logger.warn(`   ⚠️ 其中${sleeveCount - placedSleeveCount}个未成功排料，但已保留在结果中`);
+        }
+    } else if (sleeveCount > 0) {
+        logger.warn(`   ⚠️ 只找到${sleeveCount}个sleeve（期望2个）`);
     } else {
-        logger.warn(`   ⚠️ 找到${sleeveCount}个sleeve（期望2个）`);
+        logger.error(`   ❌ 没有找到任何sleeve pieces！`);
     }
     
     logger.debug('=========================================\n');
