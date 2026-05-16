@@ -74,7 +74,7 @@ export class CubicBezier {
     return cross / len;
   }
 
-  getLength(steps: number = 100): number {
+  getLength(steps: number = 200): number {
     let length = 0;
     let prev = this.getPoint(0);
     for (let i = 1; i <= steps; i++) {

@@ -188,7 +188,7 @@ export class Path {
     return this.toPoints(50);
   }
 
-  getLength(stepsPerCurve: number = 20): number {
+  getLength(stepsPerCurve: number = 100): number {
     let length = 0;
     let current: Point | null = null;
 

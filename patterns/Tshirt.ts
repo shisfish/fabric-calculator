@@ -250,7 +250,7 @@ export class TshirtPatternGenerator {
         sleeveLength: sL,
         cuffWidth: cuW
       },
-      1.5,
+      2.0, // 默认使用 2.0cm ease
       armholeDepth
     );
 
