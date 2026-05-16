@@ -35,7 +35,8 @@ export class TshirtPatternGenerator {
       params.sleeve,
       params.seamAllowance,
       frontArmholeOps,
-      backArmholeOps
+      backArmholeOps,
+      (params.frontPanel.armholeDepth + params.backPanel.armholeDepth) / 2
     );
 
     if (params.seamAllowance && params.seamAllowance > 0) {
@@ -74,25 +75,16 @@ export class TshirtPatternGenerator {
       
       // 收集袖窿部分的操作
       if (collectingArmhole) {
+        // 如果已经收集到curve，并且遇到了下一个line（侧缝线），则停止（不包含侧缝）
+        if (hasCollectedCurve && op.type === 'line' && !op.cp1) {
+          break;
+        }
+        
         armholeOps.push(op);
         
         // 如果收集到了curve，标记它
         if (op.type === 'curve') {
           hasCollectedCurve = true;
-        }
-        
-        // 如果已经收集到curve，并且遇到了下一个line（侧缝线），则停止
-        if (hasCollectedCurve && op.type === 'line' && !op.cp1) {
-          break;
-        }
-        
-        // 如果收集了超过4个操作还没找到curve，可能是后片特殊情况
-        if (armholeOps.length > 5 && !hasCollectedCurve) {
-          // 继续收集，直到找到curve或到达边界
-          if (op.type === 'curve') {
-            hasCollectedCurve = true;
-            continue; // 继续收集下一个line作为结束
-          }
         }
       }
     }
@@ -213,7 +205,8 @@ export class TshirtPatternGenerator {
     sl: SleeveParams,
     seamAllowance: number,
     frontArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>,
-    backArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>
+    backArmholeOps: Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}>,
+    armholeDepth: number
   ): PatternPiece {
 
     // 🔍 【调试日志】输入参数检查
@@ -252,12 +245,13 @@ export class TshirtPatternGenerator {
       frontArmholeOps,
       backArmholeOps,
       {
-        bicepsWidth: bW,        // 原始值，不经过转换
-        sleeveCapHeight: cH,    // 原始值
-        sleeveLength: sL,       // 原始值
-        cuffWidth: cuW          // 原始值
+        bicepsWidth: bW,
+        sleeveCapHeight: cH,
+        sleeveLength: sL,
+        cuffWidth: cuW
       },
-      0.5  // T-shirt ease: 0~1cm
+      1.5,
+      armholeDepth
     );
 
     // 🔍 【调试日志】sleeveResult完整性检查
