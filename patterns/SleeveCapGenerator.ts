@@ -106,8 +106,8 @@ export class SleeveCapGenerator {
    */
   private static calculateCapHeight(
     totalArmholeLen: number,
-    frontArmholeLen: number,
-    backArmholeLen: number,
+    _frontArmholeLen: number,
+    _backArmholeLen: number,
     armholeDepth?: number
   ): number {
     if (armholeDepth) {
@@ -136,7 +136,7 @@ export class SleeveCapGenerator {
     ease: number
   ): number {
     const targetCapLen = totalArmholeLen + ease;
-    const bW = targetCapLen * 0.75;
+    const bW = targetCapLen * 0.78;
     return Math.max(bW, cH * 2.5);
   }
 
@@ -205,8 +205,8 @@ export class SleeveCapGenerator {
       capTop: { outgoing: 15, incoming: 165 },
       frontPitch: { outgoing: 45, incoming: 45 },
       frontAxilla: { outgoing: 80, incoming: 80 },
-      backAxilla: { outgoing: 100, incoming: 100 },
-      backPitch: { outgoing: 138, incoming: 138 }
+      backAxilla: { outgoing: 200, incoming: 270 },
+      backPitch: { outgoing: 330, incoming: 330 }
     };
 
     // 张力参数：控制杆长度 = span × tension
