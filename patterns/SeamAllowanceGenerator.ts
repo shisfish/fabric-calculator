@@ -17,16 +17,29 @@ interface SourceSegment {
   opType: 'line' | 'curve' | 'quad';
 }
 
-interface SampledSegment {
+interface OffsetSegment {
   segmentName: string;
+  segmentType: string;
   distance: number;
-  outlinePoints: Point[];
-  offsetPoints: Point[];
+  kind: 'line' | 'curve';
+  start: Point;
+  end: Point;
+  cp1?: Point;
+  cp2?: Point;
   startTangent: Point;
   endTangent: Point;
-  startOffset: Point;
-  endOffset: Point;
 }
+
+interface RoundJoin {
+  kind: 'round';
+  curves: CubicBezier[];
+}
+
+interface DirectJoin {
+  kind: 'direct';
+}
+
+type JoinGeometry = RoundJoin | DirectJoin;
 
 export class SeamAllowanceGenerator {
   static generate(outline: Path, rules: SeamAllowanceRule[]): Path {
@@ -34,22 +47,18 @@ export class SeamAllowanceGenerator {
       return outline.clone();
     }
 
-    const segments = this.extractSegments(outline, rules);
-    if (!segments.length) {
+    const sourceSegments = this.extractSegments(outline, rules);
+    if (!sourceSegments.length) {
       return outline.clone();
     }
 
     const orientation = this.getOutlineOrientation(outline);
-    const sampledSegments = segments.map((segment) =>
-      this.sampleAndOffsetSegment(segment, orientation)
+    const offsetSegments = sourceSegments.map((segment) =>
+      this.createOffsetSegment(segment, orientation)
     );
 
-    const joinedPoints = this.joinOffsetSegments(sampledSegments);
-    if (joinedPoints.length < 3) {
-      return outline.clone();
-    }
-
-    return Path.fromPoints(joinedPoints, true);
+    const joins = this.resolveJoins(offsetSegments, sourceSegments, orientation);
+    return this.buildOffsetPath(offsetSegments, joins);
   }
 
   private static extractSegments(outline: Path, rules: SeamAllowanceRule[]): SourceSegment[] {
@@ -102,135 +111,272 @@ export class SeamAllowanceGenerator {
     return segments;
   }
 
-  private static sampleAndOffsetSegment(segment: SourceSegment, orientation: number): SampledSegment {
-    const { outlinePoints, tangents } = this.flattenSegment(segment);
-    const offsetPoints = outlinePoints.map((point, index) => {
-      const normal = this.getOutwardNormal(tangents[index], orientation);
-      return new Point(
-        point.x + normal.x * segment.distance,
-        point.y + normal.y * segment.distance
-      );
-    });
-
-    return {
-      segmentName: segment.segmentName,
-      distance: segment.distance,
-      outlinePoints,
-      offsetPoints,
-      startTangent: tangents[0],
-      endTangent: tangents[tangents.length - 1],
-      startOffset: offsetPoints[0],
-      endOffset: offsetPoints[offsetPoints.length - 1]
-    };
-  }
-
-  private static flattenSegment(segment: SourceSegment): { outlinePoints: Point[]; tangents: Point[] } {
+  private static createOffsetSegment(segment: SourceSegment, orientation: number): OffsetSegment {
     if (segment.opType === 'line') {
-      const tangent = this.normalize({
-        x: segment.end.x - segment.start.x,
-        y: segment.end.y - segment.start.y
-      });
-
-      return {
-        outlinePoints: [segment.start.copy(), segment.end.copy()],
-        tangents: [new Point(tangent.x, tangent.y), new Point(tangent.x, tangent.y)]
-      };
+      return this.createParallelLineOffset(segment, orientation);
     }
 
     if (segment.opType === 'quad' && segment.cp1) {
-      const quad = new QuadraticBezier(segment.start, segment.cp1, segment.end);
-      const cubic = quad.toCubic();
-      return this.flattenCubic(cubic);
+      const cubic = new QuadraticBezier(segment.start, segment.cp1, segment.end).toCubic();
+      return this.createOffsetCubicSegment(segment, cubic, orientation);
     }
 
     if (segment.opType === 'curve' && segment.cp1 && segment.cp2) {
-      return this.flattenCubic(new CubicBezier(segment.start, segment.cp1, segment.cp2, segment.end));
+      const cubic = new CubicBezier(segment.start, segment.cp1, segment.cp2, segment.end);
+      return this.createOffsetCubicSegment(segment, cubic, orientation);
     }
 
+    return this.createParallelLineOffset(segment, orientation);
+  }
+
+  private static createParallelLineOffset(segment: SourceSegment, orientation: number): OffsetSegment {
+    const tangent = this.normalizePoint(new Point(
+      segment.end.x - segment.start.x,
+      segment.end.y - segment.start.y
+    ));
+    const normal = this.getOutwardNormal(tangent, orientation);
+    const start = this.offsetPoint(segment.start, normal, segment.distance);
+    const end = this.offsetPoint(segment.end, normal, segment.distance);
+
     return {
-      outlinePoints: [segment.start.copy(), segment.end.copy()],
-      tangents: [new Point(1, 0), new Point(1, 0)]
+      segmentName: segment.segmentName,
+      segmentType: segment.segmentType,
+      distance: segment.distance,
+      kind: 'line',
+      start,
+      end,
+      startTangent: tangent.copy(),
+      endTangent: tangent.copy()
     };
   }
 
-  private static flattenCubic(bezier: CubicBezier): { outlinePoints: Point[]; tangents: Point[] } {
-    const approxLength = bezier.getLength();
-    const steps = Math.max(12, Math.min(80, Math.ceil(approxLength / 0.35)));
-    const outlinePoints: Point[] = [];
-    const tangents: Point[] = [];
+  private static createOffsetCubicSegment(
+    segment: SourceSegment,
+    cubic: CubicBezier,
+    orientation: number
+  ): OffsetSegment {
+    const startTangent = this.ensureTangent(cubic.getTangent(0), cubic.p0, cubic.p1);
+    const endTangent = this.ensureTangent(cubic.getTangent(1), cubic.p2, cubic.p3);
+    const startNormal = this.getOutwardNormal(startTangent, orientation);
+    const endNormal = this.getOutwardNormal(endTangent, orientation);
 
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      outlinePoints.push(bezier.getPoint(t));
-      tangents.push(bezier.getTangent(t));
-    }
+    // 工业 offset: 起点控制系跟随起点法线，终点控制系跟随终点法线。
+    const q0 = this.offsetPoint(cubic.p0, startNormal, segment.distance);
+    const q1 = this.offsetPoint(cubic.p1, startNormal, segment.distance);
+    const q2 = this.offsetPoint(cubic.p2, endNormal, segment.distance);
+    const q3 = this.offsetPoint(cubic.p3, endNormal, segment.distance);
 
-    return { outlinePoints, tangents };
+    return {
+      segmentName: segment.segmentName,
+      segmentType: segment.segmentType,
+      distance: segment.distance,
+      kind: 'curve',
+      start: q0,
+      cp1: q1,
+      cp2: q2,
+      end: q3,
+      startTangent: this.ensureTangent(
+        this.normalizePoint(new Point(q1.x - q0.x, q1.y - q0.y)),
+        q0,
+        q1
+      ),
+      endTangent: this.ensureTangent(
+        this.normalizePoint(new Point(q3.x - q2.x, q3.y - q2.y)),
+        q2,
+        q3
+      )
+    };
   }
 
-  private static joinOffsetSegments(segments: SampledSegment[]): Point[] {
-    if (segments.length === 1) {
-      return this.deduplicateSequentialPoints(segments[0].offsetPoints);
+  private static resolveJoins(
+    offsetSegments: OffsetSegment[],
+    sourceSegments: SourceSegment[],
+    orientation: number
+  ): JoinGeometry[] {
+    const joins: JoinGeometry[] = [];
+
+    for (let i = 0; i < offsetSegments.length; i++) {
+      const current = offsetSegments[i];
+      const next = offsetSegments[(i + 1) % offsetSegments.length];
+      const corner = sourceSegments[i].end.copy();
+      const angle = this.getTurnAngle(current.endTangent, next.startTangent);
+      const shouldUseDirect =
+        current.distance === 0 ||
+        next.distance === 0 ||
+        angle < this.degToRad(18);
+
+      if (shouldUseDirect) {
+        const intersection = this.computeLineIntersection(
+          current.end,
+          current.endTangent,
+          next.start,
+          next.startTangent
+        );
+        const joinPoint = intersection || Point.midpoint(current.end, next.start);
+        this.updateSegmentEnd(current, joinPoint);
+        this.updateSegmentStart(next, joinPoint);
+        joins.push({ kind: 'direct' });
+        continue;
+      }
+
+      joins.push({
+        kind: 'round',
+        curves: this.createRoundJoinCurves(current, next, corner, orientation)
+      });
     }
 
-    const joined: Point[] = [];
+    return joins;
+  }
+
+  private static buildOffsetPath(segments: OffsetSegment[], joins: JoinGeometry[]): Path {
+    const path = new Path();
+    path.move(segments[0].start);
 
     for (let i = 0; i < segments.length; i++) {
-      const current = segments[i];
-      const next = segments[(i + 1) % segments.length];
+      this.appendOffsetSegment(path, segments[i]);
 
-      const bodyPoints =
-        i === 0
-          ? current.offsetPoints.slice(0, -1)
-          : current.offsetPoints.slice(1, -1);
-
-      joined.push(...bodyPoints);
-      joined.push(...this.createCornerJoin(current, next));
-    }
-
-    return this.deduplicateSequentialPoints(joined, true);
-  }
-
-  private static createCornerJoin(current: SampledSegment, next: SampledSegment): Point[] {
-    const intersection = this.intersectOffsetRays(
-      current.endOffset,
-      current.endTangent,
-      next.startOffset,
-      next.startTangent
-    );
-
-    if (intersection) {
-      const maxDistance = Math.max(current.distance, next.distance, 0.01) * 6;
-      if (
-        intersection.dist(current.endOffset) <= maxDistance &&
-        intersection.dist(next.startOffset) <= maxDistance
-      ) {
-        return [intersection];
+      const join = joins[i];
+      if (join.kind === 'round') {
+        for (const curve of join.curves) {
+          path.curve(curve.p1, curve.p2, curve.p3).segment('roundJoin', 'roundJoin');
+        }
       }
     }
 
-    return [current.endOffset, next.startOffset];
+    path.close();
+    return path;
   }
 
-  private static intersectOffsetRays(
-    p1: Point,
-    d1: Point,
-    p2: Point,
-    d2: Point
-  ): Point | null {
-    const cross = d1.x * d2.y - d1.y * d2.x;
-    if (Math.abs(cross) < 1e-8) {
-      return null;
+  private static appendOffsetSegment(path: Path, segment: OffsetSegment): void {
+    if (segment.kind === 'line') {
+      path.line(segment.end).segment(segment.segmentName, segment.segmentType);
+      return;
     }
 
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const t = (dx * d2.y - dy * d2.x) / cross;
+    if (segment.cp1 && segment.cp2) {
+      path.curve(segment.cp1, segment.cp2, segment.end).segment(segment.segmentName, segment.segmentType);
+    }
+  }
 
-    return new Point(
-      p1.x + d1.x * t,
-      p1.y + d1.y * t
+  private static updateSegmentStart(segment: OffsetSegment, start: Point): void {
+    if (segment.kind === 'line') {
+      segment.start = start.copy();
+      return;
+    }
+
+    const handleLength = segment.cp1 ? segment.start.dist(segment.cp1) : 0;
+    segment.start = start.copy();
+    segment.cp1 = new Point(
+      start.x + segment.startTangent.x * handleLength,
+      start.y + segment.startTangent.y * handleLength
     );
+  }
+
+  private static updateSegmentEnd(segment: OffsetSegment, end: Point): void {
+    if (segment.kind === 'line') {
+      segment.end = end.copy();
+      return;
+    }
+
+    const handleLength = segment.cp2 ? segment.cp2.dist(segment.end) : 0;
+    segment.end = end.copy();
+    segment.cp2 = new Point(
+      end.x - segment.endTangent.x * handleLength,
+      end.y - segment.endTangent.y * handleLength
+    );
+  }
+
+  private static createRoundJoinCurves(
+    current: OffsetSegment,
+    next: OffsetSegment,
+    corner: Point,
+    orientation: number
+  ): CubicBezier[] {
+    const start = current.end.copy();
+    const end = next.start.copy();
+
+    if (start.equals(end)) {
+      return [];
+    }
+
+    const startRadius = start.dist(corner);
+    const endRadius = end.dist(corner);
+    const radiusDelta = Math.abs(startRadius - endRadius);
+
+    if (radiusDelta < 0.02) {
+      const startAngle = Math.atan2(start.y - corner.y, start.x - corner.x);
+      const endAngle = this.normalizeArcEndAngle(
+        startAngle,
+        Math.atan2(end.y - corner.y, end.x - corner.x),
+        orientation
+      );
+      return this.createCircularArcCurves(corner, (startRadius + endRadius) / 2, startAngle, endAngle);
+    }
+
+    return [
+      this.createBlendJoinCurve(
+        start,
+        this.getArcTangent(corner, start, orientation),
+        end,
+        this.getArcTangent(corner, end, orientation)
+      )
+    ];
+  }
+
+  private static createBlendJoinCurve(
+    start: Point,
+    startTangent: Point,
+    end: Point,
+    endTangent: Point
+  ): CubicBezier {
+    const chord = start.dist(end);
+    const handle = Math.max(chord * 0.35, 0.01);
+
+    return new CubicBezier(
+      start,
+      new Point(
+        start.x + startTangent.x * handle,
+        start.y + startTangent.y * handle
+      ),
+      new Point(
+        end.x - endTangent.x * handle,
+        end.y - endTangent.y * handle
+      ),
+      end
+    );
+  }
+
+  private static createCircularArcCurves(
+    center: Point,
+    radius: number,
+    startAngle: number,
+    endAngle: number
+  ): CubicBezier[] {
+    const sweep = endAngle - startAngle;
+    const segmentCount = Math.max(1, Math.ceil(Math.abs(sweep) / (Math.PI / 2)));
+    const step = sweep / segmentCount;
+    const curves: CubicBezier[] = [];
+
+    for (let i = 0; i < segmentCount; i++) {
+      const a0 = startAngle + step * i;
+      const a1 = a0 + step;
+      const p0 = this.pointOnCircle(center, radius, a0);
+      const p3 = this.pointOnCircle(center, radius, a1);
+      const alpha = (4 / 3) * Math.tan((a1 - a0) / 4) * radius;
+      const t0 = this.tangentForAngle(a0);
+      const t1 = this.tangentForAngle(a1);
+
+      curves.push(
+        new CubicBezier(
+          p0,
+          new Point(p0.x + t0.x * alpha, p0.y + t0.y * alpha),
+          new Point(p3.x - t1.x * alpha, p3.y - t1.y * alpha),
+          p3
+        )
+      );
+    }
+
+    return curves;
   }
 
   private static getOutlineOrientation(outline: Path): number {
@@ -249,39 +395,105 @@ export class SeamAllowanceGenerator {
   }
 
   private static getOutwardNormal(tangent: Point, orientation: number): Point {
-    const unit = this.normalize({ x: tangent.x, y: tangent.y });
+    const unit = this.normalizePoint(tangent);
     if (orientation >= 0) {
       return new Point(unit.y, -unit.x);
     }
     return new Point(-unit.y, unit.x);
   }
 
-  private static normalize(vector: { x: number; y: number }): { x: number; y: number } {
-    const length = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
-    if (length < 1e-8) {
-      return { x: 1, y: 0 };
+  private static getArcTangent(center: Point, point: Point, orientation: number): Point {
+    const radial = this.normalizePoint(new Point(point.x - center.x, point.y - center.y));
+    if (orientation >= 0) {
+      return new Point(radial.y, -radial.x);
     }
-
-    return {
-      x: vector.x / length,
-      y: vector.y / length
-    };
+    return new Point(-radial.y, radial.x);
   }
 
-  private static deduplicateSequentialPoints(points: Point[], closed: boolean = false): Point[] {
-    const result: Point[] = [];
+  private static tangentForAngle(angle: number): Point {
+    return new Point(-Math.sin(angle), Math.cos(angle));
+  }
 
-    for (const point of points) {
-      const previous = result[result.length - 1];
-      if (!previous || !previous.equals(point, 0.0001)) {
-        result.push(point);
+  private static pointOnCircle(center: Point, radius: number, angle: number): Point {
+    return new Point(
+      center.x + radius * Math.cos(angle),
+      center.y + radius * Math.sin(angle)
+    );
+  }
+
+  private static computeLineIntersection(
+    p1: Point,
+    d1: Point,
+    p2: Point,
+    d2: Point
+  ): Point | null {
+    const cross = d1.x * d2.y - d1.y * d2.x;
+    if (Math.abs(cross) < 1e-8) {
+      return null;
+    }
+
+    const delta = new Point(p2.x - p1.x, p2.y - p1.y);
+    const t = (delta.x * d2.y - delta.y * d2.x) / cross;
+
+    return new Point(
+      p1.x + d1.x * t,
+      p1.y + d1.y * t
+    );
+  }
+
+  private static normalizeArcEndAngle(startAngle: number, rawEndAngle: number, orientation: number): number {
+    let endAngle = rawEndAngle;
+
+    if (orientation >= 0) {
+      while (endAngle >= startAngle) {
+        endAngle -= Math.PI * 2;
+      }
+      if (Math.abs(endAngle - startAngle) > Math.PI) {
+        endAngle += Math.PI * 2;
+      }
+    } else {
+      while (endAngle <= startAngle) {
+        endAngle += Math.PI * 2;
+      }
+      if (Math.abs(endAngle - startAngle) > Math.PI) {
+        endAngle -= Math.PI * 2;
       }
     }
 
-    if (closed && result.length > 1 && result[0].equals(result[result.length - 1], 0.0001)) {
-      result.pop();
-    }
+    return endAngle;
+  }
 
-    return result;
+  private static getTurnAngle(previous: Point, next: Point): number {
+    const a = this.normalizePoint(previous);
+    const b = this.normalizePoint(next);
+    const dot = Math.max(-1, Math.min(1, a.x * b.x + a.y * b.y));
+    return Math.acos(dot);
+  }
+
+  private static ensureTangent(fallback: Point, from: Point, to: Point): Point {
+    const vector = new Point(to.x - from.x, to.y - from.y);
+    if (vector.dist(new Point(0, 0)) < 1e-8) {
+      return this.normalizePoint(fallback);
+    }
+    return this.normalizePoint(vector);
+  }
+
+  private static offsetPoint(point: Point, normal: Point, distance: number): Point {
+    return new Point(
+      point.x + normal.x * distance,
+      point.y + normal.y * distance
+    );
+  }
+
+  private static normalizePoint(point: Point): Point {
+    const length = Math.sqrt(point.x * point.x + point.y * point.y);
+    if (length < 1e-8) {
+      return new Point(1, 0);
+    }
+    return new Point(point.x / length, point.y / length);
+  }
+
+  private static degToRad(degrees: number): number {
+    return degrees * Math.PI / 180;
   }
 }
