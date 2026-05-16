@@ -147,67 +147,60 @@ export class SleeveCapGenerator {
       cH * 0.35
     );
 
-    // 3. 控制点 - 工业矢量切线对齐算法 (Vector Tangent Alignment)
-    // 目标：确保曲线在 Pitch 点处 G1 连续（圆顺），无折痕。
-    
-    // --- 前袖山基准切线 ---
-    // 计算从 capTop 到 frontAxilla 的整体趋势矢量
-    const fVecX = frontAxilla.x - capTop.x;
-    const fVecY = frontAxilla.y - capTop.y;
-    const fLen = Math.sqrt(fVecX * fVecX + fVecY * fVecY);
-    const fDirX = fVecX / fLen;
-    const fDirY = fVecY / fLen;
-
-    // --- 后袖山基准切线 ---
-    const bVecX = backAxilla.x - capTop.x;
-    const bVecY = backAxilla.y - capTop.y;
-    const bLen = Math.sqrt(bVecX * bVecX + bVecY * bVecY);
-    const bDirX = bVecX / bLen;
-    const bDirY = bVecY / bLen;
+    // 3. 控制点 - 工业平滑样条算法 (Industrial Smooth Spline)
+    // 目标：通过平均弦向矢量计算 Pitch 点切线，并优化手柄比例。
 
     // --- 顶部控制 (capTop) ---
-    // 顶部手柄长度：bicepsWidth 的 12%~15%
-    const topHandleLen = bW * 0.14;
+    // 工业修正：顶部手柄不能太长，否则会出现“平头”或“凹陷”。取 6%~8%
+    const topHandleLen = bW * 0.08;
     const ufCp1 = new Point(capTop.x + topHandleLen, capTop.y);
     const ubCp2 = new Point(capTop.x - topHandleLen, capTop.y);
 
     // --- 前 Pitch 连续性控制 ---
-    // 手柄长度：前袖山总趋势长度的 20%~25%
-    const fHandleLen = fLen * 0.22;
-    // ufCp2 和 lfCp1 必须与 frontPitch 在同一直线上，方向与基准切线一致
-    const ufCp2 = new Point(
-      frontPitch.x - fDirX * fHandleLen,
-      frontPitch.y - fDirY * fHandleLen
-    );
-    const lfCp1 = new Point(
-      frontPitch.x + fDirX * fHandleLen,
-      frontPitch.y + fDirY * fHandleLen
-    );
+    // 1. 计算前上段和前下段的弦矢量
+    const v1x = frontPitch.x - capTop.x;
+    const v1y = frontPitch.y - capTop.y;
+    const v2x = frontAxilla.x - frontPitch.x;
+    const v2y = frontAxilla.y - frontPitch.y;
+    
+    // 2. 取平均方向作为 Pitch 点的平滑切线 (G1 连续)
+    const fSmoothDirX = (v1x / Math.sqrt(v1x*v1x + v1y*v1y) + v2x / Math.sqrt(v2x*v2x + v2y*v2y)) / 2;
+    const fSmoothDirY = (v1y / Math.sqrt(v1x*v1x + v1y*v1y) + v2y / Math.sqrt(v2x*v2x + v2y*v2y)) / 2;
+    const fSmoothLen = Math.sqrt(fSmoothDirX*fSmoothDirX + fSmoothDirY*fSmoothDirY);
+    const fTanX = fSmoothDirX / fSmoothLen;
+    const fTanY = fSmoothDirY / fSmoothLen;
 
-    // --- 前腋下控制 (frontAxilla) ---
-    // 前袖下段轻微凹入 (hollow)
-    const lfCp2 = new Point(
-      frontAxilla.x - fVecX * 0.1,
-      frontAxilla.y - fVecY * 0.05
-    );
+    // 3. 分配手柄长度 (30% 比例最圆顺)
+    const fH1 = Math.sqrt(v1x*v1x + v1y*v1y) * 0.35;
+    const fH2 = Math.sqrt(v2x*v2x + v2y*v2y) * 0.35;
+
+    const ufCp2 = new Point(frontPitch.x - fTanX * fH1, frontPitch.y - fTanY * fH1);
+    const lfCp1 = new Point(frontPitch.x + fTanX * fH2, frontPitch.y + fTanY * fH2);
 
     // --- 后 Pitch 连续性控制 ---
-    const bHandleLen = bLen * 0.25; // 后袖手柄稍长，更圆顺
-    const ubCp1 = new Point(
-      backPitch.x - bDirX * bHandleLen,
-      backPitch.y - bDirY * bHandleLen
-    );
-    const lbCp2 = new Point(
-      backPitch.x + bDirX * bHandleLen,
-      backPitch.y + bDirY * bHandleLen
-    );
+    const vb1x = backPitch.x - backAxilla.x;
+    const vb1y = backPitch.y - backAxilla.y;
+    const vb2x = capTop.x - backPitch.x;
+    const vb2y = capTop.y - backPitch.y;
 
-    // --- 后腋下控制 (backAxilla) ---
-    // 后袖下段保持饱满
-    const lbCp1 = new Point(
-      backAxilla.x - bVecX * 0.1,
-      backAxilla.y + bVecY * 0.05
-    );
+    const bSmoothDirX = (vb1x / Math.sqrt(vb1x*vb1x + vb1y*vb1y) + vb2x / Math.sqrt(vb2x*vb2x + vb2y*vb2y)) / 2;
+    const bSmoothDirY = (vb1y / Math.sqrt(vb1x*vb1x + vb1y*vb1y) + vb2y / Math.sqrt(vb2x*vb2x + vb2y*vb2y)) / 2;
+    const bSmoothLen = Math.sqrt(bSmoothDirX*bSmoothDirX + bSmoothDirY*bSmoothDirY);
+    const bTanX = bSmoothDirX / bSmoothLen;
+    const bTanY = bSmoothDirY / bSmoothLen;
+
+    const bH1 = Math.sqrt(vb1x*vb1x + vb1y*vb1y) * 0.35;
+    const bH2 = Math.sqrt(vb2x*vb2x + vb2y*vb2y) * 0.35;
+
+    const lbCp2 = new Point(backPitch.x - bTanX * bH1, backPitch.y - bTanY * bH1);
+    const ubCp1 = new Point(backPitch.x + bTanX * bH2, backPitch.y + bTanY * bH2);
+
+    // --- 腋下 (Axilla) 衔接控制 ---
+    // 工业修正：腋下手柄应尽量水平或顺着趋势，避免“钩子”。
+    // 前腋下：稍微向内收 (hollow)
+    const lfCp2 = new Point(frontAxilla.x - v2x * 0.3, frontAxilla.y);
+    // 后腋下：饱满外扩
+    const lbCp1 = new Point(backAxilla.x + Math.abs(vb1x) * 0.3, backAxilla.y);
 
     // 4. 计算长度
     const bezUpperFront = new CubicBezier(capTop, ufCp1, ufCp2, frontPitch);
