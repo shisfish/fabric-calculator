@@ -64,11 +64,25 @@ export class SleeveCapGenerator {
     logger.info(`   袖窿总长: ${totalArmholeLen.toFixed(2)} cm`);
     logger.info(`   ease: ${ease} cm`);
 
-    const cH = this.calculateCapHeight(totalArmholeLen, armholeDepth);
-    const bW = this.calculateBicepsWidth(totalArmholeLen, cH, ease);
+    // 优先使用UI输入的参数，未提供时才自动计算
+    let cH: number;
+    let bW: number;
 
-    logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm`);
-    logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm`);
+    if (sleeveParams.sleeveCapHeight && sleeveParams.sleeveCapHeight > 0) {
+      cH = sleeveParams.sleeveCapHeight;
+      logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (来自UI输入)`);
+    } else {
+      cH = this.calculateCapHeight(totalArmholeLen, armholeDepth);
+      logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (自动计算)`);
+    }
+
+    if (sleeveParams.bicepsWidth && sleeveParams.bicepsWidth > 0) {
+      bW = sleeveParams.bicepsWidth;
+      logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm (来自UI输入)`);
+    } else {
+      bW = this.calculateBicepsWidth(totalArmholeLen, cH, ease);
+      logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm (自动计算)`);
+    }
 
     const result = this.generateSleeveCap(
       bW, cH, sL, cuW,
@@ -137,7 +151,7 @@ export class SleeveCapGenerator {
     ease: number
   ): SleeveCapResult {
 
-    const halfBicep = bW / 2;
+    const halfBicep = bW; // bW 已经是半围，直接用作halfBicep
 
     // ========== 关键点 ==========
     const capTop = new Point(0, 0);
