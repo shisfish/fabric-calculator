@@ -64,25 +64,11 @@ export class SleeveCapGenerator {
     logger.info(`   袖窿总长: ${totalArmholeLen.toFixed(2)} cm`);
     logger.info(`   ease: ${ease} cm`);
 
-    // 优先使用UI输入的参数，未提供时才自动计算
-    let cH: number;
-    let bW: number;
+    const cH = this.calculateCapHeight(totalArmholeLen, armholeDepth);
+    const bW = this.calculateBicepsWidth(totalArmholeLen, cH, ease);
 
-    if (sleeveParams.sleeveCapHeight && sleeveParams.sleeveCapHeight > 0) {
-      cH = sleeveParams.sleeveCapHeight;
-      logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (来自UI输入)`);
-    } else {
-      cH = this.calculateCapHeight(totalArmholeLen, armholeDepth);
-      logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (自动计算)`);
-    }
-
-    if (sleeveParams.bicepsWidth && sleeveParams.bicepsWidth > 0) {
-      bW = sleeveParams.bicepsWidth;
-      logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm (来自UI输入)`);
-    } else {
-      bW = this.calculateBicepsWidth(totalArmholeLen, cH, ease);
-      logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm (自动计算)`);
-    }
+    logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (自动计算)`);
+    logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm (自动计算)`);
 
     const result = this.generateSleeveCap(
       bW, cH, sL, cuW,
@@ -151,7 +137,7 @@ export class SleeveCapGenerator {
     ease: number
   ): SleeveCapResult {
 
-    const halfBicep = bW; // bW 已经是半围，直接用作halfBicep
+    const halfBicep = bW / 2; // 自动计算的bW是全围，需除以2得到半围
 
     // ========== 关键点 ==========
     const capTop = new Point(0, 0);
@@ -162,32 +148,35 @@ export class SleeveCapGenerator {
     const backCuff = new Point(-cuW, cH + sL);
 
     // Pitch点：工业版型经验位置
-    // 前pitch：45%宽度，40%高度 → 前袖陡降区起点
-    // 后pitch：55%宽度，35%高度 → 后袖平缓区起点（更靠外→后袖更长）
-    const frontPitch = new Point(halfBicep * 0.45, cH * 0.40);
-    const backPitch = new Point(-halfBicep * 0.55, cH * 0.35);
+    // 前pitch：38%宽度，40%高度 → 前袖陡降区起点
+    // 后pitch：70%宽度，28%高度 → 后袖平缓区起点（更靠外→后袖更长）
+    const frontPitch = new Point(halfBicep * 0.38, cH * 0.40);
+    const backPitch = new Point(-halfBicep * 0.70, cH * 0.28);
 
     // ========== 控制点：工业版师直接放置 ==========
 
     // --- 前袖山上段：capTop → frontPitch ---
-    // 顶部圆弧适中：CP1水平伸展，Y≈0
-    const ufCp1 = new Point(halfBicep * 0.25, cH * 0.00);
-    const ufCp2 = new Point(halfBicep * 0.40, cH * 0.22);
+    // 顶部宽圆弧：CP1水平远伸，Y≈0
+    // CP2平滑过渡到pitch，无折点
+    const ufCp1 = new Point(halfBicep * 0.30, cH * 0.00);
+    const ufCp2 = new Point(halfBicep * 0.36, cH * 0.20);
 
     // --- 前袖山下段：frontPitch → frontAxilla ---
     // 前袖更陡：控制杆较短
-    const lfCp1 = new Point(halfBicep * 0.50, cH * 0.56);
-    const lfCp2 = new Point(halfBicep * 0.88, cH * 0.82);
+    // CP2轻微inward → 工业hollow效果
+    const lfCp1 = new Point(halfBicep * 0.42, cH * 0.58);
+    const lfCp2 = new Point(halfBicep * 0.86, cH * 0.84);
 
     // --- 后袖山下段：backAxilla → backPitch ---
-    // 后袖更饱满：控制杆较长，全程外凸
-    const lbCp1 = new Point(-halfBicep * 0.88, cH * 0.76);
-    const lbCp2 = new Point(-halfBicep * 0.62, cH * 0.48);
+    // 后袖更饱满：控制杆更长，全程外凸
+    const lbCp1 = new Point(-halfBicep * 0.90, cH * 0.78);
+    const lbCp2 = new Point(-halfBicep * 0.68, cH * 0.50);
 
     // --- 后袖山上段：backPitch → capTop ---
     // 后袖更平缓：CP1更向外凸
-    const ubCp1 = new Point(-halfBicep * 0.50, cH * 0.14);
-    const ubCp2 = new Point(-halfBicep * 0.32, cH * 0.00);
+    // CP2水平远伸，Y≈0
+    const ubCp1 = new Point(-halfBicep * 0.58, cH * 0.12);
+    const ubCp2 = new Point(-halfBicep * 0.42, cH * 0.00);
 
     // ========== Notch点 ==========
     const frontNotch = this.evaluateCubicBezier(frontPitch, lfCp1, lfCp2, frontAxilla, 0.4);
