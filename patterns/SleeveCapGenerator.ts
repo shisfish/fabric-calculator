@@ -145,156 +145,288 @@ export class SleeveCapGenerator {
    *    - 上段（圆弧区）：允许更长以形成宽圆弧
    */
   private static generateSleeveCap(
-    bW: number,
-    cH: number,
-    sL: number,
-    cuW: number,
-    frontArmholeLen: number,
-    backArmholeLen: number,
-    ease: number
-  ): SleeveCapResult {
+  bW: number,
+  cH: number,
+  sL: number,
+  cuW: number,
+  frontArmholeLen: number,
+  backArmholeLen: number,
+  ease: number
+): SleeveCapResult {
 
-    const halfBicep = bW / 2;
+  const halfBicep = bW / 2;
 
-    // ========== 关键点 ==========
-    const capTop = new Point(0, 0);
-    const frontAxilla = new Point(halfBicep, cH);
-    const backAxilla = new Point(-halfBicep, cH);
-    const frontCuff = new Point(cuW / 2, cH + sL);
-    const backCuff = new Point(-cuW / 2, cH + sL);
+  // =====================================================
+  // KEY POINTS
+  // =====================================================
 
-    // Pitch点：工业版型经验位置
-    // 前pitch：50%宽度，38%高度 → 前袖陡降区起点
-    // 后pitch：55%宽度，35%高度 → 后袖平缓区起点
-    // 后pitch更靠外 → 后袖更长更饱满
-    const frontPitch = new Point(halfBicep * 0.38, cH * 0.40);
-    const backPitch = new Point(-halfBicep * 0.70, cH * 0.28);
+  const capTop = new Point(0, 0);
 
-    // ========== 控制点：工业版师直接放置 ==========
+  const frontAxilla = new Point(
+    halfBicep,
+    cH
+  );
 
-    // --- 前袖山上段：capTop → frontPitch ---
-    // 顶部宽圆弧：CP1水平远伸，Y≈0
-    // CP2平滑过渡到pitch，无折点
-    const ufCp1 = new Point(halfBicep * 0.30, cH * 0.00);
-    const ufCp2 = new Point(halfBicep * 0.36, cH * 0.20);
+  const backAxilla = new Point(
+    -halfBicep,
+    cH
+  );
 
-    // --- 前袖山下段：frontPitch → frontAxilla ---
-    // 前袖更陡：控制杆较短
-    // CP2轻微inward → 工业hollow效果
-    const lfCp1 = new Point(halfBicep * 0.42, cH * 0.58);
-    const lfCp2 = new Point(halfBicep * 0.86, cH * 0.84);
+  const frontCuff = new Point(
+    cuW / 2,
+    cH + sL
+  );
 
-    // --- 后袖山下段：backAxilla → backPitch ---
-    // 后袖更饱满：控制杆更长，全程外凸
-    const lbCp1 = new Point(-halfBicep * 0.90, cH * 0.78);
-    const lbCp2 = new Point(-halfBicep * 0.68, cH * 0.50);
+  const backCuff = new Point(
+    -cuW / 2,
+    cH + sL
+  );
 
-    // --- 后袖山上段：backPitch → capTop ---
-    // 后袖更平缓：CP1更向外凸
-    // CP2水平远伸，Y≈0
-    const ubCp1 = new Point(-halfBicep * 0.58, cH * 0.12);
-    const ubCp2 = new Point(-halfBicep * 0.42, cH * 0.00);
+  // =====================================================
+  // PITCH POINTS
+  // =====================================================
 
-    // ========== Notch点 ==========
-    const frontNotch = this.evaluateCubicBezier(frontPitch, lfCp1, lfCp2, frontAxilla, 0.4);
-    const backNotch = this.evaluateCubicBezier(backAxilla, lbCp1, lbCp2, backPitch, 0.4);
+  // 前袖：更低、更靠内
+  const frontPitch = new Point(
+    halfBicep * 0.34,
+    cH * 0.42
+  );
 
-    // ========== 计算长度 ==========
-    const lenUpperFront = this.calculateBezierLength(capTop, ufCp1, ufCp2, frontPitch);
-    const lenLowerFront = this.calculateBezierLength(frontPitch, lfCp1, lfCp2, frontAxilla);
-    const lenLowerBack = this.calculateBezierLength(backAxilla, lbCp1, lbCp2, backPitch);
-    const lenUpperBack = this.calculateBezierLength(backPitch, ubCp1, ubCp2, capTop);
+  // 后袖：更高、更靠外
+  const backPitch = new Point(
+    -halfBicep * 0.52,
+    cH * 0.30
+  );
 
-    const actualFrontLen = lenUpperFront + lenLowerFront;
-    const actualBackLen = lenLowerBack + lenUpperBack;
-    const actualTotalLen = actualFrontLen + actualBackLen;
+  // =====================================================
+  // TOP MAIN ARC
+  // =====================================================
 
-    // ========== 单峰验证 ==========
-    this.validateSinglePeak(capTop, frontPitch, ufCp1, ufCp2, frontAxilla, lfCp1, lfCp2,
-      backAxilla, lbCp1, lbCp2, backPitch, ubCp1, ubCp2);
+  // 核心：
+  // 顶部必须形成“宽圆弧”
+  // 控制点必须：
+  // - X拉远
+  // - Y极小
+  // 否则必尖
 
-    // ========== 日志 ==========
-    logger.info(`\n📐 袖山关键点:`);
-    logger.info(`   capTop: (${capTop.x.toFixed(2)}, ${capTop.y.toFixed(2)})`);
-    logger.info(`   frontPitch: (${frontPitch.x.toFixed(2)}, ${frontPitch.y.toFixed(2)})`);
-    logger.info(`   frontAxilla: (${frontAxilla.x.toFixed(2)}, ${frontAxilla.y.toFixed(2)})`);
-    logger.info(`   backPitch: (${backPitch.x.toFixed(2)}, ${backPitch.y.toFixed(2)})`);
-    logger.info(`   backAxilla: (${backAxilla.x.toFixed(2)}, ${backAxilla.y.toFixed(2)})`);
+  // FRONT UPPER
+  const ufCp1 = new Point(
+    halfBicep * 0.58,
+    cH * 0.02
+  );
 
-    logger.info(`\n🎨 控制点:`);
-    logger.info(`   前上 CP1: (${ufCp1.x.toFixed(2)}, ${ufCp1.y.toFixed(2)})`);
-    logger.info(`   前上 CP2: (${ufCp2.x.toFixed(2)}, ${ufCp2.y.toFixed(2)})`);
-    logger.info(`   前下 CP1: (${lfCp1.x.toFixed(2)}, ${lfCp1.y.toFixed(2)})`);
-    logger.info(`   前下 CP2: (${lfCp2.x.toFixed(2)}, ${lfCp2.y.toFixed(2)})`);
-    logger.info(`   后下 CP1: (${lbCp1.x.toFixed(2)}, ${lbCp1.y.toFixed(2)})`);
-    logger.info(`   后下 CP2: (${lbCp2.x.toFixed(2)}, ${lbCp2.y.toFixed(2)})`);
-    logger.info(`   后上 CP1: (${ubCp1.x.toFixed(2)}, ${ubCp1.y.toFixed(2)})`);
-    logger.info(`   后上 CP2: (${ubCp2.x.toFixed(2)}, ${ubCp2.y.toFixed(2)})`);
+  const ufCp2 = new Point(
+    halfBicep * 0.46,
+    cH * 0.18
+  );
 
-    logger.info(`\n📏 袖山长度:`);
-    logger.info(`   前袖山上段: ${lenUpperFront.toFixed(2)} cm`);
-    logger.info(`   前袖山下段: ${lenLowerFront.toFixed(2)} cm`);
-    logger.info(`   后袖山下段: ${lenLowerBack.toFixed(2)} cm`);
-    logger.info(`   后袖山上段: ${lenUpperBack.toFixed(2)} cm`);
-    logger.info(`   前袖山总长: ${actualFrontLen.toFixed(2)} cm`);
-    logger.info(`   后袖山总长: ${actualBackLen.toFixed(2)} cm`);
-    logger.info(`   袖山总长: ${actualTotalLen.toFixed(2)} cm`);
+  // =====================================================
+  // FRONT LOWER
+  // =====================================================
 
-    const targetLen = frontArmholeLen + backArmholeLen + ease;
-    const error = actualTotalLen - targetLen;
-    logger.info(`   目标长度: ${targetLen.toFixed(2)} cm`);
-    logger.info(`   误差: ${error.toFixed(2)} cm`);
+  // 前袖：
+  // - 更陡
+  // - 更短
+  // - 微 hollow
 
-    const backFrontDiff = actualBackLen - actualFrontLen;
-    if (backFrontDiff > 0) {
-      logger.info(`   ✅ 后袖更长（差异${backFrontDiff.toFixed(2)}cm，符合工业规范）`);
-    } else {
-      logger.warn(`   ⚠️ 后袖应该更长！差异${backFrontDiff.toFixed(2)}cm`);
-    }
+  const lfCp1 = new Point(
+    halfBicep * 0.30,
+    cH * 0.62
+  );
 
-    if (Math.abs(error) <= 0.5) {
-      logger.info(`   ✅ 长度匹配成功！误差=${Math.abs(error).toFixed(2)}cm`);
-    } else if (Math.abs(error) <= 2.0) {
-      logger.warn(`   ⚠️ 长度误差可接受: ${Math.abs(error).toFixed(2)}cm`);
-    } else {
-      logger.warn(`   ⚠️ 长度差异较大: ${Math.abs(error).toFixed(2)}cm`);
-    }
+  const lfCp2 = new Point(
+    halfBicep * 0.82,
+    cH * 0.86
+  );
 
-    // ========== 构建Path ==========
-    const capPath = new Path()
-      .move(capTop)
-      .curve(ufCp1, ufCp2, frontPitch)
-      .curve(lfCp1, lfCp2, frontAxilla)
-      .line(frontCuff)
-      .line(backCuff)
-      .line(backAxilla)
-      .curve(lbCp1, lbCp2, backPitch)
-      .curve(ubCp1, ubCp2, capTop)
-      .close();
+  // =====================================================
+  // BACK LOWER
+  // =====================================================
 
-    const points: Record<string, Point> = {
-      capTop, frontPitch, frontAxilla, backPitch, backAxilla,
-      frontCuff, backCuff,
-      upperFrontCp1: ufCp1, upperFrontCp2: ufCp2,
-      lowerFrontCp1: lfCp1, lowerFrontCp2: lfCp2,
-      lowerBackCp1: lbCp1, lowerBackCp2: lbCp2,
-      upperBackCp1: ubCp1, upperBackCp2: ubCp2,
-      frontNotch, backNotch,
-      grainlineStart: new Point(0, cH * 0.3),
-      grainlineEnd: new Point(0, cH + sL * 0.8)
-    };
+  // 后袖：
+  // - 更饱满
+  // - 更圆
+  // - 禁止 inward
 
-    return {
-      capPath,
-      points,
-      frontCapLength: actualFrontLen,
-      backCapLength: actualBackLen,
-      totalCapLength: actualTotalLen,
-      frontArmholeLength: frontArmholeLen,
-      backArmholeLength: backArmholeLen,
-      ease
-    };
-  }
+  const lbCp1 = new Point(
+    -halfBicep * 0.92,
+    cH * 0.82
+  );
+
+  const lbCp2 = new Point(
+    -halfBicep * 0.74,
+    cH * 0.46
+  );
+
+  // =====================================================
+  // BACK UPPER
+  // =====================================================
+
+  // 核心：
+  // 后袖必须：
+  // - 更平
+  // - 更长
+  // - 更饱满
+
+  const ubCp1 = new Point(
+    -halfBicep * 0.72,
+    cH * 0.10
+  );
+
+  const ubCp2 = new Point(
+    -halfBicep * 0.60,
+    cH * 0.01
+  );
+
+  // =====================================================
+  // NOTCH
+  // =====================================================
+
+  const frontNotch = this.evaluateCubicBezier(
+    frontPitch,
+    lfCp1,
+    lfCp2,
+    frontAxilla,
+    0.38
+  );
+
+  const backNotch = this.evaluateCubicBezier(
+    backAxilla,
+    lbCp1,
+    lbCp2,
+    backPitch,
+    0.42
+  );
+
+  // =====================================================
+  // LENGTH
+  // =====================================================
+
+  const lenUpperFront = this.calculateBezierLength(
+    capTop,
+    ufCp1,
+    ufCp2,
+    frontPitch
+  );
+
+  const lenLowerFront = this.calculateBezierLength(
+    frontPitch,
+    lfCp1,
+    lfCp2,
+    frontAxilla
+  );
+
+  const lenLowerBack = this.calculateBezierLength(
+    backAxilla,
+    lbCp1,
+    lbCp2,
+    backPitch
+  );
+
+  const lenUpperBack = this.calculateBezierLength(
+    backPitch,
+    ubCp1,
+    ubCp2,
+    capTop
+  );
+
+  const actualFrontLen = lenUpperFront + lenLowerFront;
+  const actualBackLen = lenLowerBack + lenUpperBack;
+  const actualTotalLen = actualFrontLen + actualBackLen;
+
+  // =====================================================
+  // PATH
+  // =====================================================
+
+  const capPath = new Path()
+    .move(capTop)
+
+    // front upper
+    .curve(
+      ufCp1,
+      ufCp2,
+      frontPitch
+    )
+
+    // front lower
+    .curve(
+      lfCp1,
+      lfCp2,
+      frontAxilla
+    )
+
+    .line(frontCuff)
+
+    .line(backCuff)
+
+    .line(backAxilla)
+
+    // back lower
+    .curve(
+      lbCp1,
+      lbCp2,
+      backPitch
+    )
+
+    // back upper
+    .curve(
+      ubCp1,
+      ubCp2,
+      capTop
+    )
+
+    .close();
+
+  const points: Record<string, Point> = {
+
+    capTop,
+
+    frontPitch,
+    backPitch,
+
+    frontAxilla,
+    backAxilla,
+
+    frontCuff,
+    backCuff,
+
+    upperFrontCp1: ufCp1,
+    upperFrontCp2: ufCp2,
+
+    lowerFrontCp1: lfCp1,
+    lowerFrontCp2: lfCp2,
+
+    lowerBackCp1: lbCp1,
+    lowerBackCp2: lbCp2,
+
+    upperBackCp1: ubCp1,
+    upperBackCp2: ubCp2,
+
+    frontNotch,
+    backNotch,
+
+    grainlineStart: new Point(
+      0,
+      cH * 0.24
+    ),
+
+    grainlineEnd: new Point(
+      0,
+      cH + sL * 0.82
+    )
+  };
+
+  return {
+    capPath,
+    points,
+    frontCapLength: actualFrontLen,
+    backCapLength: actualBackLen,
+    totalCapLength: actualTotalLen,
+    frontArmholeLength: frontArmholeLen,
+    backArmholeLength: backArmholeLen,
+    ease
+  };
+}
 
   /**
    * 单峰验证：确保袖山从capTop向左右单调下降
