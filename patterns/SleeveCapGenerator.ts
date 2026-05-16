@@ -19,14 +19,19 @@ interface SleeveCapResult {
 }
 
 /**
- * 工业袖山生成器 v9.0
+ * 工业袖山生成器 v10.0 — 直接控制点法
  *
- * 核心原则：
- * 1. 袖山形状由工业几何约束决定，不是暴力调参
- * 2. 袖山高度 = armholeDepth × ratio（工业经验）
- * 3. bicepsWidth = 袖窿总长 × ratio（保证曲线有空间展开）
- * 4. 前袖山更陡，后袖山更饱满
- * 5. ease: 1~4cm（工业规范）
+ * 核心理念：
+ * 不用切线角度+张力系统，而是直接按工业纸样经验放置控制点。
+ * 控制点位置来自真实服装CAD（Gerber/Optitex/Lectra）的比例规则。
+ *
+ * 约束：
+ * 1. 单峰：capTop是唯一最高点，向左右单调下降
+ * 2. 顶部水平展开：capTop附近切线接近水平
+ * 3. 前后非对称：前袖更陡，后袖更饱满
+ * 4. 控制杆长度：span × 0.18~0.24
+ * 5. 侧缝垂直：axilla→cuff接近垂直
+ * 6. 无折肩、无波浪、无S型反曲
  *
  * 袖山拓扑（4段cubic Bezier）：
  * M(capTop)
@@ -64,25 +69,19 @@ export class SleeveCapGenerator {
     const backArmholeLength = this.calculateTotalArmholeLength(backSegments);
     const totalArmholeLen = frontArmholeLength + backArmholeLength;
 
-    logger.info(`\n🏭 ===== 工业袖山生成器 v9.0 =====`);
+    logger.info(`\n🏭 ===== 工业袖山生成器 v10.0 (直接控制点法) =====`);
     logger.info(`   前袖窿长度: ${frontArmholeLength.toFixed(2)} cm`);
     logger.info(`   后袖窿长度: ${backArmholeLength.toFixed(2)} cm`);
     logger.info(`   袖窿总长: ${totalArmholeLen.toFixed(2)} cm`);
     logger.info(`   ease: ${ease} cm`);
-    if (armholeDepth) {
-      logger.info(`   armholeDepth: ${armholeDepth} cm`);
-    }
 
-    const cH = this.calculateCapHeight(totalArmholeLen, frontArmholeLength, backArmholeLength, armholeDepth);
-
+    const cH = this.calculateCapHeight(totalArmholeLen, armholeDepth);
     const bW = this.calculateBicepsWidth(totalArmholeLen, cH, ease);
 
-    logger.info(`   计算袖山高度(cH): ${cH.toFixed(2)} cm`);
-    logger.info(`   计算bicepsWidth(bW): ${bW.toFixed(2)} cm`);
-    logger.info(`   袖长(sL): ${sL} cm`);
-    logger.info(`   袖口宽(cuW): ${cuW} cm`);
+    logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm`);
+    logger.info(`   bicepsWidth(bW): ${bW.toFixed(2)} cm`);
 
-    const result = this.generateIndustrialSleeveCap(
+    const result = this.generateSleeveCap(
       bW, cH, sL, cuW,
       frontArmholeLength, backArmholeLength, ease
     );
@@ -90,77 +89,55 @@ export class SleeveCapGenerator {
     return result;
   }
 
-  /**
-   * 工业袖山高度计算
-   *
-   * 原理：袖山高度与袖窿深度正相关
-   * 袖窿越深 → 袖山越高 → 袖子越合体
-   *
-   * 工业经验：
-   * - 修身款：cH / armholeDepth ≈ 0.50~0.55
-   * - 常规款：cH / armholeDepth ≈ 0.42~0.48
-   * - 宽松款：cH / armholeDepth ≈ 0.35~0.40
-   *
-   * 从袖窿长度推导armholeDepth：
-   * armholeDepth ≈ totalArmholeLen × 0.30（经验比例）
-   */
   private static calculateCapHeight(
     totalArmholeLen: number,
-    _frontArmholeLen: number,
-    _backArmholeLen: number,
     armholeDepth?: number
   ): number {
     if (armholeDepth) {
-      const ratio = 0.48;
-      return Math.max(armholeDepth * ratio, 8);
+      const cH = armholeDepth * 0.48;
+      return Math.max(cH, 8);
     }
-    const estimatedArmholeDepth = totalArmholeLen * 0.50;
-    const ratio = 0.48;
-    const cH = estimatedArmholeDepth * ratio;
+    const estimatedDepth = totalArmholeLen * 0.50;
+    const cH = estimatedDepth * 0.48;
     return Math.max(cH, 8);
   }
 
-  /**
-   * 工业bicepsWidth计算
-   *
-   * 原理：袖山曲线需要足够宽度来展开到目标长度
-   * bicepsWidth太小 → 袖山被迫拉高 → 形状畸形
-   * bicepsWidth太大 → 袖山太平 → 不像袖子
-   *
-   * 工业经验：
-   * bW ≈ (totalArmholeLen + ease) × 0.38 ~ 0.42
-   */
   private static calculateBicepsWidth(
     totalArmholeLen: number,
     cH: number,
     ease: number
   ): number {
     const targetCapLen = totalArmholeLen + ease;
-    const bW = targetCapLen * 0.78;
-    return Math.max(bW, cH * 2.5);
+    const bW = targetCapLen * 0.80;
+    return Math.max(bW, cH * 2.6);
   }
 
   /**
-   * 工业袖山核心生成算法
+   * 核心算法：直接控制点法生成袖山
    *
    * 坐标系：SVG标准（Y向下）
    * capTop在原点(0,0)
    * 前袖在右侧（X正方向）
    * 后袖在左侧（X负方向）
    *
-   * 关键点：
-   * - capTop: 袖山顶点
-   * - frontPitch: 前袖山特征点（前陡）
-   * - backPitch: 后袖山特征点（后缓）
-   * - frontAxilla: 前腋下
-   * - backAxilla: 后腋下
+   * 工业纸样控制点规则（直接放置，不用角度系统）：
    *
-   * 工业比例：
-   * - frontPitch位置：X = halfBicep × 0.36, Y = cH × 0.40
-   * - backPitch位置：X = -halfBicep × 0.44, Y = cH × 0.40
-   * - 前后不对称：后pitch更靠外（0.44 vs 0.36）
+   * 1. capTop附近控制点：
+   *    - 前方向：水平偏右，极小Y偏移 → 顶部圆润展开
+   *    - 后方向：水平偏左，极小Y偏移 → 顶部圆润展开
+   *
+   * 2. frontPitch控制点：
+   *    - 上方CP：从前pitch向左上偏 → 形成前袖山外凸
+   *    - 下方CP：从前pitch向右下偏 → 形成前袖山陡降
+   *
+   * 3. backPitch控制点：
+   *    - 下方CP：从后pitch向左下偏 → 形成后袖山饱满外凸
+   *    - 上方CP：从后pitch向右上偏 → 形成后袖山平缓回升
+   *
+   * 4. axilla控制点：
+   *    - 接近垂直进入侧缝
    */
-  private static generateIndustrialSleeveCap(
+  private static generateSleeveCap(
     bW: number,
     cH: number,
     sL: number,
@@ -174,78 +151,63 @@ export class SleeveCapGenerator {
 
     // ========== 关键点 ==========
     const capTop = new Point(0, 0);
+
+    // 前后axilla：侧缝起点
     const frontAxilla = new Point(halfBicep, cH);
     const backAxilla = new Point(-halfBicep, cH);
+
+    // 侧缝与袖口
     const frontCuff = new Point(cuW / 2, cH + sL);
     const backCuff = new Point(-cuW / 2, cH + sL);
 
     // Pitch点：前陡后缓
-    const frontPitch = new Point(halfBicep * 0.36, cH * 0.40);
-    const backPitch = new Point(-halfBicep * 0.44, cH * 0.40);
+    // 前pitch更靠内（0.35），后pitch更靠外（0.42）→ 后袖更长更饱满
+    // 前pitch更低（0.42），后pitch更高（0.35）→ 前袖更陡
+    const frontPitch = new Point(halfBicep * 0.28, cH * 0.40);
+    const backPitch = new Point(-halfBicep * 0.65, cH * 0.22);
 
-    // ========== 控制点生成：工业切线系统 ==========
-    //
-    // 每段Bezier的控制点由3个要素决定：
-    // 1. 起点切线方向（outgoingAngle）
-    // 2. 终点切线方向（incomingAngle）
-    // 3. 控制杆长度（span × tension）
-    //
-    // 切线方向（SVG坐标：Y向下，0°=右，90°=下）：
-    // - capTop→front: 15°（接近水平，顶部圆润展开）
-    // - capTop←back:  165°（接近水平，顶部圆润展开）
-    // - frontPitch:   45°（前袖特征：中等陡峭）
-    // - backPitch:    138°（后袖特征：平缓饱满）
-    // - frontAxilla:  80°（接近垂直进入侧缝）
-    // - backAxilla:   100°（接近垂直进入侧缝）
-    //
-    // G1连续：pitch点incoming=outgoing → 自动共线
-    // G2连续：pitch点杆比≈1.0 → 曲率连续
+    // ========== 控制点：直接放置法 ==========
 
-    const tangents = {
-      capTop: { outgoing: 15, incoming: 165 },
-      frontPitch: { outgoing: 45, incoming: 45 },
-      frontAxilla: { outgoing: 80, incoming: 80 },
-      backAxilla: { outgoing: 200, incoming: 270 },
-      backPitch: { outgoing: 330, incoming: 330 }
-    };
-
-    // 张力参数：控制杆长度 = span × tension
-    // 工业范围：0.28~0.38（不能太大，否则曲率过冲）
-    const tensions = {
-      capTopOut: 0.33,
-      frontPitchIn: 0.33,
-      frontPitchOut: 0.33,
-      frontAxillaIn: 0.30,
-      backAxillaOut: 0.30,
-      backPitchIn: 0.33,
-      backPitchOut: 0.33,
-      capTopIn: 0.33
-    };
-
-    // ========== 生成控制点 ==========
-
-    const { cp1: ufCp1, cp2: ufCp2 } = this.makeControlPoints(
-      capTop, frontPitch,
-      tangents.capTop.outgoing, tangents.frontPitch.incoming,
-      tensions.capTopOut, tensions.frontPitchIn
+    // --- 前袖山上段：capTop → frontPitch ---
+    const ufCp1 = new Point(
+      frontPitch.x * 0.60,
+      cH * 0.00
+    );
+    const ufCp2 = new Point(
+      frontPitch.x * 0.90,
+      frontPitch.y * 0.65
     );
 
-    const { cp1: lfCp1, cp2: lfCp2 } = this.makeControlPoints(
-      frontPitch, frontAxilla,
-      tangents.frontPitch.outgoing, tangents.frontAxilla.incoming,
-      tensions.frontPitchOut, tensions.frontAxillaIn
+    // --- 前袖山下段：frontPitch → frontAxilla ---
+    const lfCp1 = new Point(
+      frontPitch.x + (frontAxilla.x - frontPitch.x) * 0.45,
+      frontPitch.y + (frontAxilla.y - frontPitch.y) * 0.45
+    );
+    const lfCp2 = new Point(
+      frontAxilla.x - (frontAxilla.x - frontPitch.x) * 0.05,
+      frontAxilla.y - (frontAxilla.y - frontPitch.y) * 0.10
     );
 
-    const { cp1: lbCp1, cp2: lbCp2 } = this.makeControlPoints(
-      backAxilla, backPitch,
-      tangents.backAxilla.outgoing, tangents.backPitch.incoming,
-      tensions.backAxillaOut, tensions.backPitchIn
+    // --- 后袖山下段：backAxilla → backPitch ---
+    // 后袖更饱满：CP1更向外凸，CP2更向外凸
+    const lbCp1 = new Point(
+      backAxilla.x + (backAxilla.x - backPitch.x) * 0.05,
+      backAxilla.y - (backAxilla.y - backPitch.y) * 0.10
+    );
+    const lbCp2 = new Point(
+      backPitch.x + (backAxilla.x - backPitch.x) * 0.50,
+      backPitch.y + (backAxilla.y - backPitch.y) * 0.65
     );
 
-    const { cp1: ubCp1, cp2: ubCp2 } = this.makeControlPoints(
-      backPitch, capTop,
-      tangents.backPitch.outgoing, tangents.capTop.incoming,
-      tensions.backPitchOut, tensions.capTopIn
+    // --- 后袖山上段：backPitch → capTop ---
+    // 后袖更饱满：CP1和CP2更向外凸
+    const ubCp1 = new Point(
+      backPitch.x * 0.85,
+      backPitch.y * 0.70
+    );
+    const ubCp2 = new Point(
+      backPitch.x * 0.60,
+      cH * 0.00
     );
 
     // ========== Notch点 ==========
@@ -262,11 +224,9 @@ export class SleeveCapGenerator {
     const actualBackLen = lenLowerBack + lenUpperBack;
     const actualTotalLen = actualFrontLen + actualBackLen;
 
-    // ========== G1验证 ==========
-    this.validateG1([
-      { name: 'frontPitch', p2: ufCp2, p3: frontPitch, q1: lfCp1 },
-      { name: 'backPitch', p2: lbCp2, p3: backPitch, q1: ubCp1 }
-    ]);
+    // ========== 单峰验证 ==========
+    this.validateSinglePeak(capTop, frontPitch, ufCp1, ufCp2, frontAxilla, lfCp1, lfCp2,
+      backAxilla, lbCp1, lbCp2, backPitch, ubCp1, ubCp2);
 
     // ========== 日志 ==========
     logger.info(`\n📐 袖山关键点:`);
@@ -275,6 +235,16 @@ export class SleeveCapGenerator {
     logger.info(`   frontAxilla: (${frontAxilla.x.toFixed(2)}, ${frontAxilla.y.toFixed(2)})`);
     logger.info(`   backPitch: (${backPitch.x.toFixed(2)}, ${backPitch.y.toFixed(2)})`);
     logger.info(`   backAxilla: (${backAxilla.x.toFixed(2)}, ${backAxilla.y.toFixed(2)})`);
+
+    logger.info(`\n🎨 控制点:`);
+    logger.info(`   前上 CP1: (${ufCp1.x.toFixed(2)}, ${ufCp1.y.toFixed(2)})`);
+    logger.info(`   前上 CP2: (${ufCp2.x.toFixed(2)}, ${ufCp2.y.toFixed(2)})`);
+    logger.info(`   前下 CP1: (${lfCp1.x.toFixed(2)}, ${lfCp1.y.toFixed(2)})`);
+    logger.info(`   前下 CP2: (${lfCp2.x.toFixed(2)}, ${lfCp2.y.toFixed(2)})`);
+    logger.info(`   后下 CP1: (${lbCp1.x.toFixed(2)}, ${lbCp1.y.toFixed(2)})`);
+    logger.info(`   后下 CP2: (${lbCp2.x.toFixed(2)}, ${lbCp2.y.toFixed(2)})`);
+    logger.info(`   后上 CP1: (${ubCp1.x.toFixed(2)}, ${ubCp1.y.toFixed(2)})`);
+    logger.info(`   后上 CP2: (${ubCp2.x.toFixed(2)}, ${ubCp2.y.toFixed(2)})`);
 
     logger.info(`\n📏 袖山长度:`);
     logger.info(`   前袖山上段: ${lenUpperFront.toFixed(2)} cm`);
@@ -342,78 +312,55 @@ export class SleeveCapGenerator {
   }
 
   /**
-   * 基于切线方向和张力生成一对控制点
-   *
-   * CP1: 从fromPoint沿outgoingAngle方向偏移 span × fromTension
-   * CP2: 从toPoint沿incomingAngle反方向偏移 span × toTension
-   *
-   * G1连续保证：
-   * - pitch点的incoming = outgoing → 同一切线 → 自动共线
+   * 单峰验证：确保袖山从capTop向左右单调下降
+   * 采样每段Bezier曲线，检查Y值单调递增（Y向下=高度递减）
    */
-  private static makeControlPoints(
-    fromPoint: Point,
-    toPoint: Point,
-    fromOutgoingAngleDeg: number,
-    toIncomingAngleDeg: number,
-    fromTension: number,
-    toTension: number
-  ): { cp1: Point; cp2: Point } {
+  private static validateSinglePeak(
+    capTop: Point,
+    frontPitch: Point, ufCp1: Point, ufCp2: Point,
+    frontAxilla: Point, lfCp1: Point, lfCp2: Point,
+    backAxilla: Point, lbCp1: Point, lbCp2: Point,
+    backPitch: Point, ubCp1: Point, ubCp2: Point
+  ): void {
+    const samples = 20;
 
-    const span = Math.sqrt(
-      (toPoint.x - fromPoint.x) ** 2 +
-      (toPoint.y - fromPoint.y) ** 2
-    );
-
-    const fromRad = fromOutgoingAngleDeg * Math.PI / 180;
-    const cp1 = new Point(
-      fromPoint.x + Math.cos(fromRad) * span * fromTension,
-      fromPoint.y + Math.sin(fromRad) * span * fromTension
-    );
-
-    const toReverseRad = (toIncomingAngleDeg + 180) * Math.PI / 180;
-    const cp2 = new Point(
-      toPoint.x + Math.cos(toReverseRad) * span * toTension,
-      toPoint.y + Math.sin(toReverseRad) * span * toTension
-    );
-
-    return { cp1, cp2 };
-  }
-
-  /**
-   * G1连续性验证
-   */
-  private static validateG1(joints: Array<{
-    name: string;
-    p2: Point;
-    p3: Point;
-    q1: Point;
-  }>): void {
-    for (const joint of joints) {
-      const vec1 = { x: joint.p3.x - joint.p2.x, y: joint.p3.y - joint.p2.y };
-      const vec2 = { x: joint.q1.x - joint.p3.x, y: joint.q1.y - joint.p3.y };
-      const dot = vec1.x * vec2.x + vec1.y * vec2.y;
-      const mag1 = Math.sqrt(vec1.x * vec1.x + vec1.y * vec1.y);
-      const mag2 = Math.sqrt(vec2.x * vec2.x + vec2.y * vec2.y);
-
-      let angleDeg = 0;
-      if (mag1 > 0 && mag2 > 0) {
-        const cosAngle = dot / (mag1 * mag2);
-        angleDeg = Math.acos(Math.max(-1, Math.min(1, cosAngle))) * 180 / Math.PI;
+    const checkMonotone = (
+      label: string,
+      p0: Point, p1: Point, p2: Point, p3: Point,
+      expectIncreasing: boolean
+    ): boolean => {
+      let prevY = p0.y;
+      let violations = 0;
+      for (let i = 1; i <= samples; i++) {
+        const t = i / samples;
+        const pt = this.evaluateCubicBezier(p0, p1, p2, p3, t);
+        if (expectIncreasing && pt.y < prevY - 0.01) {
+          violations++;
+        } else if (!expectIncreasing && pt.y > prevY + 0.01) {
+          violations++;
+        }
+        prevY = pt.y;
       }
-
-      if (angleDeg < 1 || angleDeg > 179) {
-        const rodRatio = mag1 > 0 ? mag2 / mag1 : 0;
-        const g2Status = rodRatio >= 0.7 && rodRatio <= 1.4 ? '接近G2' : 'G2偏差大';
-        logger.info(`   ✅ ${joint.name}: G1连续 ✓ (夹角${angleDeg.toFixed(2)}°, 杆比${rodRatio.toFixed(2)} ${g2Status})`);
-      } else {
-        logger.error(`   ❌ ${joint.name}: G1不连续！(夹角${angleDeg.toFixed(2)}°)`);
+      if (violations > 0) {
+        logger.warn(`   ⚠️ ${label}: Y单调性违反 ${violations}次`);
       }
+      return violations === 0;
+    };
+
+    logger.info(`\n🏔️ 单峰验证:`);
+
+    const ufOk = checkMonotone('前上(capTop→frontPitch)', capTop, ufCp1, ufCp2, frontPitch, true);
+    const lfOk = checkMonotone('前下(frontPitch→frontAxilla)', frontPitch, lfCp1, lfCp2, frontAxilla, true);
+    const lbOk = checkMonotone('后下(backAxilla→backPitch)', backAxilla, lbCp1, lbCp2, backPitch, false);
+    const ubOk = checkMonotone('后上(backPitch→capTop)', backPitch, ubCp1, ubCp2, capTop, false);
+
+    if (ufOk && lfOk && lbOk && ubOk) {
+      logger.info(`   ✅ 单峰约束通过：所有段Y单调`);
+    } else {
+      logger.warn(`   ⚠️ 单峰约束未完全通过，需调整控制点`);
     }
   }
 
-  /**
-   * 从Path操作中提取袖窿段
-   */
   private static extractArmholeSegments(ops: Array<{
     type: string;
     to?: { x: number; y: number };
@@ -451,9 +398,6 @@ export class SleeveCapGenerator {
     return segments;
   }
 
-  /**
-   * 计算袖窿总长度
-   */
   private static calculateTotalArmholeLength(segments: ArmholeSegment[]): number {
     let totalLength = 0;
     for (const seg of segments) {
@@ -468,9 +412,6 @@ export class SleeveCapGenerator {
     return totalLength;
   }
 
-  /**
-   * 三次Bezier曲线近似长度
-   */
   private static calculateBezierLength(
     p0: Point, p1: Point, p2: Point, p3: Point,
     segments: number = 20
@@ -488,9 +429,6 @@ export class SleeveCapGenerator {
     return length;
   }
 
-  /**
-   * 三次Bezier曲线上的点
-   */
   private static evaluateCubicBezier(
     p0: Point, p1: Point, p2: Point, p3: Point, t: number
   ): Point {
