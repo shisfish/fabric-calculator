@@ -8,6 +8,8 @@ export interface PathOperation {
   to?: Point;
   cp1?: Point;
   cp2?: Point;
+  segmentName?: string;
+  segmentType?: string;
 }
 
 export class Path {
@@ -18,6 +20,18 @@ export class Path {
 
   constructor() {
     this.attributes = new Attributes();
+  }
+
+  /**
+   * 给最近的一个操作标记段名称和类型
+   */
+  segment(name: string, type?: string): this {
+    if (this.ops.length > 0) {
+      const lastOp = this.ops[this.ops.length - 1];
+      lastOp.segmentName = name;
+      lastOp.segmentType = type || name;
+    }
+    return this;
   }
 
   move(to: Point): this {
@@ -412,7 +426,11 @@ export class Path {
   clone(): Path {
     const cloned = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.copy();
       if (op.cp1) newOp.cp1 = op.cp1.copy();
       if (op.cp2) newOp.cp2 = op.cp2.copy();
@@ -427,7 +445,11 @@ export class Path {
   translate(dx: number, dy: number): Path {
     const result = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.translate(dx, dy);
       if (op.cp1) newOp.cp1 = op.cp1.translate(dx, dy);
       if (op.cp2) newOp.cp2 = op.cp2.translate(dx, dy);
@@ -442,7 +464,11 @@ export class Path {
   rotate(angleDegrees: number, center: Point = new Point(0, 0)): Path {
     const result = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.rotate(angleDegrees, center);
       if (op.cp1) newOp.cp1 = op.cp1.rotate(angleDegrees, center);
       if (op.cp2) newOp.cp2 = op.cp2.rotate(angleDegrees, center);
@@ -457,7 +483,11 @@ export class Path {
   scale(factor: number, center: Point = new Point(0, 0)): Path {
     const result = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.scale(factor, center);
       if (op.cp1) newOp.cp1 = op.cp1.scale(factor, center);
       if (op.cp2) newOp.cp2 = op.cp2.scale(factor, center);
@@ -472,7 +502,11 @@ export class Path {
   mirror(lineStart: Point, lineEnd: Point): Path {
     const result = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.mirror(lineStart, lineEnd);
       if (op.cp1) newOp.cp1 = op.cp1.mirror(lineStart, lineEnd);
       if (op.cp2) newOp.cp2 = op.cp2.mirror(lineStart, lineEnd);
@@ -487,7 +521,11 @@ export class Path {
   flipX(axis: Point = new Point(0, 0)): Path {
     const result = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.flipX(axis);
       if (op.cp1) newOp.cp1 = op.cp1.flipX(axis);
       if (op.cp2) newOp.cp2 = op.cp2.flipX(axis);
@@ -502,7 +540,11 @@ export class Path {
   flipY(axis: Point = new Point(0, 0)): Path {
     const result = new Path();
     for (const op of this.ops) {
-      const newOp: PathOperation = { type: op.type };
+      const newOp: PathOperation = { 
+        type: op.type,
+        segmentName: op.segmentName,
+        segmentType: op.segmentType
+      };
       if (op.to) newOp.to = op.to.flipY(axis);
       if (op.cp1) newOp.cp1 = op.cp1.flipY(axis);
       if (op.cp2) newOp.cp2 = op.cp2.flipY(axis);

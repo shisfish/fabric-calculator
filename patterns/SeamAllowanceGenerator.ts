@@ -1,251 +1,137 @@
 import { Point, Path } from '../geometry/index.js';
+import { CubicBezier, QuadraticBezier } from '../geometry/Bezier.js';
+import { createLogger } from '../utils/CADLogger.js';
+
+const logger = createLogger('SEAM-ALLOWANCE');
+
+export interface SeamAllowanceRule {
+  segment: string;
+  distance: number;
+}
 
 export class SeamAllowanceGenerator {
-
-  static generate(outline: Path, distance: number): Path {
-    if (distance <= 0) {
+  /**
+   * 工业级分段缝份生成器
+   * 
+   * 1. 基于 path segment 标识进行分段处理
+   * 2. 采样离散化 (Flatten)
+   * 3. 计算法线方向并平移
+   * 4. 重新构建路径
+   */
+  static generate(outline: Path, rules: SeamAllowanceRule[]): Path {
+    if (!rules || rules.length === 0) {
       return outline.clone();
     }
 
-    const sampledPoints = this.flattenBezier(outline, 50);
+    const resultPath = new Path();
+    let currentPoint: Point | null = null;
+    let startPoint: Point | null = null;
 
-    if (sampledPoints.length < 3) {
-      return outline.clone();
-    }
+    // 存储所有生成的离散点，最后统一重建
+    const allOffsetPoints: Point[] = [];
 
-    const tangents = this.computeTangents(sampledPoints);
-    let normals = this.computeNormals(tangents);
-    
-    const pathDirection = this.getPathDirection(sampledPoints);
-    
-    if (pathDirection < 0) {
-      normals = normals.map(n => new Point(-n.x, -n.y));
-    }
+    for (const op of outline.ops) {
+      const rule = rules.find(r => r.segment === op.segmentName);
+      const distance = rule ? rule.distance : 0;
 
-    const offsetPoints = this.offsetPoints(sampledPoints, normals, distance);
-    const smoothedPoints = this.smoothCorners(offsetPoints, tangents, distance);
-    const offsetPath = this.rebuildPath(smoothedPoints);
-
-    return offsetPath;
-  }
-
-  private static getPathDirection(points: Point[]): number {
-    let area = 0;
-    const n = points.length;
-
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      area += points[i].x * points[j].y;
-      area -= points[j].x * points[i].y;
-    }
-
-    return area / 2;
-  }
-
-  private static flattenBezier(path: Path, segmentsPerCurve: number = 50): Point[] {
-    const points: Point[] = [];
-    let current: Point | null = null;
-
-    for (const op of path.ops) {
       switch (op.type) {
         case 'move':
           if (op.to) {
-            current = op.to.copy();
-            points.push(current);
+            currentPoint = op.to.copy();
+            startPoint = currentPoint.copy();
           }
           break;
 
         case 'line':
-          if (op.to && current) {
-            const lineSegments = Math.max(1, Math.ceil(current.dist(op.to) / 0.5));
-            for (let i = 1; i <= lineSegments; i++) {
-              const t = i / lineSegments;
-              const point = new Point(
-                current.x + (op.to.x - current.x) * t,
-                current.y + (op.to.y - current.y) * t
-              );
-              points.push(point);
-            }
-            current = op.to;
+          if (op.to && currentPoint) {
+            const segmentPoints = this.offsetLine(currentPoint, op.to, distance);
+            allOffsetPoints.push(...segmentPoints);
+            currentPoint = op.to.copy();
           }
           break;
 
         case 'curve':
-          if (op.cp1 && op.cp2 && op.to && current) {
-            for (let i = 1; i <= segmentsPerCurve; i++) {
-              const t = i / segmentsPerCurve;
-              const mt = 1 - t;
-              const mt2 = mt * mt;
-              const mt3 = mt2 * mt;
-              const t2 = t * t;
-              const t3 = t2 * t;
-
-              const x = mt3 * current.x + 3 * mt2 * t * op.cp1.x + 3 * mt * t2 * op.cp2.x + t3 * op.to.x;
-              const y = mt3 * current.y + 3 * mt2 * t * op.cp1.y + 3 * mt * t2 * op.cp2.y + t3 * op.to.y;
-
-              points.push(new Point(x, y));
-            }
-            current = op.to;
+          if (op.cp1 && op.cp2 && op.to && currentPoint) {
+            const segmentPoints = this.offsetCubicBezier(currentPoint, op.cp1, op.cp2, op.to, distance);
+            allOffsetPoints.push(...segmentPoints);
+            currentPoint = op.to.copy();
           }
           break;
 
         case 'quad':
-          if (op.cp1 && op.to && current) {
-            for (let i = 1; i <= segmentsPerCurve; i++) {
-              const t = i / segmentsPerCurve;
-              const mt = 1 - t;
-              const mt2 = mt * mt;
-              const t2 = t * t;
-
-              const x = mt2 * current.x + 2 * mt * t * op.cp1.x + t2 * op.to.x;
-              const y = mt2 * current.y + 2 * mt * t * op.cp1.y + t2 * op.to.y;
-
-              points.push(new Point(x, y));
-            }
-            current = op.to;
+          if (op.cp1 && op.to && currentPoint) {
+            const segmentPoints = this.offsetQuadraticBezier(currentPoint, op.cp1, op.to, distance);
+            allOffsetPoints.push(...segmentPoints);
+            currentPoint = op.to.copy();
           }
           break;
 
         case 'close':
+          if (currentPoint && startPoint) {
+            // 闭合处暂不特殊处理，交给 rebuildPath 统一封闭
+          }
           break;
       }
     }
 
+    if (allOffsetPoints.length < 2) {
+      return outline.clone();
+    }
+
+    // 简单平滑并重建路径
+    resultPath.move(allOffsetPoints[0]);
+    for (let i = 1; i < allOffsetPoints.length; i++) {
+      resultPath.line(allOffsetPoints[i]);
+    }
+    resultPath.close();
+
+    return resultPath;
+  }
+
+  private static offsetLine(p0: Point, p1: Point, distance: number): Point[] {
+    if (distance === 0) return [p0.copy(), p1.copy()];
+
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    
+    if (len < 1e-6) return [p0.copy()];
+
+    // 法线方向 (顺时针方向 90 度，对于闭合路径通常是向外)
+    // 假设路径是顺时针，法线指向左侧 (dy, -dx) 是向外
+    const nx = dy / len;
+    const ny = -dx / len;
+
+    return [
+      new Point(p0.x + nx * distance, p0.y + ny * distance),
+      new Point(p1.x + nx * distance, p1.y + ny * distance)
+    ];
+  }
+
+  private static offsetCubicBezier(p0: Point, cp1: Point, cp2: Point, p3: Point, distance: number, steps: number = 20): Point[] {
+    const bezier = new CubicBezier(p0, cp1, cp2, p3);
+    const points: Point[] = [];
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const pt = bezier.getPoint(t);
+      if (distance === 0) {
+        points.push(pt);
+        continue;
+      }
+      const normal = bezier.getNormal(t);
+      // 工业规则：需要根据路径走向判断法线方向，这里默认向外
+      points.push(new Point(
+        pt.x + normal.x * distance,
+        pt.y + normal.y * distance
+      ));
+    }
     return points;
   }
 
-  private static computeTangents(points: Point[]): Point[] {
-    const tangents: Point[] = [];
-    const n = points.length;
-
-    for (let i = 0; i < n; i++) {
-      const prev = points[(i - 1 + n) % n];
-      const curr = points[i];
-      const next = points[(i + 1) % n];
-
-      let tx = 0, ty = 0;
-
-      if (i === 0 && n > 1) {
-        tx = next.x - curr.x;
-        ty = next.y - curr.y;
-      } else if (i === n - 1 && n > 1) {
-        tx = curr.x - prev.x;
-        ty = curr.y - prev.y;
-      } else {
-        tx = next.x - prev.x;
-        ty = next.y - prev.y;
-      }
-
-      const len = Math.sqrt(tx * tx + ty * ty);
-      if (len > 1e-10) {
-        tangents.push(new Point(tx / len, ty / len));
-      } else {
-        tangents.push(new Point(1, 0));
-      }
-    }
-
-    return tangents;
-  }
-
-  private static computeNormals(tangents: Point[]): Point[] {
-    return tangents.map(t => new Point(t.y, -t.x));
-  }
-
-  private static offsetPoints(points: Point[], normals: Point[], distance: number): Point[] {
-    return points.map((p, i) => new Point(
-      p.x + normals[i].x * distance,
-      p.y + normals[i].y * distance
-    ));
-  }
-
-  private static smoothCorners(offsetPoints: Point[], tangents: Point[], distance: number): Point[] {
-    const smoothed: Point[] = [];
-    const n = offsetPoints.length;
-    const cornerThreshold = Math.cos(Math.PI / 6);
-
-    for (let i = 0; i < n; i++) {
-      const prev = tangents[(i - 1 + n) % n];
-      const curr = tangents[i];
-
-      const dot = prev.x * curr.x + prev.y * curr.y;
-
-      if (dot < cornerThreshold && i > 0 && i < n - 1) {
-        const pPrev = offsetPoints[(i - 1 + n) % n];
-        const pCurr = offsetPoints[i];
-        const pNext = offsetPoints[(i + 1) % n];
-
-        const d1 = distance * 0.8;
-        const d2 = distance * 0.8;
-
-        const interp1 = new Point(
-          pCurr.x + (pPrev.x - pCurr.x) * (d1 / pCurr.dist(pPrev)),
-          pCurr.y + (pPrev.y - pCurr.y) * (d1 / pCurr.dist(pPrev))
-        );
-
-        const interp2 = new Point(
-          pCurr.x + (pNext.x - pCurr.x) * (d2 / pCurr.dist(pNext)),
-          pCurr.y + (pNext.y - pCurr.y) * (d2 / pCurr.dist(pNext))
-        );
-
-        if (!isNaN(interp1.x) && !isNaN(interp1.y)) {
-          smoothed.push(interp1);
-        }
-        if (!isNaN(interp2.x) && !isNaN(interp2.y)) {
-          smoothed.push(interp2);
-        }
-      } else {
-        smoothed.push(offsetPoints[i]);
-      }
-    }
-
-    return smoothed.length >= 3 ? smoothed : offsetPoints;
-  }
-
-  private static rebuildPath(points: Point[]): Path {
-    if (points.length < 3) {
-      return Path.fromPoints(points, true);
-    }
-
-    const path = new Path();
-    path.move(points[0]);
-
-    for (let i = 1; i < points.length; i++) {
-      path.line(points[i]);
-    }
-
-    path.close();
-
-    return path;
-  }
-
-  static generateWithVisualData(outline: Path, distance: number): {
-    offsetPath: Path;
-    originalPoints: Point[];
-    offsetPoints: Point[];
-    sampleCount: number;
-  } {
-    const originalPoints = this.flattenBezier(outline, 50);
-
-    if (originalPoints.length < 3 || distance <= 0) {
-      return {
-        offsetPath: outline.clone(),
-        originalPoints,
-        offsetPoints: originalPoints.map(p => p.copy()),
-        sampleCount: originalPoints.length
-      };
-    }
-
-    const tangents = this.computeTangents(originalPoints);
-    const normals = this.computeNormals(tangents);
-    const offsetPts = this.offsetPoints(originalPoints, normals, distance);
-    const smoothedPoints = this.smoothCorners(offsetPts, tangents, distance);
-    const offsetPath = this.rebuildPath(smoothedPoints);
-
-    return {
-      offsetPath,
-      originalPoints,
-      offsetPoints: smoothedPoints,
-      sampleCount: originalPoints.length
-    };
+  private static offsetQuadraticBezier(p0: Point, cp: Point, p1: Point, distance: number, steps: number = 20): Point[] {
+    const quad = new QuadraticBezier(p0, cp, p1);
+    const cubic = quad.toCubic();
+    return this.offsetCubicBezier(cubic.p0, cubic.p1, cubic.p2, cubic.p3, distance, steps);
   }
 }

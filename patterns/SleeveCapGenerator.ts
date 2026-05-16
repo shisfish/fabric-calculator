@@ -224,13 +224,13 @@ export class SleeveCapGenerator {
     // 6. 构造 Path
     const capPath = new Path()
       .move(capTop)
-      .curve(ufCp1, ufCp2, frontPitch)
-      .curve(lfCp1, lfCp2, frontAxilla)
-      .line(frontCuff)
-      .line(backCuff)
-      .line(backAxilla)
-      .curve(lbCp1, lbCp2, backPitch)
-      .curve(ubCp1, ubCp2, capTop)
+      .curve(ufCp1, ufCp2, frontPitch).segment('armhole')
+      .curve(lfCp1, lfCp2, frontAxilla).segment('armhole')
+      .line(frontCuff).segment('sideSeam')
+      .line(backCuff).segment('sleeveHem')
+      .line(backAxilla).segment('sideSeam')
+      .curve(lbCp1, lbCp2, backPitch).segment('armhole')
+      .curve(ubCp1, ubCp2, capTop).segment('armhole')
       .close();
 
     return {

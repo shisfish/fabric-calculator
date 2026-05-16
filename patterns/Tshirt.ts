@@ -40,9 +40,18 @@ export class TshirtPatternGenerator {
     );
 
     if (params.seamAllowance && params.seamAllowance > 0) {
-      backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, params.seamAllowance);
-      frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, params.seamAllowance);
-      sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, params.seamAllowance);
+      const rules = [
+        { segment: 'shoulder', distance: 1.0 },
+        { segment: 'armhole', distance: 1.0 },
+        { segment: 'sideSeam', distance: 1.2 },
+        { segment: 'neckline', distance: 0.6 },
+        { segment: 'hem', distance: 2.5 },
+        { segment: 'sleeveHem', distance: 2.5 }
+      ];
+
+      backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, rules);
+      frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, rules);
+      sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, rules);
     }
 
     pieces.push(backPiece, frontPiece, sleevePiece);
@@ -119,12 +128,12 @@ export class TshirtPatternGenerator {
 
     const path = new Path()
       .move(points.cbNeck)
-      .quad(new Point(nW * 0.5, nD), points.hps) // 后领口
-      .line(points.shoulder)
-      .line(points.backPitch)
-      .curve(points.bCp1, points.bCp2, points.armholeEnd)
-      .line(points.sideHem)
-      .line(points.cbHem)
+      .quad(new Point(nW * 0.5, nD), points.hps).segment('neckline') // 后领口
+      .line(points.shoulder).segment('shoulder')
+      .line(points.backPitch).segment('armhole')
+      .curve(points.bCp1, points.bCp2, points.armholeEnd).segment('armhole')
+      .line(points.sideHem).segment('sideSeam')
+      .line(points.cbHem).segment('hem')
       .close();
 
     return { 
@@ -175,12 +184,12 @@ export class TshirtPatternGenerator {
 
     const path = new Path()
       .move(points.cfNeck)
-      .quad(points.neckCp, points.neckEnd)
-      .line(points.shoulder)
-      .curve(points.armholeTopCp1, points.armholeTopCp2, points.armholePitch)
-      .curve(points.armholeBottomCp1, points.armholeBottomCp2, points.armholeEnd)
-      .line(points.sideBottom)
-      .quad(points.hemCp, points.hemFold)
+      .quad(points.neckCp, points.neckEnd).segment('neckline')
+      .line(points.shoulder).segment('shoulder')
+      .curve(points.armholeTopCp1, points.armholeTopCp2, points.armholePitch).segment('armhole')
+      .curve(points.armholeBottomCp1, points.armholeBottomCp2, points.armholeEnd).segment('armhole')
+      .line(points.sideBottom).segment('sideSeam')
+      .quad(points.hemCp, points.hemFold).segment('hem')
       .close();
 
     return { 
