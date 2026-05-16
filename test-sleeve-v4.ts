@@ -44,7 +44,7 @@ const testParams = {
     bicepsWidth: 20,
     sleeveCapHeight: 14,
     sleeveLength: 58,
-    cuffWidth: 18
+    cuffWidth: 10
   },
   seamAllowance: 0
 };
