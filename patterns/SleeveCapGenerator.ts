@@ -148,53 +148,54 @@ export class SleeveCapGenerator {
     );
 
     // 3. 控制点 - 遵循比例规则 (spanX * ratio)
+    // 核心优化：确保上段（Top to Pitch）始终保持凸起 (Convex)，消除 S-Curve
     
     // --- 前上段 (capTop -> frontPitch) ---
-    const ufSpanX = frontPitch.x - capTop.x;
-    const ufSpanY = frontPitch.y - capTop.y;
+    // 顶部必须宽圆，CP1 的 Y 必须接近 0
     const ufCp1 = new Point(
-      capTop.x + ufSpanX * 0.4,
-      capTop.y + ufSpanY * 0.05 // 顶部接近水平
+      capTop.x + halfBicep * 0.25, 
+      capTop.y
     );
+    // CP2 必须向外推，确保曲线外凸，且 Y 坐标位于 capTop 和 frontPitch 之间
     const ufCp2 = new Point(
-      frontPitch.x - ufSpanX * 0.2,
-      frontPitch.y - ufSpanY * 0.15
+      frontPitch.x,
+      frontPitch.y - cH * 0.15
     );
 
     // --- 前下段 (frontPitch -> frontAxilla) ---
-    const lfSpanX = frontAxilla.x - frontPitch.x;
-    const lfSpanY = frontAxilla.y - frontPitch.y;
+    // CP1 延续 Pitch 处的切线方向
     const lfCp1 = new Point(
-      frontPitch.x + lfSpanX * 0.2,
-      frontPitch.y + lfSpanY * 0.25
+      frontPitch.x,
+      frontPitch.y + cH * 0.15
     );
+    // CP2 靠近腋下，前袖下段可以有轻微凹陷 (hollow)
     const lfCp2 = new Point(
-      frontAxilla.x - lfSpanX * 0.1, // 腋下凹陷 (hollow)
-      frontAxilla.y - lfSpanY * 0.05
+      frontAxilla.x - halfBicep * 0.05,
+      frontAxilla.y - cH * 0.1
     );
 
     // --- 后下段 (backAxilla -> backPitch) ---
-    const lbSpanX = backPitch.x - backAxilla.x;
-    const lbSpanY = backPitch.y - backAxilla.y;
+    // 后袖必须饱满，CP1 远离腋下
     const lbCp1 = new Point(
-      backAxilla.x + lbSpanX * 0.15,
-      backAxilla.y + lbSpanY * 0.05
+      backAxilla.x + halfBicep * 0.05,
+      backAxilla.y - cH * 0.1
     );
+    // CP2 延续 Pitch 处的切线
     const lbCp2 = new Point(
-      backPitch.x - lbSpanX * 0.3,
-      backPitch.y - lbSpanY * 0.2
+      backPitch.x,
+      backPitch.y + cH * 0.15
     );
 
     // --- 后上段 (backPitch -> capTop) ---
-    const ubSpanX = capTop.x - backPitch.x;
-    const ubSpanY = capTop.y - backPitch.y;
+    // CP1 延续 Pitch 处的切线
     const ubCp1 = new Point(
-      backPitch.x + ubSpanX * 0.35,
-      backPitch.y + ubSpanY * 0.15
+      backPitch.x,
+      backPitch.y - cH * 0.15
     );
+    // CP2 靠近顶部，保持圆顺
     const ubCp2 = new Point(
-      capTop.x - ubSpanX * 0.4,
-      capTop.y - ubSpanY * 0.05 // 顶部接近水平
+      capTop.x - halfBicep * 0.25,
+      capTop.y
     );
 
     // 4. 计算长度
