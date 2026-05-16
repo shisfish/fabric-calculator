@@ -162,35 +162,32 @@ export class SleeveCapGenerator {
     const backCuff = new Point(-cuW, cH + sL);
 
     // Pitch点：工业版型经验位置
-    // 前pitch：38%宽度，40%高度 → 前袖陡降区起点
-    // 后pitch：70%宽度，28%高度 → 后袖平缓区起点（更靠外→后袖更长）
-    const frontPitch = new Point(halfBicep * 0.38, cH * 0.40);
-    const backPitch = new Point(-halfBicep * 0.70, cH * 0.28);
+    // 前pitch：45%宽度，40%高度 → 前袖陡降区起点
+    // 后pitch：55%宽度，35%高度 → 后袖平缓区起点（更靠外→后袖更长）
+    const frontPitch = new Point(halfBicep * 0.45, cH * 0.40);
+    const backPitch = new Point(-halfBicep * 0.55, cH * 0.35);
 
     // ========== 控制点：工业版师直接放置 ==========
 
     // --- 前袖山上段：capTop → frontPitch ---
-    // 顶部宽圆弧：CP1水平远伸，Y≈0
-    // CP2平滑过渡到pitch，无折点
-    const ufCp1 = new Point(halfBicep * 0.30, cH * 0.00);
-    const ufCp2 = new Point(halfBicep * 0.36, cH * 0.20);
+    // 顶部圆弧适中：CP1水平伸展，Y≈0
+    const ufCp1 = new Point(halfBicep * 0.25, cH * 0.00);
+    const ufCp2 = new Point(halfBicep * 0.40, cH * 0.22);
 
     // --- 前袖山下段：frontPitch → frontAxilla ---
     // 前袖更陡：控制杆较短
-    // CP2轻微inward → 工业hollow效果
-    const lfCp1 = new Point(halfBicep * 0.42, cH * 0.58);
-    const lfCp2 = new Point(halfBicep * 0.86, cH * 0.84);
+    const lfCp1 = new Point(halfBicep * 0.50, cH * 0.56);
+    const lfCp2 = new Point(halfBicep * 0.88, cH * 0.82);
 
     // --- 后袖山下段：backAxilla → backPitch ---
-    // 后袖更饱满：控制杆更长，全程外凸
-    const lbCp1 = new Point(-halfBicep * 0.90, cH * 0.78);
-    const lbCp2 = new Point(-halfBicep * 0.68, cH * 0.50);
+    // 后袖更饱满：控制杆较长，全程外凸
+    const lbCp1 = new Point(-halfBicep * 0.88, cH * 0.76);
+    const lbCp2 = new Point(-halfBicep * 0.62, cH * 0.48);
 
     // --- 后袖山上段：backPitch → capTop ---
     // 后袖更平缓：CP1更向外凸
-    // CP2水平远伸，Y≈0
-    const ubCp1 = new Point(-halfBicep * 0.58, cH * 0.12);
-    const ubCp2 = new Point(-halfBicep * 0.42, cH * 0.00);
+    const ubCp1 = new Point(-halfBicep * 0.50, cH * 0.14);
+    const ubCp2 = new Point(-halfBicep * 0.32, cH * 0.00);
 
     // ========== Notch点 ==========
     const frontNotch = this.evaluateCubicBezier(frontPitch, lfCp1, lfCp2, frontAxilla, 0.4);
