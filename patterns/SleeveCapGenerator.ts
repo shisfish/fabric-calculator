@@ -147,55 +147,66 @@ export class SleeveCapGenerator {
       cH * 0.35
     );
 
-    // 3. 控制点 - 遵循比例规则 (spanX * ratio)
-    // 核心优化：确保上段（Top to Pitch）始终保持凸起 (Convex)，消除 S-Curve
+    // 3. 控制点 - 工业矢量切线对齐算法 (Vector Tangent Alignment)
+    // 目标：确保曲线在 Pitch 点处 G1 连续（圆顺），无折痕。
     
-    // --- 前上段 (capTop -> frontPitch) ---
-    // 顶部必须宽圆，CP1 的 Y 必须接近 0
-    const ufCp1 = new Point(
-      capTop.x + halfBicep * 0.25, 
-      capTop.y
-    );
-    // CP2 必须向外推，确保曲线外凸，且 Y 坐标位于 capTop 和 frontPitch 之间
+    // --- 前袖山基准切线 ---
+    // 计算从 capTop 到 frontAxilla 的整体趋势矢量
+    const fVecX = frontAxilla.x - capTop.x;
+    const fVecY = frontAxilla.y - capTop.y;
+    const fLen = Math.sqrt(fVecX * fVecX + fVecY * fVecY);
+    const fDirX = fVecX / fLen;
+    const fDirY = fVecY / fLen;
+
+    // --- 后袖山基准切线 ---
+    const bVecX = backAxilla.x - capTop.x;
+    const bVecY = backAxilla.y - capTop.y;
+    const bLen = Math.sqrt(bVecX * bVecX + bVecY * bVecY);
+    const bDirX = bVecX / bLen;
+    const bDirY = bVecY / bLen;
+
+    // --- 顶部控制 (capTop) ---
+    // 顶部手柄长度：bicepsWidth 的 12%~15%
+    const topHandleLen = bW * 0.14;
+    const ufCp1 = new Point(capTop.x + topHandleLen, capTop.y);
+    const ubCp2 = new Point(capTop.x - topHandleLen, capTop.y);
+
+    // --- 前 Pitch 连续性控制 ---
+    // 手柄长度：前袖山总趋势长度的 20%~25%
+    const fHandleLen = fLen * 0.22;
+    // ufCp2 和 lfCp1 必须与 frontPitch 在同一直线上，方向与基准切线一致
     const ufCp2 = new Point(
-      frontPitch.x,
-      frontPitch.y - cH * 0.15
+      frontPitch.x - fDirX * fHandleLen,
+      frontPitch.y - fDirY * fHandleLen
     );
-
-    // --- 前下段 (frontPitch -> frontAxilla) ---
-    // CP1 延续 Pitch 处的切线方向
     const lfCp1 = new Point(
-      frontPitch.x,
-      frontPitch.y + cH * 0.15
+      frontPitch.x + fDirX * fHandleLen,
+      frontPitch.y + fDirY * fHandleLen
     );
-    // CP2 靠近腋下，前袖下段可以有轻微凹陷 (hollow)
+
+    // --- 前腋下控制 (frontAxilla) ---
+    // 前袖下段轻微凹入 (hollow)
     const lfCp2 = new Point(
-      frontAxilla.x - halfBicep * 0.05,
-      frontAxilla.y - cH * 0.1
+      frontAxilla.x - fVecX * 0.1,
+      frontAxilla.y - fVecY * 0.05
     );
 
-    // --- 后下段 (backAxilla -> backPitch) ---
-    // 后袖必须饱满，CP1 远离腋下
-    const lbCp1 = new Point(
-      backAxilla.x + halfBicep * 0.05,
-      backAxilla.y - cH * 0.1
-    );
-    // CP2 延续 Pitch 处的切线
-    const lbCp2 = new Point(
-      backPitch.x,
-      backPitch.y + cH * 0.15
-    );
-
-    // --- 后上段 (backPitch -> capTop) ---
-    // CP1 延续 Pitch 处的切线
+    // --- 后 Pitch 连续性控制 ---
+    const bHandleLen = bLen * 0.25; // 后袖手柄稍长，更圆顺
     const ubCp1 = new Point(
-      backPitch.x,
-      backPitch.y - cH * 0.15
+      backPitch.x - bDirX * bHandleLen,
+      backPitch.y - bDirY * bHandleLen
     );
-    // CP2 靠近顶部，保持圆顺
-    const ubCp2 = new Point(
-      capTop.x - halfBicep * 0.25,
-      capTop.y
+    const lbCp2 = new Point(
+      backPitch.x + bDirX * bHandleLen,
+      backPitch.y + bDirY * bHandleLen
+    );
+
+    // --- 后腋下控制 (backAxilla) ---
+    // 后袖下段保持饱满
+    const lbCp1 = new Point(
+      backAxilla.x - bVecX * 0.1,
+      backAxilla.y + bVecY * 0.05
     );
 
     // 4. 计算长度
