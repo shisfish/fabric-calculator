@@ -69,7 +69,7 @@ export class SleeveCapGenerator {
     const backArmholeLength = this.calculateTotalArmholeLength(backSegments);
     const totalArmholeLen = frontArmholeLength + backArmholeLength;
 
-    logger.info(`\n🏭 ===== 工业袖山生成器 v10.0 (直接控制点法) =====`);
+    logger.info(`\n🏭 ===== 工业袖山生成器 v11.0 (版师直接放置法) =====`);
     logger.info(`   前袖窿长度: ${frontArmholeLength.toFixed(2)} cm`);
     logger.info(`   后袖窿长度: ${backArmholeLength.toFixed(2)} cm`);
     logger.info(`   袖窿总长: ${totalArmholeLen.toFixed(2)} cm`);
@@ -108,34 +108,41 @@ export class SleeveCapGenerator {
     ease: number
   ): number {
     const targetCapLen = totalArmholeLen + ease;
-    const bW = targetCapLen * 0.80;
+    const bW = targetCapLen * 0.78;
     return Math.max(bW, cH * 2.6);
   }
 
   /**
-   * 核心算法：直接控制点法生成袖山
+   * 核心算法：工业版师直接放置法 v11.0
    *
    * 坐标系：SVG标准（Y向下）
    * capTop在原点(0,0)
    * 前袖在右侧（X正方向）
    * 后袖在左侧（X负方向）
    *
-   * 工业纸样控制点规则（直接放置，不用角度系统）：
+   * 工业纸样原则：
    *
-   * 1. capTop附近控制点：
-   *    - 前方向：水平偏右，极小Y偏移 → 顶部圆润展开
-   *    - 后方向：水平偏左，极小Y偏移 → 顶部圆润展开
+   * 1. 顶部宽圆弧
+   *    - CP1/CP2的Y≈0，X远伸
+   *    - 圆弧占袖山宽度60%+
+   *    - 禁止尖峰、帐篷结构
    *
-   * 2. frontPitch控制点：
-   *    - 上方CP：从前pitch向左上偏 → 形成前袖山外凸
-   *    - 下方CP：从前pitch向右下偏 → 形成前袖山陡降
+   * 2. pitch不是折点
+   *    - pitch只是4段Bezier的分段标记
+   *    - 曲率在pitch处必须平滑过渡
+   *    - 前后pitch的进出切线方向一致
    *
-   * 3. backPitch控制点：
-   *    - 下方CP：从后pitch向左下偏 → 形成后袖山饱满外凸
-   *    - 上方CP：从后pitch向右上偏 → 形成后袖山平缓回升
+   * 3. 前后非对称
+   *    - 前袖：更短、更陡、下段有hollow
+   *    - 后袖：更长、更圆、更平、全程外凸
    *
-   * 4. axilla控制点：
-   *    - 接近垂直进入侧缝
+   * 4. 曲率分散
+   *    - 禁止曲率集中在pitch附近
+   *    - 每段曲线均匀承担曲率变化
+   *
+   * 5. 控制杆长度
+   *    - 下段：span × 0.18~0.24
+   *    - 上段（圆弧区）：允许更长以形成宽圆弧
    */
   private static generateSleeveCap(
     bW: number,
@@ -151,64 +158,42 @@ export class SleeveCapGenerator {
 
     // ========== 关键点 ==========
     const capTop = new Point(0, 0);
-
-    // 前后axilla：侧缝起点
     const frontAxilla = new Point(halfBicep, cH);
     const backAxilla = new Point(-halfBicep, cH);
-
-    // 侧缝与袖口
     const frontCuff = new Point(cuW / 2, cH + sL);
     const backCuff = new Point(-cuW / 2, cH + sL);
 
-    // Pitch点：前陡后缓
-    // 前pitch更靠内（0.35），后pitch更靠外（0.42）→ 后袖更长更饱满
-    // 前pitch更低（0.42），后pitch更高（0.35）→ 前袖更陡
-    const frontPitch = new Point(halfBicep * 0.28, cH * 0.40);
-    const backPitch = new Point(-halfBicep * 0.65, cH * 0.22);
+    // Pitch点：工业版型经验位置
+    // 前pitch：50%宽度，38%高度 → 前袖陡降区起点
+    // 后pitch：55%宽度，35%高度 → 后袖平缓区起点
+    // 后pitch更靠外 → 后袖更长更饱满
+    const frontPitch = new Point(halfBicep * 0.38, cH * 0.40);
+    const backPitch = new Point(-halfBicep * 0.70, cH * 0.28);
 
-    // ========== 控制点：直接放置法 ==========
+    // ========== 控制点：工业版师直接放置 ==========
 
     // --- 前袖山上段：capTop → frontPitch ---
-    const ufCp1 = new Point(
-      frontPitch.x * 0.60,
-      cH * 0.00
-    );
-    const ufCp2 = new Point(
-      frontPitch.x * 0.90,
-      frontPitch.y * 0.65
-    );
+    // 顶部宽圆弧：CP1水平远伸，Y≈0
+    // CP2平滑过渡到pitch，无折点
+    const ufCp1 = new Point(halfBicep * 0.30, cH * 0.00);
+    const ufCp2 = new Point(halfBicep * 0.36, cH * 0.20);
 
     // --- 前袖山下段：frontPitch → frontAxilla ---
-    const lfCp1 = new Point(
-      frontPitch.x + (frontAxilla.x - frontPitch.x) * 0.45,
-      frontPitch.y + (frontAxilla.y - frontPitch.y) * 0.45
-    );
-    const lfCp2 = new Point(
-      frontAxilla.x - (frontAxilla.x - frontPitch.x) * 0.05,
-      frontAxilla.y - (frontAxilla.y - frontPitch.y) * 0.10
-    );
+    // 前袖更陡：控制杆较短
+    // CP2轻微inward → 工业hollow效果
+    const lfCp1 = new Point(halfBicep * 0.42, cH * 0.58);
+    const lfCp2 = new Point(halfBicep * 0.86, cH * 0.84);
 
     // --- 后袖山下段：backAxilla → backPitch ---
-    // 后袖更饱满：CP1更向外凸，CP2更向外凸
-    const lbCp1 = new Point(
-      backAxilla.x + (backAxilla.x - backPitch.x) * 0.05,
-      backAxilla.y - (backAxilla.y - backPitch.y) * 0.10
-    );
-    const lbCp2 = new Point(
-      backPitch.x + (backAxilla.x - backPitch.x) * 0.50,
-      backPitch.y + (backAxilla.y - backPitch.y) * 0.65
-    );
+    // 后袖更饱满：控制杆更长，全程外凸
+    const lbCp1 = new Point(-halfBicep * 0.90, cH * 0.78);
+    const lbCp2 = new Point(-halfBicep * 0.68, cH * 0.50);
 
     // --- 后袖山上段：backPitch → capTop ---
-    // 后袖更饱满：CP1和CP2更向外凸
-    const ubCp1 = new Point(
-      backPitch.x * 0.85,
-      backPitch.y * 0.70
-    );
-    const ubCp2 = new Point(
-      backPitch.x * 0.60,
-      cH * 0.00
-    );
+    // 后袖更平缓：CP1更向外凸
+    // CP2水平远伸，Y≈0
+    const ubCp1 = new Point(-halfBicep * 0.58, cH * 0.12);
+    const ubCp2 = new Point(-halfBicep * 0.42, cH * 0.00);
 
     // ========== Notch点 ==========
     const frontNotch = this.evaluateCubicBezier(frontPitch, lfCp1, lfCp2, frontAxilla, 0.4);
