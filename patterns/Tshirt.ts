@@ -1,4 +1,4 @@
-import { Point, Path } from '../geometry/index.js';
+import { Point, Path, QuadraticBezier, CubicBezier } from '../geometry/index.js';
 import { SeamAllowanceGenerator } from './SeamAllowanceGenerator.js';
 import { GarmentParams, BackPanelParams, FrontPanelParams, SleeveParams } from './GarmentMeasurementAdapter.js';
 import { SleeveCapGenerator } from './SleeveCapGenerator.js';
@@ -133,13 +133,60 @@ export class TshirtPatternGenerator {
       .line(points.cbHem).segment('hem')
       .close();
 
+    // ======================================================
+    // 后片详细段长度分析（用于调试）
+    // ======================================================
+    logger.info('\n' + '═'.repeat(80));
+    logger.info('📐 后片 (Back Panel) 详细段长度');
+    logger.info('═'.repeat(80));
+
+    const neckQuad = new QuadraticBezier(points.cbNeck, new Point(nW * 0.5, nD), points.hps);
+    const neckLen = neckQuad.toCubic().getLength();
+    const shoulderLen = points.cbNeck.dist(points.shoulder); // 这里应该是hps到shoulder，让我重新计算
+    const shoulderLenCorrect = points.hps.dist(points.shoulder);
+    const armholeLineLen = points.shoulder.dist(points.backPitch);
+    const armholeCurveLen = new CubicBezier(points.backPitch, points.bCp1, points.bCp2, points.armholeEnd).getLength();
+    const sideSeamLen = points.armholeEnd.dist(points.sideHem);
+    const hemLen = points.sideHem.dist(points.cbHem);
+
+    logger.info('\n【后片各段长度】');
+    logger.info(`   1. 后领口 (cbNeck→hps):           ${neckLen.toFixed(2)} cm [quad]`);
+    logger.info(`      控制点: (${(nW * 0.5).toFixed(1)}, ${nD.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   2. 肩线 (hps→shoulder):            ${shoulderLenCorrect.toFixed(2)} cm [line]`);
+    logger.info(`      起点: (${points.hps.x.toFixed(1)}, ${points.hps.y.toFixed(1)})`);
+    logger.info(`      终点: (${points.shoulder.x.toFixed(1)}, ${points.shoulder.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   3. 袖窿上段 (shoulder→backPitch):   ${armholeLineLen.toFixed(2)} cm [line] ⚠️`);
+    logger.info(`      起点: (${points.shoulder.x.toFixed(1)}, ${points.shoulder.y.toFixed(1)})`);
+    logger.info(`      终点: (${points.backPitch.x.toFixed(1)}, ${points.backPitch.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   4. 袖窿下段 (backPitch→armholeEnd): ${armholeCurveLen.toFixed(2)} cm [curve]`);
+    logger.info(`      控制点: bCp1(${points.bCp1.x.toFixed(1)}, ${points.bCp1.y.toFixed(1)}) → bCp2(${points.bCp2.x.toFixed(1)}, ${points.bCp2.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   5. 侧缝 (armholeEnd→sideHem):      ${sideSeamLen.toFixed(2)} cm [line]`);
+    logger.info(`      长度: ${L.toFixed(1)} - ${aD.toFixed(1)} = ${(L - aD).toFixed(1)} cm`);
+    logger.info('');
+    logger.info(`   6. 下摆 (sideHem→cbHem):          ${hemLen.toFixed(2)} cm [line]`);
+    logger.info(`      宽度: ${W.toFixed(1)} cm`);
+
+    const totalBackLen = neckLen + shoulderLenCorrect + armholeLineLen + armholeCurveLen + sideSeamLen + hemLen;
+    const backArmholeTotal = armholeLineLen + armholeCurveLen;
+
+    logger.info('\n【后片汇总】');
+    logger.info(`   总周长: ${totalBackLen.toFixed(2)} cm`);
+    logger.info(`   袖窿总长: ${backArmholeTotal.toFixed(2)} cm (直线${armholeLineLen.toFixed(2)} + 曲线${armholeCurveLen.toFixed(2)})`);
+    logger.info(`   宽×高: ${W} × ${L} cm`);
+    logger.info('═'.repeat(80) + '\n');
+
     return { 
       name: 'back', 
       path, 
       points, 
       seamAllowance, 
       cutCount: 1, 
-      onFold: true 
+      onFold: true,
+      backArmholeLength: backArmholeTotal
     };
   }
 
@@ -189,13 +236,59 @@ export class TshirtPatternGenerator {
       .quad(points.hemCp, points.hemFold).segment('hem')
       .close();
 
+    // ======================================================
+    // 前片详细段长度分析（用于调试）
+    // ======================================================
+    logger.info('\n' + '═'.repeat(80));
+    logger.info('📐 前片 (Front Panel) 详细段长度');
+    logger.info('═'.repeat(80));
+
+    const frontNeckQuad = new QuadraticBezier(points.cfNeck, points.neckCp, points.neckEnd);
+    const frontNeckLen = frontNeckQuad.toCubic().getLength();
+    const frontShoulderLen = points.neckEnd.dist(points.shoulder);
+    const frontArmholeUpperLen = new CubicBezier(points.shoulder, points.armholeTopCp1, points.armholeTopCp2, points.armholePitch).getLength();
+    const frontArmholeLowerLen = new CubicBezier(points.armholePitch, points.armholeBottomCp1, points.armholeBottomCp2, points.armholeEnd).getLength();
+    const frontSideSeamLen = points.armholeEnd.dist(points.sideBottom);
+    const frontHemQuad = new QuadraticBezier(points.sideBottom, points.hemCp, points.hemFold);
+    const frontHemLen = frontHemQuad.toCubic().getLength();
+
+    logger.info('\n【前片各段长度】');
+    logger.info(`   1. 前领口 (cfNeck→neckEnd):        ${frontNeckLen.toFixed(2)} cm [quad]`);
+    logger.info(`      控制点: (${points.neckCp.x.toFixed(1)}, ${points.neckCp.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   2. 肩线 (neckEnd→shoulder):         ${frontShoulderLen.toFixed(2)} cm [line]`);
+    logger.info(`      起点: (${points.neckEnd.x.toFixed(1)}, ${points.neckEnd.y.toFixed(1)})`);
+    logger.info(`      终点: (${points.shoulder.x.toFixed(1)}, ${points.shoulder.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   3. 袖窿上段 (shoulder→armholePitch): ${frontArmholeUpperLen.toFixed(2)} cm [curve]`);
+    logger.info(`      控制点: (${points.armholeTopCp1.x.toFixed(1)}, ${points.armholeTopCp1.y.toFixed(1)}) → (${points.armholeTopCp2.x.toFixed(1)}, ${points.armholeTopCp2.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   4. 袖窿下段 (armholePitch→armholeEnd): ${frontArmholeLowerLen.toFixed(2)} cm [curve]`);
+    logger.info(`      控制点: (${points.armholeBottomCp1.x.toFixed(1)}, ${points.armholeBottomCp1.y.toFixed(1)}) → (${points.armholeBottomCp2.x.toFixed(1)}, ${points.armholeBottomCp2.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   5. 侧缝 (armholeEnd→sideBottom):    ${frontSideSeamLen.toFixed(2)} cm [line]`);
+    logger.info(`      长度: ${L.toFixed(1)} - ${aD.toFixed(1)} = ${(L - aD).toFixed(1)} cm`);
+    logger.info('');
+    logger.info(`   6. 下摆 (sideBottom→hemFold):       ${frontHemLen.toFixed(2)} cm [quad]`);
+    logger.info(`      控制点: (${points.hemCp.x.toFixed(1)}, ${points.hemCp.y.toFixed(1)})`);
+
+    const totalFrontLen = frontNeckLen + frontShoulderLen + frontArmholeUpperLen + frontArmholeLowerLen + frontSideSeamLen + frontHemLen;
+    const frontArmholeTotal = frontArmholeUpperLen + frontArmholeLowerLen;
+
+    logger.info('\n【前片汇总】');
+    logger.info(`   总周长: ${totalFrontLen.toFixed(2)} cm`);
+    logger.info(`   袖窿总长: ${frontArmholeTotal.toFixed(2)} cm (上段${frontArmholeUpperLen.toFixed(2)} + 下段${frontArmholeLowerLen.toFixed(2)})`);
+    logger.info(`   宽×高: ${W} × ${L} cm`);
+    logger.info('═'.repeat(80) + '\n');
+
     return { 
       name: 'front', 
       path, 
       points, 
       seamAllowance, 
       cutCount: 1, 
-      onFold: true 
+      onFold: true,
+      frontArmholeLength: frontArmholeTotal
     };
   }
 

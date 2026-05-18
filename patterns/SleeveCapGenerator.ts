@@ -419,6 +419,61 @@ export class SleeveCapGenerator {
 
       .close();
 
+    // ======================================================
+    // 详细段长度分析（用于调试）
+    // ======================================================
+
+    const upperFrontLen = upperFront.getLength();
+    const lowerFrontLen = lowerFront.getLength();
+    const upperBackLen = upperBack.getLength();
+    const lowerBackLen = lowerBack.getLength();
+    
+    const frontSideSeamLen = frontAxilla.dist(frontCuff);
+    const backSideSeamLen = backAxilla.dist(backCuff);
+    const cuffLen = frontCuff.dist(backCuff);
+
+    logger.info('\n' + '═'.repeat(80));
+    logger.info('📏 袖子详细段长度分析');
+    logger.info('═'.repeat(80));
+    
+    logger.info('\n【袖山部分 - 4段Bezier曲线】');
+    logger.info(`   1. 前上段 (capTop→frontPitch):  ${upperFrontLen.toFixed(2)} cm`);
+    logger.info(`      控制点: ufCp1(${ufCp1.x.toFixed(1)}, ${ufCp1.y.toFixed(1)}) → ufCp2(${ufCp2.x.toFixed(1)}, ${ufCp2.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   2. 前下段 (frontPitch→frontAxilla): ${lowerFrontLen.toFixed(2)} cm`);
+    logger.info(`      控制点: lfCp1(${lfCp1.x.toFixed(1)}, ${lfCp1.y.toFixed(1)}) → lfCp2(${lfCp2.x.toFixed(1)}, ${lfCp2.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   3. 后下段 (backAxilla→backPitch):  ${lowerBackLen.toFixed(2)} cm`);
+    logger.info(`      控制点: lbCp1(${lbCp1.x.toFixed(1)}, ${lbCp1.y.toFixed(1)}) → lbCp2(${lbCp2.x.toFixed(1)}, ${lbCp2.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   4. 后上段 (backPitch→capTop):     ${upperBackLen.toFixed(2)} cm`);
+    logger.info(`      控制点: ubCp1(${ubCp1.x.toFixed(1)}, ${ubCp1.y.toFixed(1)}) → ubCp2(${ubCp2.x.toFixed(1)}, ${ubCp2.y.toFixed(1)})`);
+
+    logger.info('\n【袖身部分 - 直线段】');
+    logger.info(`   5. 前侧缝 (frontAxilla→frontCuff): ${frontSideSeamLen.toFixed(2)} cm`);
+    logger.info(`      起点: (${frontAxilla.x.toFixed(1)}, ${frontAxilla.y.toFixed(1)})`);
+    logger.info(`      终点: (${frontCuff.x.toFixed(1)}, ${frontCuff.y.toFixed(1)})`);
+    logger.info('');
+    logger.info(`   6. 袖口 (frontCuff→backCuff):     ${cuffLen.toFixed(2)} cm`);
+    logger.info(`      宽度: ${(cuffLen * 2).toFixed(1)} cm (全围)`);
+    logger.info(`      输入参数 cuffWidth: ${cuffHalf} cm (半围)`);
+    logger.info('');
+    logger.info(`   7. 后侧缝 (backCuff→backAxilla):  ${backSideSeamLen.toFixed(2)} cm`);
+    logger.info(`      起点: (${backCuff.x.toFixed(1)}, ${backCuff.y.toFixed(1)})`);
+    logger.info(`      终点: (${backAxilla.x.toFixed(1)}, ${backAxilla.y.toFixed(1)})`);
+
+    logger.info('\n【汇总统计】');
+    logger.info(`   袖山总长: ${totalCapLength.toFixed(2)} cm (前${frontCapLength.toFixed(2)} + 后${backCapLength.toFixed(2)})`);
+    logger.info(`   袖身总长: ${(frontSideSeamLen + cuffLen + backSideSeamLen).toFixed(2)} cm`);
+    logger.info(`   袖子周长: ${(totalCapLength + frontSideSeamLen + cuffLen + backSideSeamLen).toFixed(2)} cm`);
+
+    logger.info('\n【关键尺寸】');
+    logger.info(`   腋下半围: ${(frontAxilla.x - backAxilla.x).toFixed(1)} cm → 全围 ${((frontAxilla.x - backAxilla.x) * 2).toFixed(1)} cm`);
+    logger.info(`   袖口半围: ${cuffHalf.toFixed(1)} cm → 全围 ${(cuffHalf * 2).toFixed(1)} cm`);
+    logger.info(`   袖口/腋下比: ${((cuffHalf * 2) / ((frontAxilla.x - backAxilla.x) * 2) * 100).toFixed(1)}%`);
+    logger.info(`   总高度: ${frontCuff.y.toFixed(1)} cm (capHeight=${capHeight} + sleeveLength=${sleeveLength})`);
+    logger.info('═'.repeat(80) + '\n');
+
     return {
       capPath,
 
