@@ -107,7 +107,11 @@ export class SleeveCapGenerator {
     logger.info(`   袖山高度: ${capHeight.toFixed(2)} cm`);
     logger.info(`   腋下半围: ${halfBicep.toFixed(2)} cm`);
 
-    return this.generateSleeveCap(
+    // 智能迭代调整：在用户输入的基础上微调以确保可缝合性
+    const targetCapLen = totalArmhole + ease;
+    
+    // 首先生成初始结果
+    let result = this.generateSleeveCap(
       halfBicep,
       capHeight,
       sleeveLength,
@@ -116,6 +120,59 @@ export class SleeveCapGenerator {
       backArmholeLength,
       ease
     );
+    
+    // 检查是否需要迭代调整
+    const initialError = Math.abs(result.totalCapLength - targetCapLen);
+    
+    if (initialError > 1.0) {
+      // 误差过大，需要调整
+      logger.info(`\n⚠️ 初始误差较大 (${initialError.toFixed(2)}cm)，启动智能迭代...`);
+      
+      let bestResult = result;
+      let minError = initialError;
+      let adjustedBicep = halfBicep;
+      
+      // 在±15%范围内搜索最佳bicepsWidth
+      for (let delta = -0.15; delta <= 0.15; delta += 0.03) {
+        const testBicep = halfBicep * (1 + delta);
+        
+        try {
+          const testResult = this.generateSleeveCap(
+            testBicep,
+            capHeight,
+            sleeveLength,
+            cuffHalf,
+            frontArmholeLength,
+            backArmholeLength,
+            ease
+          );
+          
+          const testError = Math.abs(testResult.totalCapLength - targetCapLen);
+          
+          if (testError < minError) {
+            minError = testError;
+            bestResult = testResult;
+            adjustedBicep = testBicep;
+            
+            // 如果找到优秀解（<0.5cm），提前退出
+            if (testError < 0.5) {
+              break;
+            }
+          }
+        } catch (e) {
+          // 忽略生成错误
+        }
+      }
+      
+      if (Math.abs(adjustedBicep - halfBicep) / halfBicep > 0.01) {
+        logger.info(`   调整腋下半围: ${halfBicep.toFixed(2)} → ${adjustedBicep.toFixed(2)} cm (${((adjustedBicep/halfBicep-1)*100).toFixed(1)}%)`);
+      }
+      
+      logger.info(`   最终误差: ${minError.toFixed(3)} cm`);
+      result = bestResult;
+    }
+
+    return result;
   }
 
   /**

@@ -16,6 +16,14 @@ export interface PatternPiece {
   notches?: Point[];
   cutCount: number;
   onFold: boolean;
+  
+  // 袖山特有属性（工业长度匹配）
+  frontCapLength?: number;
+  backCapLength?: number;
+  totalCapLength?: number;
+  frontArmholeLength?: number;
+  backArmholeLength?: number;
+  ease?: number;
 }
 
 export class TshirtPatternGenerator {
@@ -67,38 +75,27 @@ export class TshirtPatternGenerator {
   private static extractArmholeOps(path: Path): Array<{type: string; to?: {x: number; y: number}; cp1?: {x: number; y: number}; cp2?: {x: number; y: number}}> {
     const ops = path.ops || [];
     const armholeOps: typeof ops = [];
-    
-    let foundShoulder = false;
-    let collectingArmhole = false;
-    let hasCollectedCurve = false;
-    
-      for (const op of ops) {
-      // 找到肩线终点（第一个y>0的line）- 作为袖窿起点
-      if (!foundShoulder && op.type === 'line' && op.to && op.to.y > 0) {
-        foundShoulder = true;
-        collectingArmhole = true;
-        // 【工业修正】将shoulder点作为move操作添加（提供曲线起始点）
-        armholeOps.push({ type: 'move', to: new Point(op.to.x, op.to.y) });
-        continue; // 不包含shoulder line本身
-      }
-      
-      // 收集袖窿部分的操作
-      if (collectingArmhole) {
-        // 如果已经收集到curve，并且遇到了下一个line（侧缝线），则停止（不包含侧缝）
-        if (hasCollectedCurve && op.type === 'line' && !op.cp1) {
-          break;
+
+    let shoulderPoint: {x: number, y: number} | null = null;
+
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+
+      if ((op.type === 'curve' || op.type === 'quad') && op.segmentName === 'armhole') {
+
+        if (!shoulderPoint && i > 0) {
+          const prevOp = ops[i - 1];
+          if (prevOp.to) {
+            shoulderPoint = { x: prevOp.to.x, y: prevOp.to.y };
+            armholeOps.push({ type: 'move', to: new Point(shoulderPoint.x, shoulderPoint.y) });
+          }
         }
-        
+
         armholeOps.push(op);
-        
-        // 如果收集到了curve，标记它
-        if (op.type === 'curve') {
-          hasCollectedCurve = true;
-        }
       }
     }
-    
-    return armholeOps.length > 1 ? armholeOps : ops.filter(op => op.type === 'curve');
+
+    return armholeOps;
   }
 
   /**
@@ -305,16 +302,24 @@ export class TshirtPatternGenerator {
       points.grainlineEnd = new Point(0, totalL * 0.8);
     }
 
-    const sleevePiece = {
+    const sleevePiece: PatternPiece = {
       name: 'sleeve',
       path: sleeveResult.capPath,
       points,
       seamAllowance,
       cutCount: 2,
       onFold: false,
-      grainline: points.grainline ? 
+      grainline: points.grainline ?
         {start: points.grainlineStart, end: points.grainlineEnd} : undefined,
-      notches: [points.frontNotch, points.backNotch].filter(p => p !== undefined)
+      notches: [points.frontNotch, points.backNotch].filter(p => p !== undefined),
+      
+      // 工业长度匹配数据
+      frontCapLength: sleeveResult.frontCapLength,
+      backCapLength: sleeveResult.backCapLength,
+      totalCapLength: sleeveResult.totalCapLength,
+      frontArmholeLength: sleeveResult.frontArmholeLength,
+      backArmholeLength: sleeveResult.backArmholeLength,
+      ease: sleeveResult.ease
     };
 
     // 🔍 【调试日志】最终sleevePiece输出检查
