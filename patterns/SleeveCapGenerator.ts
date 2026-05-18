@@ -155,154 +155,167 @@ export class SleeveCapGenerator {
     backArmholeLen: number,
     ease: number
   ): SleeveCapResult {
-    const halfBicep = bW; // bW 已经是半围（无论是UI输入还是自动计算）
 
-    // 1. 关键点
+    const halfBicep = bW;
+
+    // =========================
+    // 关键点
+    // =========================
+
     const capTop = new Point(0, 0);
-    const frontAxilla = new Point(halfBicep, cH);
-    const backAxilla = new Point(-halfBicep, cH);
-    const frontCuff = new Point(cuW, cH + sL); // cuW 已经是半围
-    const backCuff = new Point(-cuW, cH + sL);
 
-    // 2. Pitch 点 (分段点)
-    // 前 Pitch: 更深 (Y更大), 更靠内 (X更小)
-    const frontPitch = new Point(
-      halfBicep * 0.42,
-      cH * 0.36
+    const frontAxilla = new Point(
+      halfBicep,
+      cH
     );
 
-    const backPitch = new Point(
-      -halfBicep * 0.68,
-      cH * 0.30
+    const backAxilla = new Point(
+      -halfBicep,
+      cH
     );
 
-    // =============================
-    // 工业控制点系统 FINAL
-    // =============================
-
-    // 顶部宽圆弧
-    const topHandle = halfBicep * 0.22;
-
-    // 前袖：更陡、更短
-    const ufCp1 = new Point(
-      capTop.x + topHandle,
-      capTop.y
+    const frontCuff = new Point(
+      cuW,
+      cH + sL
     );
 
-    const ufCp2 = new Point(
-      frontPitch.x - halfBicep * 0.10,
-      frontPitch.y - cH * 0.08
+    const backCuff = new Point(
+      -cuW,
+      cH + sL
     );
 
-    // 前下：轻微 inward hollow
-    const lfCp1 = new Point(
-      frontPitch.x + halfBicep * 0.12,
-      frontPitch.y + cH * 0.12
+    // =========================
+    // 工业控制点
+    // 真正工业版
+    // =========================
+
+    // 顶部宽度控制
+    const topSpread = halfBicep * 0.42;
+
+    // 前袖：更短、更陡
+    const frontCp1 = new Point(
+      topSpread,
+      cH * 0.04
     );
 
-    const lfCp2 = new Point(
-      frontAxilla.x - halfBicep * 0.10,
-      frontAxilla.y - cH * 0.02
+    const frontCp2 = new Point(
+      halfBicep * 0.92,
+      cH * 0.72
     );
 
-    // 后袖：更长、更饱满
-    const lbCp1 = new Point(
-      backAxilla.x + halfBicep * 0.18,
-      backAxilla.y - cH * 0.04
+    // 后袖：更长、更平、更饱满
+    const backCp1 = new Point(
+      -halfBicep * 0.92,
+      cH * 0.62
     );
 
-    const lbCp2 = new Point(
-      backPitch.x - halfBicep * 0.12,
-      backPitch.y + cH * 0.10
+    const backCp2 = new Point(
+      -topSpread,
+      cH * 0.02
     );
 
-    // 后上：宽圆饱满
-    const ubCp1 = new Point(
-      backPitch.x + halfBicep * 0.10,
-      backPitch.y - cH * 0.08
+    // =========================
+    // Bezier
+    // =========================
+
+    const frontCurve = new CubicBezier(
+      capTop,
+      frontCp1,
+      frontCp2,
+      frontAxilla
     );
 
-    const ubCp2 = new Point(
-      capTop.x - topHandle,
-      capTop.y
+    const backCurve = new CubicBezier(
+      backAxilla,
+      backCp1,
+      backCp2,
+      capTop
     );
 
-    // --- 前 Pitch 连续性控制 ---
-    // 1. 计算前上段和前下段的弦矢量
-    const v1x = frontPitch.x - capTop.x;
-    const v1y = frontPitch.y - capTop.y;
-    const v2x = frontAxilla.x - frontPitch.x;
-    const v2y = frontAxilla.y - frontPitch.y;
-    
-    // 2. 取平均方向作为 Pitch 点的平滑切线 (G1 连续)
-    const fSmoothDirX = (v1x / Math.sqrt(v1x*v1x + v1y*v1y) + v2x / Math.sqrt(v2x*v2x + v2y*v2y)) / 2;
-    const fSmoothDirY = (v1y / Math.sqrt(v1x*v1x + v1y*v1y) + v2y / Math.sqrt(v2x*v2x + v2y*v2y)) / 2;
-    const fSmoothLen = Math.sqrt(fSmoothDirX*fSmoothDirX + fSmoothDirY*fSmoothDirY);
-    const fTanX = fSmoothDirX / fSmoothLen;
-    const fTanY = fSmoothDirY / fSmoothLen;
+    // =========================
+    // 长度
+    // =========================
 
-    // 3. 分配手柄长度 (30% 比例最圆顺)
-    const fH1 = Math.sqrt(v1x*v1x + v1y*v1y) * 0.35;
-    const fH2 = Math.sqrt(v2x*v2x + v2y*v2y) * 0.35;
+    const frontLen = frontCurve.getLength();
+    const backLen = backCurve.getLength();
+    const totalLen = frontLen + backLen;
 
-    // --- 后 Pitch 连续性控制 ---
-    const vb1x = backPitch.x - backAxilla.x;
-    const vb1y = backPitch.y - backAxilla.y;
-    const vb2x = capTop.x - backPitch.x;
-    const vb2y = capTop.y - backPitch.y;
+    // =========================
+    // Notch
+    // =========================
 
-    const bSmoothDirX = (vb1x / Math.sqrt(vb1x*vb1x + vb1y*vb1y) + vb2x / Math.sqrt(vb2x*vb2x + vb2y*vb2y)) / 2;
-    const bSmoothDirY = (vb1y / Math.sqrt(vb1x*vb1x + vb1y*vb1y) + vb2y / Math.sqrt(vb2x*vb2x + vb2y*vb2y)) / 2;
-    const bSmoothLen = Math.sqrt(bSmoothDirX*bSmoothDirX + bSmoothDirY*bSmoothDirY);
-    const bTanX = bSmoothDirX / bSmoothLen;
-    const bTanY = bSmoothDirY / bSmoothLen;
+    const frontNotch = frontCurve.getPoint(0.72);
 
-    const bH1 = Math.sqrt(vb1x*vb1x + vb1y*vb1y) * 0.35;
-    const bH2 = Math.sqrt(vb2x*vb2x + vb2y*vb2y) * 0.35;
+    const backNotch = backCurve.getPoint(0.38);
 
-    // 4. 计算长度
-    const bezUpperFront = new CubicBezier(capTop, ufCp1, ufCp2, frontPitch);
-    const bezLowerFront = new CubicBezier(frontPitch, lfCp1, lfCp2, frontAxilla);
-    const bezLowerBack = new CubicBezier(backAxilla, lbCp1, lbCp2, backPitch);
-    const bezUpperBack = new CubicBezier(backPitch, ubCp1, ubCp2, capTop);
+    // =========================
+    // Path
+    // =========================
 
-    const lenUpperFront = bezUpperFront.getLength();
-    const lenLowerFront = bezLowerFront.getLength();
-    const lenLowerBack = bezLowerBack.getLength();
-    const lenUpperBack = bezUpperBack.getLength();
-
-    const actualFrontLen = lenUpperFront + lenLowerFront;
-    const actualBackLen = lenLowerBack + lenUpperBack;
-    const actualTotalLen = actualFrontLen + actualBackLen;
-
-    // 5. 生成 Notch (工业位置通常在下段 curves 上)
-    const frontNotch = bezLowerFront.getPoint(0.4); // 前 Notch
-    const backNotch = bezLowerBack.getPoint(0.4);  // 后 Notch
-
-    // 6. 构造 Path
     const capPath = new Path()
       .move(capTop)
-      .curve(ufCp1, ufCp2, frontPitch).segment('armhole')
-      .curve(lfCp1, lfCp2, frontAxilla).segment('armhole')
-      .line(frontCuff).segment('sideSeam')
-      .line(backCuff).segment('sleeveHem')
-      .line(backAxilla).segment('sideSeam')
-      .curve(lbCp1, lbCp2, backPitch).segment('armhole')
-      .curve(ubCp1, ubCp2, capTop).segment('armhole')
+
+      // 前袖
+      .curve(
+        frontCp1,
+        frontCp2,
+        frontAxilla
+      )
+      .segment('armhole')
+
+      // 前侧缝
+      .line(frontCuff)
+      .segment('sideSeam')
+
+      // 袖口
+      .line(backCuff)
+      .segment('sleeveHem')
+
+      // 后侧缝
+      .line(backAxilla)
+      .segment('sideSeam')
+
+      // 后袖
+      .curve(
+        backCp1,
+        backCp2,
+        capTop
+      )
+      .segment('armhole')
+
       .close();
+
+    logger.info(`\n🏭 工业袖山生成完成`);
+    logger.info(`   前袖长: ${frontLen.toFixed(2)} cm`);
+    logger.info(`   后袖长: ${backLen.toFixed(2)} cm`);
+    logger.info(`   总长: ${totalLen.toFixed(2)} cm`);
 
     return {
       capPath,
+
       points: {
-        capTop, frontPitch, frontAxilla, backPitch, backAxilla,
-        frontCuff, backCuff, frontNotch, backNotch,
-        ufCp1, ufCp2, lfCp1, lfCp2, lbCp1, lbCp2, ubCp1, ubCp2
+        capTop,
+        frontAxilla,
+        backAxilla,
+        frontCuff,
+        backCuff,
+
+        frontCp1,
+        frontCp2,
+        backCp1,
+        backCp2,
+
+        frontNotch,
+        backNotch
       },
-      frontCapLength: actualFrontLen,
-      backCapLength: actualBackLen,
-      totalCapLength: actualTotalLen,
+
+      frontCapLength: frontLen,
+      backCapLength: backLen,
+      totalCapLength: totalLen,
+
       frontArmholeLength: frontArmholeLen,
       backArmholeLength: backArmholeLen,
+
       ease
     };
   }
