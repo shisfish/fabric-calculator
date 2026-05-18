@@ -472,6 +472,8 @@ def _normalize_garment_input(measurements):
         'neckWidth': ('neckWidth', '领宽', 'neck_width'),
         'armholeDepth': ('armholeDepth', '袖窿深', 'armhole_depth'),
         'cuffWidth': ('cuffWidth', '袖口宽', 'cuff_width'),
+        'bicepWidth': ('bicepWidth', 'bicepsWidth', '腋下围', 'bicep_width', 'biceps_width'),  # 新增：袖子参数
+        'sleeveCapHeight': ('sleeveCapHeight', '袖山高', 'cap_height', 'sleeve_cap_height'),  # 新增：袖山高
         'hemCurve': ('hemCurve', '下摆弧度', 'hem_curve'),
         'shoulderSlope': ('shoulderSlope', '肩斜角', 'shoulder_slope'),
     }
@@ -506,6 +508,8 @@ def _normalize_garment_input(measurements):
     neck_width = flat_result.get('neckWidth', 25)
     armhole_depth = flat_result.get('armholeDepth', 28)
     cuff_width = flat_result.get('cuffWidth', 10)
+    bicep_width = flat_result.get('bicepWidth')  # 新增：用户输入的腋下围
+    sleeve_cap_height = flat_result.get('sleeveCapHeight')  # 新增：用户输入的袖山高
     shoulder_slope = flat_result.get('shoulderSlope', 5.5)
 
     print(f"[参数规范化] 输入参数提取完成:")
@@ -516,6 +520,8 @@ def _normalize_garment_input(measurements):
     print(f"   neckWidth: {neck_width}")
     print(f"   armholeDepth: {armhole_depth}")
     print(f"   🔍 [关键] cuffWidth (原始输入): {cuff_width} ← 检查这个值")
+    print(f"   🔍 [关键] bicepWidth (原始输入): {bicep_width} ← 检查是否使用用户输入")
+    print(f"   🔍 [关键] sleeveCapHeight (原始输入): {sleeve_cap_height} ← 检查是否使用用户输入")
     print(f"   shoulderSlope: {shoulder_slope}")
 
     # 计算领深（基于领宽的比例）
@@ -543,15 +549,20 @@ def _normalize_garment_input(measurements):
         },
         'sleeve': {
             'sleeveLength': sleeve_length,
-            'bicepWidth': chest_width * 0.38,  # 基于胸宽估算
+            'bicepWidth': bicep_width if bicep_width is not None else chest_width * 0.38,  # 优先使用用户输入
             'cuffWidth': cuff_width,           # 直接使用用户输入的半围值，不翻倍
-            'sleeveCapHeight': armhole_depth * 0.45
+            'sleeveCapHeight': sleeve_cap_height if sleeve_cap_height is not None else armhole_depth * 0.45  # 优先使用用户输入
         }
     }
 
     print(f"[参数转换] 扁平化 → 嵌套结构")
     print(f"  输入: chestWidth={chest_width}, shoulderWidth={shoulder_width}")
     print(f"  转换: front.chestWidth={chest_width}, back.chestWidth={chest_width}")
+    print(f"  🔍 [最终sleeve参数]")
+    print(f"     sleeveLength: {sleeve_length}")
+    print(f"     bicepWidth: {bicep_width if bicep_width is not None else chest_width * 0.38} (用户输入: {bicep_width})")
+    print(f"     cuffWidth: {cuff_width} ✅")
+    print(f"     sleeveCapHeight: {sleeve_cap_height if sleeve_cap_height is not None else armhole_depth * 0.45} (用户输入: {sleeve_cap_height})")
     
     return nested_result
 
