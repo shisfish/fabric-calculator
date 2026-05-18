@@ -11,8 +11,10 @@ const garmentInput = {
   neckWidth: 25,
   neckDepth: 8,
   armholeDepth: 28,
+  sleeveCapHeight: 14,
   sleeveLength: 60,
   bicepsWidth: 20,
+  bicepWidth: 20,       // 半围 (cm) - 兼容字段
   cuffWidth: 10,
   shoulderSlope: 5.5,
   seamAllowance: 1

@@ -167,24 +167,65 @@ export class SleeveCapGenerator {
     // 2. Pitch 点 (分段点)
     // 前 Pitch: 更深 (Y更大), 更靠内 (X更小)
     const frontPitch = new Point(
-      halfBicep * 0.45,
-      cH * 0.45
+      halfBicep * 0.42,
+      cH * 0.36
     );
 
-    // 后 Pitch: 更平 (Y更小), 更靠外 (X更大)
     const backPitch = new Point(
-      -halfBicep * 0.55,
-      cH * 0.35
+      -halfBicep * 0.68,
+      cH * 0.30
     );
 
-    // 3. 控制点 - 工业平滑样条算法 (Industrial Smooth Spline)
-    // 目标：通过平均弦向矢量计算 Pitch 点切线，并优化手柄比例。
+    // =============================
+    // 工业控制点系统 FINAL
+    // =============================
 
-    // --- 顶部控制 (capTop) ---
-    // 工业修正：顶部手柄不能太长，否则会出现“平头”或“凹陷”。取 6%~8%
-    const topHandleLen = bW * 0.08;
-    const ufCp1 = new Point(capTop.x + topHandleLen, capTop.y);
-    const ubCp2 = new Point(capTop.x - topHandleLen, capTop.y);
+    // 顶部宽圆弧
+    const topHandle = halfBicep * 0.22;
+
+    // 前袖：更陡、更短
+    const ufCp1 = new Point(
+      capTop.x + topHandle,
+      capTop.y
+    );
+
+    const ufCp2 = new Point(
+      frontPitch.x - halfBicep * 0.10,
+      frontPitch.y - cH * 0.08
+    );
+
+    // 前下：轻微 inward hollow
+    const lfCp1 = new Point(
+      frontPitch.x + halfBicep * 0.12,
+      frontPitch.y + cH * 0.12
+    );
+
+    const lfCp2 = new Point(
+      frontAxilla.x - halfBicep * 0.10,
+      frontAxilla.y - cH * 0.02
+    );
+
+    // 后袖：更长、更饱满
+    const lbCp1 = new Point(
+      backAxilla.x + halfBicep * 0.18,
+      backAxilla.y - cH * 0.04
+    );
+
+    const lbCp2 = new Point(
+      backPitch.x - halfBicep * 0.12,
+      backPitch.y + cH * 0.10
+    );
+
+    // 后上：宽圆饱满
+    const ubCp1 = new Point(
+      backPitch.x + halfBicep * 0.10,
+      backPitch.y - cH * 0.08
+    );
+
+    const ubCp2 = new Point(
+      capTop.x - topHandle,
+      capTop.y
+    );
 
     // --- 前 Pitch 连续性控制 ---
     // 1. 计算前上段和前下段的弦矢量
@@ -204,9 +245,6 @@ export class SleeveCapGenerator {
     const fH1 = Math.sqrt(v1x*v1x + v1y*v1y) * 0.35;
     const fH2 = Math.sqrt(v2x*v2x + v2y*v2y) * 0.35;
 
-    const ufCp2 = new Point(frontPitch.x - fTanX * fH1, frontPitch.y - fTanY * fH1);
-    const lfCp1 = new Point(frontPitch.x + fTanX * fH2, frontPitch.y + fTanY * fH2);
-
     // --- 后 Pitch 连续性控制 ---
     const vb1x = backPitch.x - backAxilla.x;
     const vb1y = backPitch.y - backAxilla.y;
@@ -221,16 +259,6 @@ export class SleeveCapGenerator {
 
     const bH1 = Math.sqrt(vb1x*vb1x + vb1y*vb1y) * 0.35;
     const bH2 = Math.sqrt(vb2x*vb2x + vb2y*vb2y) * 0.35;
-
-    const lbCp2 = new Point(backPitch.x - bTanX * bH1, backPitch.y - bTanY * bH1);
-    const ubCp1 = new Point(backPitch.x + bTanX * bH2, backPitch.y + bTanY * bH2);
-
-    // --- 腋下 (Axilla) 衔接控制 ---
-    // 工业修正：腋下手柄应尽量水平或顺着趋势，避免“钩子”。
-    // 前腋下：稍微向内收 (hollow)
-    const lfCp2 = new Point(frontAxilla.x - v2x * 0.3, frontAxilla.y);
-    // 后腋下：饱满外扩
-    const lbCp1 = new Point(backAxilla.x + Math.abs(vb1x) * 0.3, backAxilla.y);
 
     // 4. 计算长度
     const bezUpperFront = new CubicBezier(capTop, ufCp1, ufCp2, frontPitch);
