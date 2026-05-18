@@ -101,11 +101,11 @@ export class SleeveCapGenerator {
     const sleeveLength = sleeveParams.sleeveLength;
     const cuffHalf = sleeveParams.cuffWidth;
 
-    logger.info(`\n🏭 Sleeve Cap v13`);
-    logger.info(`front armhole = ${frontArmholeLength.toFixed(2)}`);
-    logger.info(`back armhole  = ${backArmholeLength.toFixed(2)}`);
-    logger.info(`cap height    = ${capHeight.toFixed(2)}`);
-    logger.info(`half bicep    = ${halfBicep.toFixed(2)}`);
+    logger.info(`\n🏭 ===== 工业袖山生成器 v13.0 (意大利CAD规范) =====`);
+    logger.info(`   前袖窿长度: ${frontArmholeLength.toFixed(2)} cm`);
+    logger.info(`   后袖窿长度: ${backArmholeLength.toFixed(2)} cm`);
+    logger.info(`   袖山高度: ${capHeight.toFixed(2)} cm`);
+    logger.info(`   腋下半围: ${halfBicep.toFixed(2)} cm`);
 
     return this.generateSleeveCap(
       halfBicep,
@@ -119,7 +119,13 @@ export class SleeveCapGenerator {
   }
 
   /**
-   * 真正工业袖山
+   * 工业CAD袖山生成器 v13.0
+   * 基于意大利工业制版规范（TAGLIARE E APRIRE）
+   *
+   * 核心特征：
+   * 1. 顶部宽圆弧（占袖山宽度60%+）
+   * 2. 前后明显不对称（DAVANTI/DIETRO）
+   * 3. 基于工业经验比例，非数学推导
    */
   private static generateSleeveCap(
     halfBicep: number,
@@ -132,96 +138,101 @@ export class SleeveCapGenerator {
   ): SleeveCapResult {
 
     // ======================================================
-    // 关键点
+    // 工业关键点定义
+    // 基于图一：意大利CAD标准
     // ======================================================
 
     const capTop = new Point(0, 0);
 
-    const frontAxilla = new Point(
-      halfBicep,
-      capHeight
-    );
+    // 腋下点（固定位置）
+    const frontAxilla = new Point(halfBicep, capHeight);
+    const backAxilla = new Point(-halfBicep, capHeight);
 
-    const backAxilla = new Point(
-      -halfBicep,
-      capHeight
-    );
+    // ------------------------------------------------------
+    // Pitch点（分段点）- 工业标准位置
+    // 图一标注：前后pitch距离中心线约6cm（对于M码）
+    // 使用相对比例以适应不同尺寸
+    // ------------------------------------------------------
 
-    // 后袖 pitch 更靠外、更低（更平）
+    // 后pitch (DIETRO)：更低、更靠外 → 形成更长的后袖山
     const backPitch = new Point(
-      -halfBicep * 0.58,
-      capHeight * 0.34
+      -halfBicep * 0.55,  // 更靠外
+      capHeight * 0.38     // 更低（更平缓）
     );
 
-    // 前袖 pitch 更靠内、更高（更陡）
+    // 前pitch (DAVANTI)：更高、更靠内 → 形成更陡的前袖山
     const frontPitch = new Point(
-      halfBicep * 0.42,
-      capHeight * 0.46
+      halfBicep * 0.45,   // 更靠内
+      capHeight * 0.50    // 更高（更陡峭）
     );
 
     // ======================================================
-    // 工业控制点
+    // 工业控制点 - 基于真实服装CAD经验
+    // 不使用角度/切线系统，直接放置控制点
     // ======================================================
 
     // ----------------------------------------
-    // 后上：backPitch → capTop
-    // 后袖必须圆、长、平
+    // 后上段：backPitch → capTop
+    // DIETRO特征：长、圆、平
+    // 控制点必须远离曲线，产生宽圆弧效果
     // ----------------------------------------
 
     const ubCp1 = new Point(
-      -halfBicep * 0.40,
-      capHeight * 0.10
+      -halfBicep * 0.42,  // 控制点向外扩展
+      capHeight * 0.08     // 接近Y=0，形成平顶
     );
 
     const ubCp2 = new Point(
-      -halfBicep * 0.16,
-      0
+      -halfBicep * 0.18,  // 靠近中心线
+      0                    // 在capTop高度
     );
 
     // ----------------------------------------
-    // 前上：capTop → frontPitch
-    // 前袖必须更快下降
+    // 前上段：capTop → frontPitch
+    // DAVANTI特征：短、陡、略凹
+    // 控制点较近，快速下降
     // ----------------------------------------
 
     const ufCp1 = new Point(
-      halfBicep * 0.12,
-      0
+      halfBicep * 0.10,   // 靠近起点
+      0                   // 在capTop高度
     );
 
     const ufCp2 = new Point(
-      halfBicep * 0.30,
-      capHeight * 0.18
+      halfBicep * 0.28,   // 中等距离
+      capHeight * 0.20    // 快速下降
     );
 
     // ----------------------------------------
-    // 前下：frontPitch → frontAxilla
-    // 前袖下段必须 inward
-    // 形成工业 hollow
+    // 前下段：frontPitch → frontAxilla
+    // DAVANTI下段：inward hollow
+    // 工业特征：轻微向内凹陷
     // ----------------------------------------
 
     const lfCp1 = new Point(
-      halfBicep * 0.58,
-      capHeight * 0.62
+      halfBicep * 0.56,   // 略微向外
+      capHeight * 0.65    // 继续下降
     );
 
     const lfCp2 = new Point(
-      halfBicep * 0.92,
-      capHeight * 0.86
+      halfBicep * 0.88,   // 接近腋下
+      capHeight * 0.88    // 接近腋下高度
     );
 
     // ----------------------------------------
-    // 后下：backAxilla → backPitch
-    // 后袖必须更饱满
+    // 后下段：backAxilla → backPitch
+    // DIETRO下段：饱满外鼓
+    // 工业特征：明显向外凸出
     // ----------------------------------------
 
     const lbCp1 = new Point(
-      -halfBicep * 0.94,
-      capHeight * 0.82
+      -halfBicep * 0.92,  // 明显向外凸出
+      capHeight * 0.85    // 接近腋下高度
     );
 
     const lbCp2 = new Point(
-      -halfBicep * 0.74,
-      capHeight * 0.52
+      -halfBicep * 0.70,  // 向内收敛到backPitch
+      capHeight * 0.55    // 上升
     );
 
     // ======================================================
