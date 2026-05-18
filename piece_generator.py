@@ -508,6 +508,16 @@ def _normalize_garment_input(measurements):
     cuff_width = flat_result.get('cuffWidth', 10)
     shoulder_slope = flat_result.get('shoulderSlope', 5.5)
 
+    print(f"[参数规范化] 输入参数提取完成:")
+    print(f"   chestWidth: {chest_width}")
+    print(f"   shoulderWidth: {shoulder_width}")
+    print(f"   bodyLength: {body_length}")
+    print(f"   sleeveLength: {sleeve_length}")
+    print(f"   neckWidth: {neck_width}")
+    print(f"   armholeDepth: {armhole_depth}")
+    print(f"   🔍 [关键] cuffWidth (原始输入): {cuff_width} ← 检查这个值")
+    print(f"   shoulderSlope: {shoulder_slope}")
+
     # 计算领深（基于领宽的比例）
     front_neck_drop = neck_width * 0.34 if neck_width else 8.5
     back_neck_drop = neck_width * 0.10 if neck_width else 2.5
@@ -534,7 +544,7 @@ def _normalize_garment_input(measurements):
         'sleeve': {
             'sleeveLength': sleeve_length,
             'bicepWidth': chest_width * 0.38,  # 基于胸宽估算
-            'cuffWidth': cuff_width * 2,       # 袖口宽是半围，需要×2
+            'cuffWidth': cuff_width,           # 直接使用用户输入的半围值，不翻倍
             'sleeveCapHeight': armhole_depth * 0.45
         }
     }

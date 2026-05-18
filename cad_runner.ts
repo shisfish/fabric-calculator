@@ -8,6 +8,19 @@ const input = JSON.parse(process.argv[2]);
 
 logger.debug('输入参数:', JSON.stringify(input).substring(0, 200));
 
+// 🔍 [参数追踪] 打印原始输入中的袖子参数
+if (input.garmentInput) {
+  logger.info('\n🔍 [CAD-RUNNER] 原始输入 garmentInput:');
+  if (input.garmentInput.sleeve) {
+    logger.info(`   sleeve.cuffWidth: ${input.garmentInput.sleeve.cuffWidth}`);
+    logger.info(`   sleeve.bicepWidth: ${input.garmentInput.sleeve.bicepWidth}`);
+    logger.info(`   sleeve.sleeveLength: ${input.garmentInput.sleeve.sleeveLength}`);
+    logger.info(`   sleeve.sleeveCapHeight: ${input.garmentInput.sleeve.sleeveCapHeight}`);
+  } else if (input.garmentInput.cuffWidth !== undefined) {
+    logger.info(`   扁平格式 cuffWidth: ${input.garmentInput.cuffWidth}`);
+  }
+}
+
 let params: GarmentParams;
 
 if (input.garmentInput) {

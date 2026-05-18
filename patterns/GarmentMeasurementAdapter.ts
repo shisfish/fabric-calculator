@@ -1,3 +1,7 @@
+import { createLogger } from '../utils/CADLogger.js';
+
+const logger = createLogger('MEASUREMENT-ADAPTER');
+
 export interface GarmentMeasurementInput {
   garment: string;
   front: FrontPieceInput;
@@ -111,8 +115,14 @@ export class GarmentMeasurementAdapter {
     // 2. 扁平格式: { bicepsWidth: 20, sleeveLength: 60, ... }
     let sleeve = merged.sleeve || DEFAULT_INPUT.sleeve;
     
-    // 如果是扁平格式（直接包含sleeve相关字段），则转换为嵌套格式
     const flatInput = input as any;
+    
+    logger.info(`\n🔍 [GarmentMeasurementAdapter] 输入处理:`);
+    logger.info(`   merged.sleeve: ${JSON.stringify(merged.sleeve)}`);
+    logger.info(`   flatInput.cuffWidth: ${flatInput.cuffWidth}`);
+    logger.info(`   flatInput.bicepsWidth: ${flatInput.bicepsWidth}`);
+    
+    // 如果是扁平格式（直接包含sleeve相关字段），则转换为嵌套格式
     if (flatInput.bicepsWidth !== undefined || flatInput.sleeveLength !== undefined) {
       sleeve = {
         bicepWidth: flatInput.bicepsWidth ?? sleeve.bicepWidth,
@@ -120,6 +130,13 @@ export class GarmentMeasurementAdapter {
         sleeveLength: flatInput.sleeveLength ?? sleeve.sleeveLength,
         sleeveCapHeight: flatInput.sleeveCapHeight ?? sleeve.sleeveCapHeight
       };
+      logger.info(`   ✅ 使用扁平格式转换后的 sleeve:`);
+      logger.info(`      cuffWidth: ${sleeve.cuffWidth}`);
+      logger.info(`      bicepWidth: ${sleeve.bicepWidth}`);
+    } else {
+      logger.info(`   ✅ 使用嵌套格式的 sleeve:`);
+      logger.info(`      cuffWidth: ${sleeve.cuffWidth}`);
+      logger.info(`      bicepWidth: ${sleeve.bicepWidth}`);
     }
 
     const halfChestFront = front.chestWidth / 2;
