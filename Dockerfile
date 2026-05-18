@@ -17,7 +17,13 @@ RUN npm run build:frontend && \
 
 
 # =========================================================
-# Stage 2: Python Runtime (生产镜像)
+# Stage 2: Node.js Binary Provider
+# =========================================================
+FROM node:20-slim AS node-provider
+
+
+# =========================================================
+# Stage 3: Python Runtime (生产镜像)
 # =========================================================
 FROM python:3.11-slim
 
@@ -32,13 +38,18 @@ ENV TZ=Asia/Shanghai \
 
 WORKDIR /app
 
+# 从 node:20-slim 复制 Node.js 二进制（避免 apt install nodejs 的 118 个依赖）
+COPY --from=node-provider /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-provider /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+# 只安装 OpenCV 必需的系统库
 RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgl1 \
-        nodejs \
-        npm \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY requirements.txt .
@@ -48,9 +59,10 @@ RUN pip install \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --no-compile
 
-RUN npm install -g tsx \
-    && npm cache clean --force \
-    && rm -rf /root/.npm
+# 全局安装 tsx（运行时需要）
+RUN npm install -g tsx && \
+    npm cache clean --force && \
+    rm -rf /root/.npm
 
 COPY . .
 
