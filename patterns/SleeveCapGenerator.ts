@@ -102,6 +102,8 @@ export class SleeveCapGenerator {
     const cuffHalf = sleeveParams.cuffWidth;
 
     logger.info(`\n🏭 ===== 工业袖山生成器 v13.0 (意大利CAD规范) =====`);
+    logger.info(`   🔍 [参数追踪] cuffWidth输入值: ${sleeveParams.cuffWidth}`);
+    logger.info(`   🔍 [参数追踪] cuffHalf (将用于frontCuff.x): ${cuffHalf}`);
     logger.info(`   前袖窿长度: ${frontArmholeLength.toFixed(2)} cm`);
     logger.info(`   后袖窿长度: ${backArmholeLength.toFixed(2)} cm`);
     logger.info(`   袖山高度: ${capHeight.toFixed(2)} cm`);
@@ -124,9 +126,13 @@ export class SleeveCapGenerator {
     // 检查是否需要迭代调整
     const initialError = Math.abs(result.totalCapLength - targetCapLen);
     
-    if (initialError > 1.0) {
-      // 误差过大，需要调整
+    const userProvidedBicep = sleeveParams.bicepsWidth > 0;
+    
+    if (initialError > 1.0 && !userProvidedBicep) {
+      // 仅在用户未提供bicepsWidth时才自动调整
+      // 如果用户明确输入了bicepsWidth，尊重用户的参数，不修改
       logger.info(`\n⚠️ 初始误差较大 (${initialError.toFixed(2)}cm)，启动智能迭代...`);
+      logger.info(`   注意：用户未指定bicepsWidth，系统将自动优化`);
       
       let bestResult = result;
       let minError = initialError;
@@ -170,6 +176,11 @@ export class SleeveCapGenerator {
       
       logger.info(`   最终误差: ${minError.toFixed(3)} cm`);
       result = bestResult;
+    } else if (initialError > 1.0 && userProvidedBicep) {
+      // 用户提供了bicepsWidth但误差较大
+      logger.info(`\nℹ️ 当前误差: ${initialError.toFixed(2)}cm`);
+      logger.info(`   用户指定腋下半围: ${halfBicep} cm（保持不变）`);
+      logger.info(`   如需优化袖窿匹配度，可调整bicepsWidth或允许系统自动计算`);
     }
 
     return result;
@@ -357,6 +368,9 @@ export class SleeveCapGenerator {
       -cuffHalf,
       capHeight + sleeveLength
     );
+
+    logger.info(`   🔍 [参数追踪] frontCuff坐标: (${frontCuff.x}, ${frontCuff.y})`);
+    logger.info(`   🔍 [参数追踪] backCuff坐标: (${backCuff.x}, ${backCuff.y})`);
 
     // ======================================================
     // Notch

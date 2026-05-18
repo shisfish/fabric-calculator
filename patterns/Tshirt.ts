@@ -333,11 +333,13 @@ export class TshirtPatternGenerator {
     const sL = Number(sl.sleeveLength);
     const cuW = Number(sl.cuffWidth);
 
-    logger.debug('\n👕 袖子参数:');
-    logger.debug(`   腋下半围(bicepsWidth): ${bW} cm`);
-    logger.debug(`   袖山高度(capHeight): ${cH} cm`);
-    logger.debug(`   袖长(sleeveLength): ${sL} cm`);
-    logger.debug(`   袖口半围(cuffWidth): ${cuW} cm`);
+    logger.info('\n👕 袖子参数 (来自页面输入):');
+    logger.info(`   🔍 [原始输入] sl.cuffWidth = ${sl.cuffWidth} (类型: ${typeof sl.cuffWidth})`);
+    logger.info(`   🔍 [转换后] cuW = Number(sl.cuffWidth) = ${cuW}`);
+    logger.info(`   腋下半围(bicepsWidth): ${bW} cm`);
+    logger.info(`   袖山高度(capHeight): ${cH} cm`);
+    logger.info(`   袖长(sleeveLength): ${sL} cm`);
+    logger.info(`   袖口半围(cuffWidth): ${cuW} cm`);
 
     // 使用SleeveCapGenerator生成基于袖窿的可缝合袖山
     const sleeveResult = SleeveCapGenerator.generateFromArmhole(
