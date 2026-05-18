@@ -19,246 +19,305 @@ interface SleeveCapResult {
 }
 
 /**
- * 工业袖山生成器 v12.0 — 比例驱动与长度迭代法
- * 
- * 遵循 .trae/rules/rule-match.md 规则:
- * 1. 前后非对称 (前陡深，后平长)
- * 2. 比例控制点 (spanX * ratio)
- * 3. 长度匹配 (sleeveCapLength = frontArmhole + backArmhole + ease)
- * 4. 包含工业 Notch
+ * 工业袖山生成器 v13.0
+ *
+ * 目标：
+ * - 非半圆
+ * - 前袖窿更陡
+ * - 后袖窿更平
+ * - 顶部不是尖点
+ * - 腋下不是直冲
+ * - 整体接近真实成衣袖山
+ *
+ * 结构：
+ *
+ *        capTop
+ *      /         \
+ *  backPitch   frontPitch
+ *    /               \
+ * backAxilla     frontAxilla
+ *
+ * 前袖（右侧）：
+ * - 更短
+ * - 更陡
+ * - 更深
+ *
+ * 后袖（左侧）：
+ * - 更长
+ * - 更圆
+ * - 更平
  */
 export class SleeveCapGenerator {
 
   static generateFromArmhole(
-    frontArmholeOps: Array<{ type: string; to?: { x: number; y: number }; cp1?: { x: number; y: number }; cp2?: { x: number; y: number } }>,
-    backArmholeOps: Array<{ type: string; to?: { x: number; y: number }; cp1?: { x: number; y: number }; cp2?: { x: number; y: number } }>,
+    frontArmholeOps: Array<{
+      type: string;
+      to?: { x: number; y: number };
+      cp1?: { x: number; y: number };
+      cp2?: { x: number; y: number };
+    }>,
+    backArmholeOps: Array<{
+      type: string;
+      to?: { x: number; y: number };
+      cp1?: { x: number; y: number };
+      cp2?: { x: number; y: number };
+    }>,
     sleeveParams: {
       bicepsWidth: number;
       sleeveCapHeight: number;
       sleeveLength: number;
       cuffWidth: number;
     },
-    ease: number = 2.0, // 工业标准 1-4cm，默认取2.0
+    ease: number = 2,
     armholeDepth?: number
   ): SleeveCapResult {
-
-    const sL = sleeveParams.sleeveLength;
-    const cuW = sleeveParams.cuffWidth;
 
     const frontSegments = this.extractArmholeSegments(frontArmholeOps);
     const backSegments = this.extractArmholeSegments(backArmholeOps);
 
-    const frontArmholeLength = this.calculateTotalArmholeLength(frontSegments);
-    const backArmholeLength = this.calculateTotalArmholeLength(backSegments);
-    const totalArmholeLen = frontArmholeLength + backArmholeLength;
-    const targetCapLen = totalArmholeLen + ease;
+    const frontArmholeLength =
+      this.calculateTotalArmholeLength(frontSegments);
 
-    logger.info(`\n🏭 ===== 工业袖山生成器 v12.0 (迭代匹配法) =====`);
-    logger.info(`   前袖窿长度: ${frontArmholeLength.toFixed(2)} cm`);
-    logger.info(`   后袖窿长度: ${backArmholeLength.toFixed(2)} cm`);
-    logger.info(`   目标总长 (含ease): ${targetCapLen.toFixed(2)} cm`);
+    const backArmholeLength =
+      this.calculateTotalArmholeLength(backSegments);
 
-    // 初始参数
-    const userProvidedBiceps = sleeveParams.bicepsWidth && sleeveParams.bicepsWidth > 0;
-    const userProvidedCapHeight = sleeveParams.sleeveCapHeight && sleeveParams.sleeveCapHeight > 0;
+    const totalArmhole =
+      frontArmholeLength + backArmholeLength;
 
-    let cH: number;
-    let bW: number;
+    // =========================
+    // 工业参数
+    // =========================
 
-    if (userProvidedCapHeight) {
-      cH = sleeveParams.sleeveCapHeight!;
-      logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (来自用户输入)`);
-    } else {
-      cH = this.calculateCapHeight(totalArmholeLen, armholeDepth);
-      logger.info(`   袖山高度(cH): ${cH.toFixed(2)} cm (自动计算)`);
-    }
+    const capHeight =
+      sleeveParams.sleeveCapHeight > 0
+        ? sleeveParams.sleeveCapHeight
+        : Math.max(totalArmhole * 0.28, 12);
 
-    if (userProvidedBiceps) {
-      bW = sleeveParams.bicepsWidth!;
-      logger.info(`   腋下半围(bW): ${bW.toFixed(2)} cm (来自用户输入，不进行迭代调整)`);
-    } else {
-      bW = this.calculateBicepsWidth(totalArmholeLen, cH, ease);
-      logger.info(`   腋下半围(bW): ${bW.toFixed(2)} cm (自动计算)`);
+    const halfBicep =
+      sleeveParams.bicepsWidth > 0
+        ? sleeveParams.bicepsWidth
+        : totalArmhole * 0.36;
 
-      // 仅在自动计算时才进行迭代调整以匹配袖窿长度
-      let bestResult: SleeveCapResult | null = null;
-      let minDiff = Infinity;
+    const sleeveLength = sleeveParams.sleeveLength;
+    const cuffHalf = sleeveParams.cuffWidth;
 
-      for (let iter = 0; iter < 10; iter++) {
-        const result = this.generateSleeveCap(
-          bW, cH, sL, cuW,
-          frontArmholeLength, backArmholeLength, ease
-        );
+    logger.info(`\n🏭 Sleeve Cap v13`);
+    logger.info(`front armhole = ${frontArmholeLength.toFixed(2)}`);
+    logger.info(`back armhole  = ${backArmholeLength.toFixed(2)}`);
+    logger.info(`cap height    = ${capHeight.toFixed(2)}`);
+    logger.info(`half bicep    = ${halfBicep.toFixed(2)}`);
 
-        const diff = result.totalCapLength - targetCapLen;
-
-        if (Math.abs(diff) < 0.1) {
-          bestResult = result;
-          break;
-        }
-
-        if (Math.abs(diff) < minDiff) {
-          minDiff = Math.abs(diff);
-          bestResult = result;
-        }
-
-        // 简单的比例调整：如果太短，增加bW；如果太长，减少bW
-        bW -= diff * 1.1;
-      }
-
-      if (!bestResult) {
-        throw new Error('Failed to generate matching sleeve cap');
-      }
-
-      logger.info(`   迭代后腋下半围(bW): ${bW.toFixed(2)} cm`);
-      logger.info(`   最终袖山高度: ${cH.toFixed(2)} cm`);
-      logger.info(`   最终腋下宽度: ${bW.toFixed(2)} cm`);
-      logger.info(`   最终袖山长度: ${bestResult.totalCapLength.toFixed(2)} cm (误差: ${(bestResult.totalCapLength - targetCapLen).toFixed(3)} cm)`);
-
-      return bestResult;
-    }
-
-    // 用户提供了bW，直接生成（不迭代）
-    const result = this.generateSleeveCap(
-      bW, cH, sL, cuW,
-      frontArmholeLength, backArmholeLength, ease
+    return this.generateSleeveCap(
+      halfBicep,
+      capHeight,
+      sleeveLength,
+      cuffHalf,
+      frontArmholeLength,
+      backArmholeLength,
+      ease
     );
-
-    logger.info(`   最终袖山高度: ${cH.toFixed(2)} cm`);
-    logger.info(`   最终腋下宽度: ${bW.toFixed(2)} cm`);
-    logger.info(`   最终袖山长度: ${result.totalCapLength.toFixed(2)} cm (误差: ${(result.totalCapLength - targetCapLen).toFixed(3)} cm)`);
-
-    return result;
-  }
-
-  private static calculateCapHeight(totalArmholeLen: number, armholeDepth?: number): number {
-    if (armholeDepth) return Math.max(armholeDepth * 0.75, 12); // T恤袖山高度通常较高
-    return totalArmholeLen * 0.32;
-  }
-
-  private static calculateBicepsWidth(totalArmholeLen: number, cH: number, ease: number): number {
-    // 经验公式: 计算全围后除以2得到半围
-    const targetLen = totalArmholeLen + ease;
-    const fullBicep = Math.sqrt(Math.pow(targetLen, 2) - Math.pow(cH, 2)) * 0.9;
-    return fullBicep / 2; // 返回半围
   }
 
   /**
-   * 核心几何算法：工业比例法
+   * 真正工业袖山
    */
   private static generateSleeveCap(
-    bW: number,
-    cH: number,
-    sL: number,
-    cuW: number,
-    frontArmholeLen: number,
-    backArmholeLen: number,
+    halfBicep: number,
+    capHeight: number,
+    sleeveLength: number,
+    cuffHalf: number,
+    frontArmholeLength: number,
+    backArmholeLength: number,
     ease: number
   ): SleeveCapResult {
 
-    const halfBicep = bW;
-
-    // =========================
+    // ======================================================
     // 关键点
-    // =========================
+    // ======================================================
 
     const capTop = new Point(0, 0);
 
     const frontAxilla = new Point(
       halfBicep,
-      cH
+      capHeight
     );
 
     const backAxilla = new Point(
       -halfBicep,
-      cH
+      capHeight
     );
 
-    const frontCuff = new Point(
-      cuW,
-      cH + sL
+    // 后袖 pitch 更靠外、更低（更平）
+    const backPitch = new Point(
+      -halfBicep * 0.58,
+      capHeight * 0.34
     );
 
-    const backCuff = new Point(
-      -cuW,
-      cH + sL
+    // 前袖 pitch 更靠内、更高（更陡）
+    const frontPitch = new Point(
+      halfBicep * 0.42,
+      capHeight * 0.46
     );
 
-    // =========================
+    // ======================================================
     // 工业控制点
-    // 真正工业版
-    // =========================
+    // ======================================================
 
-    // 顶部宽度控制
-    const topSpread = halfBicep * 0.42;
+    // ----------------------------------------
+    // 后上：backPitch → capTop
+    // 后袖必须圆、长、平
+    // ----------------------------------------
 
-    // 前袖：更短、更陡
-    const frontCp1 = new Point(
-      topSpread,
-      cH * 0.04
+    const ubCp1 = new Point(
+      -halfBicep * 0.40,
+      capHeight * 0.10
     );
 
-    const frontCp2 = new Point(
+    const ubCp2 = new Point(
+      -halfBicep * 0.16,
+      0
+    );
+
+    // ----------------------------------------
+    // 前上：capTop → frontPitch
+    // 前袖必须更快下降
+    // ----------------------------------------
+
+    const ufCp1 = new Point(
+      halfBicep * 0.12,
+      0
+    );
+
+    const ufCp2 = new Point(
+      halfBicep * 0.30,
+      capHeight * 0.18
+    );
+
+    // ----------------------------------------
+    // 前下：frontPitch → frontAxilla
+    // 前袖下段必须 inward
+    // 形成工业 hollow
+    // ----------------------------------------
+
+    const lfCp1 = new Point(
+      halfBicep * 0.58,
+      capHeight * 0.62
+    );
+
+    const lfCp2 = new Point(
       halfBicep * 0.92,
-      cH * 0.72
+      capHeight * 0.86
     );
 
-    // 后袖：更长、更平、更饱满
-    const backCp1 = new Point(
-      -halfBicep * 0.92,
-      cH * 0.62
+    // ----------------------------------------
+    // 后下：backAxilla → backPitch
+    // 后袖必须更饱满
+    // ----------------------------------------
+
+    const lbCp1 = new Point(
+      -halfBicep * 0.94,
+      capHeight * 0.82
     );
 
-    const backCp2 = new Point(
-      -topSpread,
-      cH * 0.02
+    const lbCp2 = new Point(
+      -halfBicep * 0.74,
+      capHeight * 0.52
     );
 
-    // =========================
-    // Bezier
-    // =========================
+    // ======================================================
+    // 曲线
+    // ======================================================
 
-    const frontCurve = new CubicBezier(
+    const upperFront = new CubicBezier(
       capTop,
-      frontCp1,
-      frontCp2,
+      ufCp1,
+      ufCp2,
+      frontPitch
+    );
+
+    const lowerFront = new CubicBezier(
+      frontPitch,
+      lfCp1,
+      lfCp2,
       frontAxilla
     );
 
-    const backCurve = new CubicBezier(
+    const lowerBack = new CubicBezier(
       backAxilla,
-      backCp1,
-      backCp2,
+      lbCp1,
+      lbCp2,
+      backPitch
+    );
+
+    const upperBack = new CubicBezier(
+      backPitch,
+      ubCp1,
+      ubCp2,
       capTop
     );
 
-    // =========================
+    // ======================================================
     // 长度
-    // =========================
+    // ======================================================
 
-    const frontLen = frontCurve.getLength();
-    const backLen = backCurve.getLength();
-    const totalLen = frontLen + backLen;
+    const frontCapLength =
+      upperFront.getLength() +
+      lowerFront.getLength();
 
-    // =========================
+    const backCapLength =
+      upperBack.getLength() +
+      lowerBack.getLength();
+
+    const totalCapLength =
+      frontCapLength +
+      backCapLength;
+
+    logger.info(`front cap = ${frontCapLength.toFixed(2)}`);
+    logger.info(`back cap  = ${backCapLength.toFixed(2)}`);
+    logger.info(`total cap = ${totalCapLength.toFixed(2)}`);
+
+    // ======================================================
+    // 袖口
+    // ======================================================
+
+    const frontCuff = new Point(
+      cuffHalf,
+      capHeight + sleeveLength
+    );
+
+    const backCuff = new Point(
+      -cuffHalf,
+      capHeight + sleeveLength
+    );
+
+    // ======================================================
     // Notch
-    // =========================
+    // ======================================================
 
-    const frontNotch = frontCurve.getPoint(0.72);
+    const frontNotch =
+      lowerFront.getPoint(0.38);
 
-    const backNotch = backCurve.getPoint(0.38);
+    const backNotch =
+      lowerBack.getPoint(0.42);
 
-    // =========================
+    // ======================================================
     // Path
-    // =========================
+    // ======================================================
 
     const capPath = new Path()
       .move(capTop)
 
       // 前袖
       .curve(
-        frontCp1,
-        frontCp2,
+        ufCp1,
+        ufCp2,
+        frontPitch
+      )
+      .segment('armhole')
+
+      .curve(
+        lfCp1,
+        lfCp2,
         frontAxilla
       )
       .segment('armhole')
@@ -269,7 +328,7 @@ export class SleeveCapGenerator {
 
       // 袖口
       .line(backCuff)
-      .segment('sleeveHem')
+      .segment('hem')
 
       // 后侧缝
       .line(backAxilla)
@@ -277,89 +336,148 @@ export class SleeveCapGenerator {
 
       // 后袖
       .curve(
-        backCp1,
-        backCp2,
+        lbCp1,
+        lbCp2,
+        backPitch
+      )
+      .segment('armhole')
+
+      .curve(
+        ubCp1,
+        ubCp2,
         capTop
       )
       .segment('armhole')
 
       .close();
 
-    logger.info(`\n🏭 工业袖山生成完成`);
-    logger.info(`   前袖长: ${frontLen.toFixed(2)} cm`);
-    logger.info(`   后袖长: ${backLen.toFixed(2)} cm`);
-    logger.info(`   总长: ${totalLen.toFixed(2)} cm`);
-
     return {
       capPath,
 
       points: {
         capTop,
+
+        frontPitch,
+        backPitch,
+
         frontAxilla,
         backAxilla,
+
         frontCuff,
         backCuff,
 
-        frontCp1,
-        frontCp2,
-        backCp1,
-        backCp2,
-
         frontNotch,
-        backNotch
+        backNotch,
+
+        ufCp1,
+        ufCp2,
+
+        lfCp1,
+        lfCp2,
+
+        lbCp1,
+        lbCp2,
+
+        ubCp1,
+        ubCp2
       },
 
-      frontCapLength: frontLen,
-      backCapLength: backLen,
-      totalCapLength: totalLen,
+      frontCapLength,
+      backCapLength,
+      totalCapLength,
 
-      frontArmholeLength: frontArmholeLen,
-      backArmholeLength: backArmholeLen,
+      frontArmholeLength,
+      backArmholeLength,
 
       ease
     };
   }
 
-  private static extractArmholeSegments(ops: Array<{ type: string; to?: { x: number; y: number }; cp1?: { x: number; y: number }; cp2?: { x: number; y: number } }>): ArmholeSegment[] {
+  // ==========================================================
+  // Helpers
+  // ==========================================================
+
+  private static extractArmholeSegments(
+    ops: Array<{
+      type: string;
+      to?: { x: number; y: number };
+      cp1?: { x: number; y: number };
+      cp2?: { x: number; y: number };
+    }>
+  ): ArmholeSegment[] {
+
     const segments: ArmholeSegment[] = [];
-    let prevPoint: Point | null = null;
+
+    let prev: Point | null = null;
 
     for (const op of ops) {
+
       if (op.type === 'move' && op.to) {
-        prevPoint = new Point(op.to.x, op.to.y);
-      } else if (op.type === 'curve' && op.to && op.cp1 && op.cp2) {
-        if (!prevPoint) continue;
+        prev = new Point(op.to.x, op.to.y);
+        continue;
+      }
+
+      if (
+        op.type === 'curve' &&
+        prev &&
+        op.to &&
+        op.cp1 &&
+        op.cp2
+      ) {
+
         segments.push({
           type: 'curve',
-          start: prevPoint,
+          start: prev,
           cp1: new Point(op.cp1.x, op.cp1.y),
           cp2: new Point(op.cp2.x, op.cp2.y),
           end: new Point(op.to.x, op.to.y)
         });
-        prevPoint = new Point(op.to.x, op.to.y);
-      } else if (op.type === 'line' && op.to && prevPoint) {
+
+        prev = new Point(op.to.x, op.to.y);
+      }
+
+      if (
+        op.type === 'line' &&
+        prev &&
+        op.to
+      ) {
+
         segments.push({
           type: 'line',
-          start: prevPoint,
+          start: prev,
           end: new Point(op.to.x, op.to.y)
         });
-        prevPoint = new Point(op.to.x, op.to.y);
+
+        prev = new Point(op.to.x, op.to.y);
       }
     }
+
     return segments;
   }
 
-  private static calculateTotalArmholeLength(segments: ArmholeSegment[]): number {
-    let totalLength = 0;
+  private static calculateTotalArmholeLength(
+    segments: ArmholeSegment[]
+  ): number {
+
+    let total = 0;
+
     for (const seg of segments) {
+
       if (seg.type === 'curve') {
-        const bez = new CubicBezier(seg.start, seg.cp1, seg.cp2, seg.end);
-        totalLength += bez.getLength();
+
+        total += new CubicBezier(
+          seg.start,
+          seg.cp1,
+          seg.cp2,
+          seg.end
+        ).getLength();
+
       } else {
-        totalLength += seg.start.dist(seg.end);
+
+        total += seg.start.dist(seg.end);
       }
     }
-    return totalLength;
+
+    return total;
   }
 }
-
