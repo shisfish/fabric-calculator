@@ -179,7 +179,7 @@ export class GarmentMeasurementAdapter {
         capDepthRatio: 0.65
       },
 
-      seamAllowance: 1
+      seamAllowance: 1.5
     };
   }
 

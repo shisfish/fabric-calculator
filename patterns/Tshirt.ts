@@ -52,12 +52,12 @@ export class TshirtPatternGenerator {
     
     if (params.seamAllowance && params.seamAllowance > 0) {
       const rules = [
-        { segment: 'shoulder', distance: 1.0 },
-        { segment: 'armhole', distance: 1.0 },
-        { segment: 'sideSeam', distance: 1.2 },
-        { segment: 'neckline', distance: 0.6 },
-        { segment: 'hem', distance: 2.5 },
-        { segment: 'sleeveHem', distance: 2.5 }
+        { segment: 'shoulder', distance: params.seamAllowance },
+        { segment: 'armhole', distance: params.seamAllowance },
+        { segment: 'sideSeam', distance: params.seamAllowance },
+        { segment: 'neckline', distance: params.seamAllowance },
+        { segment: 'hem', distance: params.seamAllowance },
+        { segment: 'sleeveHem', distance: params.seamAllowance }
       ];
 
       logger.info(`   ✅ 开始生成缝份路径...`);

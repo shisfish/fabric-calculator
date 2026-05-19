@@ -744,49 +744,7 @@ function renderSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, piece
     // drawDimensionLine(ctx, minX, minY, maxX, minY, `${srcWidth.toFixed(1)}cm`, 'bottom');
     // drawDimensionLine(ctx, minX, minY, minX, maxY, `${srcHeight.toFixed(1)}cm`, 'left');
 
-    // 绘制缝份宽度标注
-    if (seamOps.length > 0 && pieceData && pieceData.seamAllowance) {
-        const seamDist = pieceData.seamAllowance;
-        const midY = (minY + maxY) / 2;
-        
-        ctx.strokeStyle = '#dc2626';
-        ctx.lineWidth = 3 / scale;
-        ctx.setLineDash([]);
-        
-        // 在右侧绘制缝份宽度 - 更粗更醒目
-        ctx.beginPath();
-        ctx.moveTo(maxX, midY);
-        ctx.lineTo(maxX + seamDist, midY);
-        ctx.stroke();
-        
-        // 端点竖线
-        ctx.lineWidth = 2 / scale;
-        ctx.beginPath();
-        ctx.moveTo(maxX, minY); ctx.lineTo(maxX + seamDist, minY);
-        ctx.moveTo(maxX, maxY); ctx.lineTo(maxX + seamDist, maxY);
-        ctx.stroke();
-
-        // 缝份宽度文字 - 带背景
-        ctx.save();
-        ctx.translate(maxX + seamDist / 2, midY - 10 / scale);
-        ctx.scale(1, -1);
-        
-        const seamFontSize = Math.max(14, 14 / scale);
-        ctx.font = `bold ${seamFontSize}px system-ui`;
-        const seamText = `${seamDist} cm`;
-        const seamTextWidth = ctx.measureText(seamText).width;
-        
-        // 白色背景
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.fillRect(-seamTextWidth/2 - 4, -seamFontSize + 2, seamTextWidth + 8, seamFontSize + 4);
-        
-        // 红色文字
-        ctx.fillStyle = '#dc2626';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(seamText, 0, 2);
-        ctx.restore();
-    }
+    // 缝份宽度标注已移除（避免显示异常）
 
     ctx.setLineDash([]);
     ctx.restore();
