@@ -1,6 +1,17 @@
 import { Point, Path } from '../geometry/index.js';
 import { CubicBezier, QuadraticBezier } from '../geometry/Bezier.js';
 
+/**
+ * 🔧 【工业标准】调试日志工具 - 输出到 stderr（避免污染 stdout JSON）
+ */
+const seamLog = (message: string): void => {
+  process.stderr.write(`[SEAM] ${message}\n`);
+};
+
+const seamWarn = (message: string): void => {
+  process.stderr.write(`[SEAM-WARN] ${message}\n`);
+};
+
 export interface SeamAllowanceRule {
   segment: string;
   distance: number;
@@ -60,29 +71,29 @@ export class SeamAllowanceGenerator {
     const orientation = this.getOutlineOrientation(outline);
     
     // 🔧 【工业调试】输出缝份规则
-    console.log('[缝份引擎] ===== 工业缝份生成开始 =====');
-    console.log(`   规则数量: ${rules.length}`);
-    rules.forEach(r => console.log(`   - ${r.segment}: ${r.distance}cm`));
-    console.log(`   轮廓方向: ${orientation >= 0 ? '顺时针 (CW)' : '逆时针 (CCW)'}`);
-    console.log(`   源段数量: ${sourceSegments.length}`);
+    seamLog('===== 工业缝份生成开始 =====');
+    seamLog(`   规则数量: ${rules.length}`);
+    rules.forEach(r => seamLog(`   - ${r.segment}: ${r.distance}cm`));
+    seamLog(`   轮廓方向: ${orientation >= 0 ? '顺时针 (CW)' : '逆时针 (CCW)'}`);
+    seamLog(`   源段数量: ${sourceSegments.length}`);
     
     const offsetSegments = sourceSegments.map((segment) =>
       this.createOffsetSegment(segment, orientation)
     );
 
     // 🔧 【工业调试】检查 offset 质量
-    console.log('\n[缝份引擎] Offset 质量检查:');
+    seamLog('\nOffset 质量检查:');
     offsetSegments.forEach((seg, i) => {
       const src = sourceSegments[i];
-      console.log(`   [${i}] ${seg.segmentName}:`);
-      console.log(`       源长度: ${src.start.dist(src.end).toFixed(2)}cm`);
-      console.log(`       偏移距离: ${seg.distance}cm`);
-      console.log(`       Offset长度: ${seg.start.dist(seg.end).toFixed(2)}cm`);
+      seamLog(`   [${i}] ${seg.segmentName}:`);
+      seamLog(`       源长度: ${src.start.dist(src.end).toFixed(2)}cm`);
+      seamLog(`       偏移距离: ${seg.distance}cm`);
+      seamLog(`       Offset长度: ${seg.start.dist(seg.end).toFixed(2)}cm`);
       
       // 检查是否出现爆角迹象
       const lengthRatio = seg.start.dist(seg.end) / (src.start.dist(src.end) || 1);
       if (lengthRatio > 5) {
-        console.warn(`       ⚠️ 可能的爆角！长度比: ${lengthRatio.toFixed(1)}x`);
+        seamWarn(`       ⚠️ 可能的爆角！长度比: ${lengthRatio.toFixed(1)}x`);
       }
     });
 
@@ -91,16 +102,16 @@ export class SeamAllowanceGenerator {
     // 🔧 【工业调试】输出 Join 类型统计
     const directCount = joins.filter(j => j.kind === 'direct').length;
     const roundCount = joins.filter(j => j.kind === 'round').length;
-    console.log(`\n[缝份引擎] Join 统计:`);
-    console.log(`   Direct (Miter): ${directCount}`);
-    console.log(`   Round (Fillet): ${roundCount}`);
+    seamLog(`\nJoin 统计:`);
+    seamLog(`   Direct (Miter): ${directCount}`);
+    seamLog(`   Round (Fillet): ${roundCount}`);
     
     const resultPath = this.buildOffsetPath(offsetSegments, joins);
     
     // 🔧 【工业调试】最终结果验证
-    console.log(`\n[缝份引擎] ✅ 生成完成:`);
-    console.log(`   输出路径操作数: ${resultPath.ops.length}`);
-    console.log('=====================================\n');
+    seamLog(`\n✅ 生成完成:`);
+    seamLog(`   输出路径操作数: ${resultPath.ops.length}`);
+    seamLog('=====================================\n');
     
     return resultPath;
   }
@@ -296,7 +307,7 @@ export class SeamAllowanceGenerator {
         }
         
         // ❌ Miter 超出限制（爆角风险）→ 切换到 Round Join
-        console.warn(`[缝份] ⚠️ Miter超限 (${miterLength.toFixed(2)}cm > ${maxAllowedMiter.toFixed(2)}cm)，切换到Round Join`);
+        seamWarn(`⚠️ Miter超限 (${miterLength.toFixed(2)}cm > ${maxAllowedMiter.toFixed(2)}cm)，切换到Round Join`);
       }
       
       // 默认：使用 Round Join
