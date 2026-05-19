@@ -453,6 +453,52 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         raise e
 
 
+def _calculate_industrial_biceps_width(cuff_width, chest_width, sleeve_length):
+    """
+    基于工业标准计算腋下半围（bicepWidth）
+    
+    工业比例规则：
+    - 袖肥（腋下）与袖口的比例应为 1.5:1 ~ 1.8:1
+    - 基于胸宽的参考：袖肥 ≈ 胸宽 × 0.28~0.32（半围）
+    - 长袖比短袖略宽
+    
+    参数：
+        cuff_width: 袖口半围 (cm)
+        chest_width: 胸宽 (cm)
+        sleeve_length: 袖长 (cm)
+    
+    返回：
+        合理的腋下半围 (cm)
+    """
+    
+    # 方法1：基于袖口比例（主要方法）
+    # 工业标准：长袖T恤 腋下/袖口 ≈ 1.6~1.75
+    if sleeve_length > 40:  # 长袖
+        ratio = 1.65
+    elif sleeve_length > 25:  # 中袖/七分袖
+        ratio = 1.55
+    else:  # 短袖
+        ratio = 1.45
+    
+    bicep_from_cuff = cuff_width * ratio
+    
+    # 方法2：基于胸宽（参考值）
+    bicep_from_chest = chest_width * 0.30  # 工业标准范围 0.28~0.32
+    
+    # 取两种方法的平均值，偏向袖口比例（更符合实际成衣）
+    final_bicep = (bicep_from_cuff * 0.6 + bicep_from_chest * 0.4)
+    
+    # 四舍五入到0.5cm精度（工业制版习惯）
+    final_bicep = round(final_bicep * 2) / 2
+    
+    print(f"[工业计算] bicepsWidth 计算:")
+    print(f"   基于袖口 ({cuff_width} × {ratio}): {bicep_from_cuff:.2f} cm")
+    print(f"   基于胸宽 ({chest_width} × 0.30): {bicep_from_chest:.2f} cm")
+    print(f"   最终值: {final_bicep} cm")
+    
+    return final_bicep
+
+
 def _normalize_garment_input(measurements):
     """
     将输入数据规范化为 garmentInput 格式（实物测量数据）
@@ -549,7 +595,7 @@ def _normalize_garment_input(measurements):
         },
         'sleeve': {
             'sleeveLength': sleeve_length,
-            'bicepWidth': bicep_width if bicep_width is not None else chest_width * 0.38,  # 优先使用用户输入
+            'bicepWidth': bicep_width if bicep_width is not None else self._calculate_industrial_biceps_width(cuff_width, chest_width, sleeve_length),  # 工业标准计算
             'cuffWidth': cuff_width,           # 直接使用用户输入的半围值，不翻倍
             'sleeveCapHeight': sleeve_cap_height if sleeve_cap_height is not None else armhole_depth * 0.45  # 优先使用用户输入
         }
@@ -558,11 +604,19 @@ def _normalize_garment_input(measurements):
     print(f"[参数转换] 扁平化 → 嵌套结构")
     print(f"  输入: chestWidth={chest_width}, shoulderWidth={shoulder_width}")
     print(f"  转换: front.chestWidth={chest_width}, back.chestWidth={chest_width}")
+    
+    # 计算最终的bicepWidth（用于日志显示）
+    final_bicep = bicep_width if bicep_width is not None else _calculate_industrial_biceps_width(cuff_width, chest_width, sleeve_length)
+    
     print(f"  🔍 [最终sleeve参数]")
-    print(f"     sleeveLength: {sleeve_length}")
-    print(f"     bicepWidth: {bicep_width if bicep_width is not None else chest_width * 0.38} (用户输入: {bicep_width})")
-    print(f"     cuffWidth: {cuff_width} ✅")
-    print(f"     sleeveCapHeight: {sleeve_cap_height if sleeve_cap_height is not None else armhole_depth * 0.45} (用户输入: {sleeve_cap_height})")
+    print(f"     sleeveLength: {sleeve_length} cm")
+    if bicep_width is not None:
+        print(f"     bicepWidth: {final_bicep} cm ✅ (用户输入)")
+    else:
+        print(f"     bicepWidth: {final_bicep} cm 📐 (工业标准自动计算)")
+    print(f"     cuffWidth: {cuff_width} cm ✅ (用户输入)")
+    print(f"     sleeveCapHeight: {sleeve_cap_height if sleeve_cap_height is not None else armhole_depth * 0.45} cm (用户输入: {sleeve_cap_height})")
+    print(f"  ⚠️ 袖子比例: 腋下/袖口 = {final_bicep/cuff_width:.2f}:1 (工业标准 1.5~1.8)")
     
     return nested_result
 
