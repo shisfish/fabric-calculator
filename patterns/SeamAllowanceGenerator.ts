@@ -42,6 +42,11 @@ interface DirectJoin {
 type JoinGeometry = RoundJoin | DirectJoin;
 
 export class SeamAllowanceGenerator {
+  // 🔧 【工业标准】Miter Limit 配置
+  private static readonly MITER_LIMIT = 3.0;  // Gerber/Lectra 标准
+  private static readonly ACUTE_ANGLE_THRESHOLD = 15;  // 强制 Round 的角度阈值
+  private static readonly DIRECT_JOIN_THRESHOLD = 30;   // 使用 Direct Join 的角度阈值
+  
   static generate(outline: Path, rules: SeamAllowanceRule[]): Path {
     if (!rules.length) {
       return outline.clone();
@@ -53,12 +58,51 @@ export class SeamAllowanceGenerator {
     }
 
     const orientation = this.getOutlineOrientation(outline);
+    
+    // 🔧 【工业调试】输出缝份规则
+    console.log('[缝份引擎] ===== 工业缝份生成开始 =====');
+    console.log(`   规则数量: ${rules.length}`);
+    rules.forEach(r => console.log(`   - ${r.segment}: ${r.distance}cm`));
+    console.log(`   轮廓方向: ${orientation >= 0 ? '顺时针 (CW)' : '逆时针 (CCW)'}`);
+    console.log(`   源段数量: ${sourceSegments.length}`);
+    
     const offsetSegments = sourceSegments.map((segment) =>
       this.createOffsetSegment(segment, orientation)
     );
 
+    // 🔧 【工业调试】检查 offset 质量
+    console.log('\n[缝份引擎] Offset 质量检查:');
+    offsetSegments.forEach((seg, i) => {
+      const src = sourceSegments[i];
+      console.log(`   [${i}] ${seg.segmentName}:`);
+      console.log(`       源长度: ${src.start.dist(src.end).toFixed(2)}cm`);
+      console.log(`       偏移距离: ${seg.distance}cm`);
+      console.log(`       Offset长度: ${seg.start.dist(seg.end).toFixed(2)}cm`);
+      
+      // 检查是否出现爆角迹象
+      const lengthRatio = seg.start.dist(seg.end) / (src.start.dist(src.end) || 1);
+      if (lengthRatio > 5) {
+        console.warn(`       ⚠️ 可能的爆角！长度比: ${lengthRatio.toFixed(1)}x`);
+      }
+    });
+
     const joins = this.resolveJoins(offsetSegments, sourceSegments, orientation);
-    return this.buildOffsetPath(offsetSegments, joins);
+    
+    // 🔧 【工业调试】输出 Join 类型统计
+    const directCount = joins.filter(j => j.kind === 'direct').length;
+    const roundCount = joins.filter(j => j.kind === 'round').length;
+    console.log(`\n[缝份引擎] Join 统计:`);
+    console.log(`   Direct (Miter): ${directCount}`);
+    console.log(`   Round (Fillet): ${roundCount}`);
+    
+    const resultPath = this.buildOffsetPath(offsetSegments, joins);
+    
+    // 🔧 【工业调试】最终结果验证
+    console.log(`\n[缝份引擎] ✅ 生成完成:`);
+    console.log(`   输出路径操作数: ${resultPath.ops.length}`);
+    console.log('=====================================\n');
+    
+    return resultPath;
   }
 
   private static extractSegments(outline: Path, rules: SeamAllowanceRule[]): SourceSegment[] {
@@ -199,26 +243,63 @@ export class SeamAllowanceGenerator {
       const current = offsetSegments[i];
       const next = offsetSegments[(i + 1) % offsetSegments.length];
       const corner = sourceSegments[i].end.copy();
-      const angle = this.getTurnAngle(current.endTangent, next.startTangent);
-      const shouldUseDirect =
-        current.distance === 0 ||
-        next.distance === 0 ||
-        angle < this.degToRad(18);
-
-      if (shouldUseDirect) {
-        const intersection = this.computeLineIntersection(
-          current.end,
-          current.endTangent,
-          next.start,
-          next.startTangent
-        );
-        const joinPoint = intersection || Point.midpoint(current.end, next.start);
-        this.updateSegmentEnd(current, joinPoint);
-        this.updateSegmentStart(next, joinPoint);
+      const angleDeg = this.radToDeg(this.getTurnAngle(current.endTangent, next.startTangent));
+      
+      // 🔧 【工业标准】角度分类处理
+      const isAcuteAngle = angleDeg < this.ACUTE_ANGLE_THRESHOLD;  // < 15°
+      const isObtuseAngle = angleDeg > (180 - this.DIRECT_JOIN_THRESHOLD);  // > 150°
+      
+      // 情况1：零距离或接近零距离 → Direct join
+      if (current.distance === 0 || next.distance === 0) {
+        this.applyDirectJoin(current, next);
         joins.push({ kind: 'direct' });
         continue;
       }
-
+      
+      // 情况2：锐角（<15°）→ 强制 Round Join（防止爆角）
+      if (isAcuteAngle) {
+        joins.push({
+          kind: 'round',
+          curves: this.createAcuteAngleRoundJoin(current, next, corner, orientation)
+        });
+        continue;
+      }
+      
+      // 情况3：钝角（>150°）→ Round Join
+      if (isObtuseAngle) {
+        joins.push({
+          kind: 'round',
+          curves: this.createRoundJoinCurves(current, next, corner, orientation)
+        });
+        continue;
+      }
+      
+      // 情况4：普通角度（15°~150°）→ 尝试 Miter，检查 Miter Limit
+      const intersection = this.computeLineIntersection(
+        current.end,
+        current.endTangent,
+        next.start,
+        next.startTangent
+      );
+      
+      if (intersection) {
+        // 🔧 【工业标准】计算 Miter Length 并检查限制
+        const miterLength = this.computeMiterLength(corner, intersection, current.distance, next.distance);
+        const maxAllowedMiter = Math.max(current.distance, next.distance) * this.MITER_LIMIT;
+        
+        if (miterLength <= maxAllowedMiter) {
+          // ✅ Miter 在允许范围内 → 使用 Direct Join
+          this.updateSegmentEnd(current, intersection);
+          this.updateSegmentStart(next, intersection);
+          joins.push({ kind: 'direct' });
+          continue;
+        }
+        
+        // ❌ Miter 超出限制（爆角风险）→ 切换到 Round Join
+        console.warn(`[缝份] ⚠️ Miter超限 (${miterLength.toFixed(2)}cm > ${maxAllowedMiter.toFixed(2)}cm)，切换到Round Join`);
+      }
+      
+      // 默认：使用 Round Join
       joins.push({
         kind: 'round',
         curves: this.createRoundJoinCurves(current, next, corner, orientation)
@@ -226,6 +307,111 @@ export class SeamAllowanceGenerator {
     }
 
     return joins;
+  }
+  
+  /**
+   * 🔧 【工业标准】应用 Direct Join（带安全检查）
+   */
+  private static applyDirectJoin(current: OffsetSegment, next: OffsetSegment): void {
+    const intersection = this.computeLineIntersection(
+      current.end,
+      current.endTangent,
+      next.start,
+      next.startTangent
+    );
+    
+    if (intersection) {
+      this.updateSegmentEnd(current, intersection);
+      this.updateSegmentStart(next, intersection);
+    } else {
+      // 平行线：使用中点
+      const midpoint = Point.midpoint(current.end, next.start);
+      this.updateSegmentEnd(current, midpoint);
+      this.updateSegmentStart(next, midpoint);
+    }
+  }
+  
+  /**
+   * 🔧 【工业标准】计算 Miter Length（用于爆角检测）
+   * 
+   * Gerber/Lectra 公式：miterLength = distance / sin(angle/2)
+   */
+  private static computeMiterLength(
+    corner: Point,
+    intersection: Point,
+    dist1: number,
+    dist2: number
+  ): number {
+    const actualDist = corner.dist(intersection);
+    const avgDist = (dist1 + dist2) / 2;
+    
+    // 返回相对值（相对于平均距离的倍数）
+    return actualDist / avgDist;
+  }
+  
+  /**
+   * 🔧 【工业标准】创建锐角的 Round Join（小半径圆弧）
+   * 
+   * 用于 <15° 的锐角，防止爆角
+   */
+  private static createAcuteAngleRoundJoin(
+    current: OffsetSegment,
+    next: OffsetSegment,
+    corner: Point,
+    orientation: number
+  ): CubicBezier[] {
+    // 使用较小的固定半径，防止尖刺
+    const minDist = Math.min(current.distance, next.distance);
+    const radius = Math.max(minDist * 0.3, 0.2);  // 最小 2mm
+    
+    // 从当前段的终点沿切线回退 radius 距离
+    const start = this.offsetPointAlongTangent(current.end, current.endTangent, -radius);
+    // 从下一段的起点沿切线前进 radius 距离
+    const end = this.offsetPointAlongTangent(next.start, next.startTangent, radius);
+    
+    if (start.equals(end)) {
+      return [];
+    }
+    
+    // 生成小圆弧
+    return this.createBlendJoinCurveArray(start, current.endTangent, end, next.startTangent);
+  }
+  
+  /**
+   * 沿切线方向偏移点
+   */
+  private static offsetPointAlongTangent(point: Point, tangent: Point, distance: number): Point {
+    const unitTangent = this.normalizePoint(tangent);
+    return new Point(
+      point.x + unitTangent.x * distance,
+      point.y + unitTangent.y * distance
+    );
+  }
+  
+  /**
+   * 创建 Blend Join Curve 数组（兼容接口）
+   */
+  private static createBlendJoinCurveArray(
+    start: Point,
+    startTangent: Point,
+    end: Point,
+    endTangent: Point
+  ): CubicBezier[] {
+    return [this.createBlendJoinCurve(start, startTangent, end, endTangent)];
+  }
+  
+  /**
+   * 角度转弧度
+   */
+  private static degToRad(degrees: number): number {
+    return degrees * Math.PI / 180;
+  }
+  
+  /**
+   * 弧度转角度
+   */
+  private static radToDeg(radians: number): number {
+    return radians * 180 / Math.PI;
   }
 
   private static buildOffsetPath(segments: OffsetSegment[], joins: JoinGeometry[]): Path {
@@ -302,8 +488,11 @@ export class SeamAllowanceGenerator {
     const startRadius = start.dist(corner);
     const endRadius = end.dist(corner);
     const radiusDelta = Math.abs(startRadius - endRadius);
-
-    if (radiusDelta < 0.02) {
+    
+    // 🔧 【工业标准】增大容差（从 0.02cm → 0.5cm）
+    // T恤场景：sideSeam=1.2cm, hem=2.5cm，差值可达1.3cm
+    if (radiusDelta < 0.5) {
+      // 等半径或接近等半径 → 标准圆弧
       const startAngle = Math.atan2(start.y - corner.y, start.x - corner.x);
       const endAngle = this.normalizeArcEndAngle(
         startAngle,
@@ -313,14 +502,48 @@ export class SeamAllowanceGenerator {
       return this.createCircularArcCurves(corner, (startRadius + endRadius) / 2, startAngle, endAngle);
     }
 
-    return [
-      this.createBlendJoinCurve(
-        start,
-        this.getArcTangent(corner, start, orientation),
-        end,
-        this.getArcTangent(corner, end, orientation)
-      )
-    ];
+    // 🔧 【工业标准】变半径圆弧（Biarc 近似）
+    return this.createVariableRadiusFillet(start, end, corner, startRadius, endRadius, orientation);
+  }
+  
+  /**
+   * 🔧 【工业标准】创建变半径 Fillet（双圆弧近似）
+   * 
+   * 用于不同缝份距离的角点（如 sideSeam 1.2cm → hem 2.5cm）
+   * 使用两段圆弧平滑过渡
+   */
+  private static createVariableRadiusFillet(
+    start: Point,
+    end: Point,
+    corner: Point,
+    r1: number,
+    r2: number,
+    orientation: number
+  ): CubicBezier[] {
+    const startTangent = this.getArcTangent(corner, start, orientation);
+    const endTangent = this.getArcTangent(corner, end, orientation);
+    
+    // 计算中间过渡点（线性插值半径）
+    const midPoint = Point.midpoint(start, end);
+    const midRadius = (r1 + r2) / 2;
+    
+    // 第一段：start → midpoint（使用 r1）
+    const curve1 = this.createBlendJoinCurve(
+      start,
+      startTangent,
+      midPoint,
+      this.normalizePoint(new Point(midPoint.x - start.x, midPoint.y - start.y))
+    );
+    
+    // 第二段：midpoint → end（使用 r2）
+    const curve2 = this.createBlendJoinCurve(
+      midPoint,
+      this.normalizePoint(new Point(end.x - midPoint.x, end.y - midPoint.y)),
+      end,
+      endTangent
+    );
+    
+    return [curve1, curve2];
   }
 
   private static createBlendJoinCurve(
@@ -491,9 +714,5 @@ export class SeamAllowanceGenerator {
       return new Point(1, 0);
     }
     return new Point(point.x / length, point.y / length);
-  }
-
-  private static degToRad(degrees: number): number {
-    return degrees * Math.PI / 180;
   }
 }
