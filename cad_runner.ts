@@ -131,11 +131,17 @@ if (input.mode === 'preview') {
         
         piecePathMap.set(piece.name, pathOps);
         
-        // 保存原始数据用于未排料时的fallback
+        // 保存原始数据用于未排料时的fallback（包含缝份数据）
         pieceOriginalData.set(piece.name, {
             cutCount: piece.cutCount || 1,
             onFold: piece.onFold || false,
             seamAllowance: piece.seamAllowance || 0,
+            seamAllowancePathOps: (piece.seamAllowancePath?.ops || []).map((op: any) => ({
+                type: op.type,
+                to: op.to ? { x: op.to.x, y: op.to.y } : null,
+                cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+                cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+            })),
             points: piece.points || {}
         });
     }
@@ -153,6 +159,7 @@ if (input.mode === 'preview') {
             // ✅ 已成功排料：使用实际位置
             for (const pp of placedInstances) {
                 const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
+                const originalData = pieceOriginalData.get(piece.name);
                 piecesData.push({
                     name: piece.name,
                     x: pp.x,
@@ -164,7 +171,10 @@ if (input.mode === 'preview') {
                     onFold: false,
                     rotation: pp.rotation,
                     placed: true,  // 标记为已放置
-                    pathOps: piecePathMap.get(piece.name) || []
+                    pathOps: piecePathMap.get(piece.name) || [],
+                    // 🔧 【缝份修复】添加缝份数据
+                    seamAllowance: originalData?.seamAllowance || 0,
+                    seamAllowancePathOps: originalData?.seamAllowancePathOps || []
                 });
             }
         } else {
@@ -221,7 +231,10 @@ if (input.mode === 'preview') {
                     onFold: originalPiece.onFold,
                     rotation: 0,
                     placed: false,  // 标记为未放置
-                    pathOps: pathOps
+                    pathOps: pathOps,
+                    // 🔧 【缝份修复】添加缝份数据
+                    seamAllowance: originalPiece.seamAllowance || 0,
+                    seamAllowancePathOps: originalPiece.seamAllowancePathOps || []
                 });
             }
         }
@@ -273,6 +286,16 @@ if (input.mode === 'preview') {
             }
             
             logger.info(`           排料状态: ${piece.placed ? '✅ 成功' : '⚠️ 未排料（但已保留）'}`);
+            
+            // 🔧 【缝份调试】检查缝份数据
+            logger.debug(`         🧵 缝份数据:`);
+            logger.debug(`            seamAllowance: ${piece.seamAllowance}`);
+            logger.debug(`            seamAllowancePathOps数量: ${piece.seamAllowancePathOps?.length || 0}`);
+            if (piece.seamAllowancePathOps && piece.seamAllowancePathOps.length > 0) {
+                logger.info(`           ✅ 缝份路径已包含 (${piece.seamAllowancePathOps.length} ops)`);
+            } else {
+                logger.error(`           ❌ 缺少缝份路径数据！`);
+            }
         }
     }
     
