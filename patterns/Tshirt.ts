@@ -47,6 +47,9 @@ export class TshirtPatternGenerator {
       (params.frontPanel.armholeDepth + params.backPanel.armholeDepth) / 2
     );
 
+    logger.info(`\n🧵 ===== 缝份生成检查 =====`);
+    logger.info(`   params.seamAllowance = ${params.seamAllowance} (类型: ${typeof params.seamAllowance})`);
+    
     if (params.seamAllowance && params.seamAllowance > 0) {
       const rules = [
         { segment: 'shoulder', distance: 1.0 },
@@ -57,10 +60,21 @@ export class TshirtPatternGenerator {
         { segment: 'sleeveHem', distance: 2.5 }
       ];
 
+      logger.info(`   ✅ 开始生成缝份路径...`);
+      
       backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, rules);
       frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, rules);
       sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, rules);
+      
+      logger.info(`   ✅ 缝份路径生成完成:`);
+      logger.info(`      back: ${backPiece.seamAllowancePath?.ops?.length || 0} ops`);
+      logger.info(`      front: ${frontPiece.seamAllowancePath?.ops?.length || 0} ops`);
+      logger.info(`      sleeve: ${sleevePiece.seamAllowancePath?.ops?.length || 0} ops`);
+    } else {
+      logger.error(`   ❌ 跳过缝份生成！seamAllowance=${params.seamAllowance}`);
     }
+    
+    logger.info(`=========================\n`);
 
     pieces.push(backPiece, frontPiece, sleevePiece);
     

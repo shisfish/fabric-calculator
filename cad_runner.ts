@@ -94,6 +94,18 @@ if (input.mode === 'preview') {
     }));
 
     logger.info(`Preview模式: 生成${result.length}个裁片`);
+    
+    // 🔍 【缝份调试】检查每个裁片的seamAllowance值
+    for (let i = 0; i < result.length; i++) {
+        const p = result[i];
+        logger.info(`   [${i}] ${p.name}: seamAllowance=${p.seamAllowance}, seamAllowancePathOps数量=${p.seamAllowancePathOps?.length || 0}`);
+        if (p.seamAllowancePathOps && p.seamAllowancePathOps.length > 0) {
+            logger.info(`       ✅ 缝份路径已生成 (${p.seamAllowancePathOps.length} 个操作)`);
+        } else {
+            logger.error(`       ❌ 缝份路径为空！params.seamAllowance=${params.seamAllowance}`);
+        }
+    }
+    
     console.log(JSON.stringify(result)); // 唯一的stdout输出点 - API响应
 } else {
     const engine = new NestEngine({ fabricWidth });
