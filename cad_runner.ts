@@ -1,8 +1,87 @@
 import { TshirtPatternGenerator, GarmentMeasurementAdapter, FrontPatternGenerator, type GarmentParams, type FrontPatternParams } from './patterns/index.js';
 import { NestEngine } from './nesting/index.js';
 import { logger } from './utils/CADLogger.js';
+import { Point, Path } from './geometry/index.js';
 
 logger.info('CAD引擎启动');
+
+/**
+ * 🔧 【工业标准】对称展开 onFold 裁片
+ * 
+ * 将半片裁片（如后片）沿折叠线镜像，生成完整裁片
+ * 用于排料时的真实形状显示
+ */
+function expandOnFoldPiece(
+  pathOps: Array<any>,
+  seamAllowancePathOps: Array<any>,
+  foldAxis: 'y' | 'x' = 'y'
+): { pathOps: Array<any>, seamAllowancePathOps: Array<any>, width: number } {
+  if (!pathOps || pathOps.length === 0) {
+    return { pathOps: [], seamAllowancePathOps: [], width: 0 };
+  }
+  
+  // 定义折叠线（Y轴：x=0）
+  const lineStart = new Point(0, 0);
+  const lineEnd = foldAxis === 'y' ? new Point(0, 1) : new Point(1, 0);
+  
+  // 镜像路径操作
+  const mirroredOps = pathOps.map(op => {
+    const mirroredOp: any = { 
+      type: op.type,
+      segmentName: op.segmentName,
+      segmentType: op.segmentType
+    };
+    
+    if (op.to) {
+      const toPoint = new Point(op.to.x, op.to.y);
+      mirroredOp.to = toPoint.mirror(lineStart, lineEnd);
+    }
+    if (op.cp1) {
+      const cp1Point = new Point(op.cp1.x, op.cp1.y);
+      mirroredOp.cp1 = cp1Point.mirror(lineStart, lineEnd);
+    }
+    if (op.cp2) {
+      const cp2Point = new Point(op.cp2.x, op.cp2.y);
+      mirroredOp.cp2 = cp2Point.mirror(lineStart, lineEnd);
+    }
+    
+    return mirroredOp;
+  });
+  
+  // 镜像缝份路径
+  const mirroredSeamOps = seamAllowancePathOps.map(op => {
+    const mirroredOp: any = { type: op.type };
+    
+    if (op.to) {
+      const toPoint = new Point(op.to.x, op.to.y);
+      mirroredOp.to = toPoint.mirror(lineStart, lineEnd);
+    }
+    if (op.cp1) {
+      const cp1Point = new Point(op.cp1.x, op.cp1.y);
+      mirroredOp.cp1 = cp1Point.mirror(lineStart, lineEnd);
+    }
+    if (op.cp2) {
+      const cp2Point = new Point(op.cp2.x, op.cp2.y);
+      mirroredOp.cp2 = cp2Point.mirror(lineStart, lineEnd);
+    }
+    
+    return mirroredOp;
+  });
+  
+  // 计算展开后的总宽度
+  let maxX = 0;
+  [...pathOps, ...mirroredOps].forEach(op => {
+    if (op.to && op.to.x > maxX) maxX = op.to.x;
+  });
+  
+  logger.info(`   🔄 对称展开: ${pathOps.length} ops → ${pathOps.length + mirroredOps.length} ops (宽度: ${maxX.toFixed(1)}cm)`);
+  
+  return {
+    pathOps: [...pathOps, ...mirroredOps],
+    seamAllowancePathOps: [...seamAllowancePathOps, ...mirroredSeamOps],
+    width: maxX
+  };
+}
 
 const input = JSON.parse(process.argv[2]);
 
@@ -177,21 +256,37 @@ if (input.mode === 'preview') {
             for (const pp of placedInstances) {
                 const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
                 const originalData = pieceOriginalData.get(piece.name);
+                
+                // 🔧 【工业标准】处理 onFold 裁片的对称展开
+                let finalPathOps = piecePathMap.get(piece.name) || [];
+                let finalSeamOps = (originalData?.seamAllowancePathOps || []);
+                let finalWidth = bbox.width;
+                let isExpanded = false;
+                
+                if (piece.onFold) {
+                    logger.info(`   🔄 检测到 onFold 裁片 "${piece.name}"，进行对称展开...`);
+                    const expanded = expandOnFoldPiece(finalPathOps, finalSeamOps, 'y');
+                    finalPathOps = expanded.pathOps;
+                    finalSeamOps = expanded.seamAllowancePathOps;
+                    finalWidth = expanded.width;
+                    isExpanded = true;
+                }
+                
                 piecesData.push({
                     name: piece.name,
                     x: pp.x,
                     y: pp.y,
-                    width: bbox.width,
+                    width: isExpanded ? finalWidth : bbox.width,
                     height: bbox.height,
                     area: pp.polygon.getArea(),
                     cutCount: 1,
-                    onFold: false,
+                    onFold: isExpanded ? false : piece.onFold,  // 展开后不再是 onFold
                     rotation: pp.rotation,
                     placed: true,  // 标记为已放置
-                    pathOps: piecePathMap.get(piece.name) || [],
+                    pathOps: finalPathOps,
                     // 🔧 【缝份修复】添加缝份数据
                     seamAllowance: originalData?.seamAllowance || 0,
-                    seamAllowancePathOps: originalData?.seamAllowancePathOps || []
+                    seamAllowancePathOps: finalSeamOps
                 });
             }
         } else {

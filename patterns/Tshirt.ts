@@ -51,20 +51,43 @@ export class TshirtPatternGenerator {
     logger.info(`   params.seamAllowance = ${params.seamAllowance} (类型: ${typeof params.seamAllowance})`);
     
     if (params.seamAllowance && params.seamAllowance > 0) {
-      const rules = [
-        { segment: 'shoulder', distance: params.seamAllowance },
-        { segment: 'armhole', distance: params.seamAllowance },
-        { segment: 'sideSeam', distance: params.seamAllowance },
-        { segment: 'neckline', distance: params.seamAllowance },
-        { segment: 'hem', distance: params.seamAllowance },
-        { segment: 'sleeveHem', distance: params.seamAllowance }
+      const seamDist = params.seamAllowance;
+      
+      // 后片缝份规则：折叠线（closure）不需要缝份
+      const backRules = [
+        { segment: 'neckline', distance: seamDist },
+        { segment: 'shoulder', distance: seamDist },
+        { segment: 'armhole', distance: seamDist },
+        { segment: 'sideSeam', distance: seamDist },
+        { segment: 'hem', distance: seamDist }
+        // 注意：不包含 'closure' 段，默认 distance=0
+      ];
+      
+      // 前片缝份规则：四周都加缝份（包括折叠线）
+      const frontRules = [
+        { segment: 'neckline', distance: seamDist },
+        { segment: 'shoulder', distance: seamDist },
+        { segment: 'armhole', distance: seamDist },
+        { segment: 'sideSeam', distance: seamDist },
+        { segment: 'hem', distance: seamDist },
+        { segment: 'closure', distance: seamDist }  // 前中折叠线也加缝份
+      ];
+      
+      // 袖子缝份规则：正常四周
+      const sleeveRules = [
+        { segment: 'sleeveCap', distance: seamDist },
+        { segment: 'frontSeam', distance: seamDist },
+        { segment: 'backSeam', distance: seamDist },
+        { segment: 'sleeveHem', distance: seamDist }
       ];
 
       logger.info(`   ✅ 开始生成缝份路径...`);
+      logger.info(`   后片规则: 折叠线(closure)不加缝份`);
+      logger.info(`   前片规则: 四周都加缝份(含closure)`);
       
-      backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, rules);
-      frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, rules);
-      sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, rules);
+      backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, backRules);
+      frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, frontRules);
+      sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, sleeveRules);
       
       logger.info(`   ✅ 缝份路径生成完成:`);
       logger.info(`      back: ${backPiece.seamAllowancePath?.ops?.length || 0} ops`);
