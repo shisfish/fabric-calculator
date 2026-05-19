@@ -83,12 +83,21 @@ if (input.mode === 'preview') {
             cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
         })),
         seamAllowance: piece.seamAllowance || 0,
-        seamAllowancePathOps: (piece.seamAllowancePath?.ops || []).map((op: any) => ({
-            type: op.type,
-            to: op.to ? { x: op.to.x, y: op.to.y } : null,
-            cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
-            cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-        })),
+        seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
+            .map((op: any) => ({
+                type: op.type,
+                to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
+                    ? { x: op.to.x, y: op.to.y } 
+                    : null,
+                cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
+                    ? { x: op.cp1.x, y: op.cp1.y } 
+                    : null,
+                cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
+                    ? { x: op.cp2.x, y: op.cp2.y } 
+                    : null
+            }))
+            // 🔧 【工业标准】过滤掉无效操作（to 为 null 的操作）
+            .filter((op: any) => op.to !== null),
         cutCount: piece.cutCount,
         onFold: piece.onFold
     }));
@@ -136,12 +145,20 @@ if (input.mode === 'preview') {
             cutCount: piece.cutCount || 1,
             onFold: piece.onFold || false,
             seamAllowance: piece.seamAllowance || 0,
-            seamAllowancePathOps: (piece.seamAllowancePath?.ops || []).map((op: any) => ({
-                type: op.type,
-                to: op.to ? { x: op.to.x, y: op.to.y } : null,
-                cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
-                cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-            })),
+            seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
+                .map((op: any) => ({
+                    type: op.type,
+                    to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
+                        ? { x: op.to.x, y: op.to.y } 
+                        : null,
+                    cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
+                        ? { x: op.cp1.x, y: op.cp1.y } 
+                        : null,
+                    cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
+                        ? { x: op.cp2.x, y: op.cp2.y } 
+                        : null
+                }))
+                .filter((op: any) => op.to !== null),
             points: piece.points || {}
         });
     }

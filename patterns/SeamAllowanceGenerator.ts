@@ -12,6 +12,86 @@ const seamWarn = (message: string): void => {
   process.stderr.write(`[SEAM-WARN] ${message}\n`);
 };
 
+/**
+ * 🔧 【工业标准】验证点坐标有效性
+ * 
+ * Gerber/Lectra 标准：所有坐标必须是有限数（非 NaN、非 Infinite、非 null/undefined）
+ */
+function isValidPoint(point: any): boolean {
+  if (!point || typeof point !== 'object') return false;
+  
+  const x = point.x;
+  const y = point.y;
+  
+  // 检查是否存在且为有限数
+  const isXValid = typeof x === 'number' && Number.isFinite(x);
+  const isYValid = typeof y === 'number' && Number.isFinite(y);
+  
+  return isXValid && isYValid;
+}
+
+/**
+ * 🔧 【工业标准】清洗路径操作数据
+ * 
+ * 移除无效坐标，确保输出的 JSON 符合 CAD 系统要求
+ */
+function sanitizePathOps(ops: Array<any>): Array<any> {
+  const sanitized: Array<any> = [];
+  let removedCount = 0;
+  
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    const sanitizedOp: any = { type: op.type };
+    
+    // 验证并清洗 to 坐标
+    if (op.to) {
+      if (isValidPoint(op.to)) {
+        sanitizedOp.to = { x: op.to.x, y: op.to.y };
+      } else {
+        removedCount++;
+        seamWarn(`操作 [${i}] ${op.type}: 无效的 to 坐标 (${JSON.stringify(op.to)})，已移除`);
+        continue;  // 跳过整个操作
+      }
+    }
+    
+    // 验证并清洗 cp1 坐标
+    if (op.cp1) {
+      if (isValidPoint(op.cp1)) {
+        sanitizedOp.cp1 = { x: op.cp1.x, y: op.cp1.y };
+      } else {
+        sanitizedOp.cp1 = null;
+        seamWarn(`操作 [${i}] ${op.type}: 无效的 cp1 坐标，已设为 null`);
+      }
+    } else {
+      sanitizedOp.cp1 = null;
+    }
+    
+    // 验证并清洗 cp2 坐标
+    if (op.cp2) {
+      if (isValidPoint(op.cp2)) {
+        sanitizedOp.cp2 = { x: op.cp2.x, y: op.cp2.y };
+      } else {
+        sanitizedOp.cp2 = null;
+        seamWarn(`操作 [${i}] ${op.type}: 无效的 cp2 坐标，已设为 null`);
+      }
+    } else {
+      sanitizedOp.cp2 = null;
+    }
+    
+    // 保留 segment 信息
+    if (op.segmentName) sanitizedOp.segmentName = op.segmentName;
+    if (op.segmentType) sanitizedOp.segmentType = op.segmentType;
+    
+    sanitized.push(sanitizedOp);
+  }
+  
+  if (removedCount > 0) {
+    seamWarn(`数据清洗完成：移除了 ${removedCount} 个无效操作，保留 ${sanitized.length} 个有效操作`);
+  }
+  
+  return sanitized;
+}
+
 export interface SeamAllowanceRule {
   segment: string;
   distance: number;
@@ -107,6 +187,14 @@ export class SeamAllowanceGenerator {
     seamLog(`   Round (Fillet): ${roundCount}`);
     
     const resultPath = this.buildOffsetPath(offsetSegments, joins);
+    
+    // 🔧 【工业标准】数据清洗：移除无效坐标（NaN/null/Infinite）
+    const originalOpsCount = resultPath.ops.length;
+    resultPath.ops = sanitizePathOps(resultPath.ops);
+    
+    if (resultPath.ops.length !== originalOpsCount) {
+      seamWarn(`最终路径清洗: ${originalOpsCount} → ${resultPath.ops.length} 个操作`);
+    }
     
     // 🔧 【工业调试】最终结果验证
     seamLog(`\n✅ 生成完成:`);
