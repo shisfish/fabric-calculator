@@ -595,7 +595,7 @@ def _normalize_garment_input(measurements):
         },
         'sleeve': {
             'sleeveLength': sleeve_length,
-            'bicepWidth': bicep_width if bicep_width is not None else self._calculate_industrial_biceps_width(cuff_width, chest_width, sleeve_length),  # 工业标准计算
+            'bicepWidth': bicep_width if bicep_width is not None else _calculate_industrial_biceps_width(cuff_width, chest_width, sleeve_length),  # 工业标准计算
             'cuffWidth': cuff_width,           # 直接使用用户输入的半围值，不翻倍
             'sleeveCapHeight': sleeve_cap_height if sleeve_cap_height is not None else armhole_depth * 0.45  # 优先使用用户输入
         }
