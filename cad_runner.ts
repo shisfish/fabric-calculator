@@ -148,40 +148,86 @@ logger.debug('=============================================\n');
 const fabricWidth = input.fabricWidth || 145;
 
 if (input.mode === 'preview') {
-    const result = pieces.map((piece: any) => ({
-        name: piece.name,
-        points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
-            key,
-            x: p.x,
-            y: p.y
-        })),
-        pathOps: (piece.path?.ops || []).map((op: any) => ({
-            type: op.type,
-            to: op.to ? { x: op.to.x, y: op.to.y } : null,
-            cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
-            cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-        })),
-        seamAllowance: piece.seamAllowance || 0,
-        seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
-            .map((op: any) => ({
-                type: op.type,
-                to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
-                    ? { x: op.to.x, y: op.to.y } 
-                    : null,
-                cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
-                    ? { x: op.cp1.x, y: op.cp1.y } 
-                    : null,
-                cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
-                    ? { x: op.cp2.x, y: op.cp2.y } 
-                    : null
-            }))
-            // 🔧 【工业标准】过滤掉无效操作（to 为 null 的操作）
-            .filter((op: any) => op.to !== null),
-        cutCount: piece.cutCount,
-        onFold: piece.onFold
-    }));
+    // 🔧 【工业标准】Preview模式：对onFold裁片进行对称展示
+    // Preview = 设计视图（展示对称效果），Nesting = 生产视图（实际剪裁数量）
+    const result: any[] = [];
+    
+    for (const piece of pieces) {
+        if (piece.onFold) {
+            // 对称展开 onFold 裁片（用于预览展示）
+            const expanded = expandOnFoldPiece(
+                (piece.path?.ops || []).map((op: any) => ({
+                    type: op.type,
+                    to: op.to ? { x: op.to.x, y: op.to.y } : null,
+                    cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+                    cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+                })),
+                (piece.seamAllowancePath?.ops || [])
+                    .map((op: any) => ({
+                        type: op.type,
+                        to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
+                            ? { x: op.to.x, y: op.to.y } 
+                            : null,
+                        cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
+                            ? { x: op.cp1.x, y: op.cp1.y } 
+                            : null,
+                        cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
+                            ? { x: op.cp2.x, y: op.cp2.y } 
+                            : null
+                    }))
+                    .filter((op: any) => op.to !== null)
+            );
+            
+            result.push({
+                name: piece.name,
+                points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
+                    key,
+                    x: p.x,
+                    y: p.y
+                })),
+                pathOps: expanded.pathOps,
+                seamAllowance: piece.seamAllowance || 0,
+                seamAllowancePathOps: expanded.seamAllowancePathOps,
+                cutCount: piece.cutCount,
+                onFold: piece.onFold  // 保持标记，但数据已对称
+            });
+        } else {
+            // 非对折裁片，直接使用原始数据
+            result.push({
+                name: piece.name,
+                points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
+                    key,
+                    x: p.x,
+                    y: p.y
+                })),
+                pathOps: (piece.path?.ops || []).map((op: any) => ({
+                    type: op.type,
+                    to: op.to ? { x: op.to.x, y: op.to.y } : null,
+                    cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+                    cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+                })),
+                seamAllowance: piece.seamAllowance || 0,
+                seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
+                    .map((op: any) => ({
+                        type: op.type,
+                        to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
+                            ? { x: op.to.x, y: op.to.y } 
+                            : null,
+                        cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
+                            ? { x: op.cp1.x, y: op.cp1.y } 
+                            : null,
+                        cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
+                            ? { x: op.cp2.x, y: op.cp2.y } 
+                            : null
+                    }))
+                    .filter((op: any) => op.to !== null),
+                cutCount: piece.cutCount,
+                onFold: piece.onFold
+            });
+        }
+    }
 
-    logger.info(`Preview模式: 生成${result.length}个裁片`);
+    logger.info(`Preview模式: 生成${result.length}个裁片（对称展示）`);
     
     // 🔍 【缝份调试】检查每个裁片的seamAllowance值
     for (let i = 0; i < result.length; i++) {
@@ -246,6 +292,9 @@ if (input.mode === 'preview') {
     const piecesData: any[] = [];
     
     for (const piece of pieces) {
+        const originalData = pieceOriginalData.get(piece.name);
+        const cutCount = piece.cutCount || 1;
+        
         // 查找该piece的所有已放置实例
         const placedInstances = placedPolygons.filter(pp => 
             pp.id.startsWith(piece.name + '_')
@@ -253,38 +302,35 @@ if (input.mode === 'preview') {
         
         if (placedInstances.length > 0) {
             // ✅ 已成功排料：使用实际位置
-            for (const pp of placedInstances) {
+            
+            // 🔧 【工业标准】处理 onFold 裁片的对称展开
+            let finalPathOps = piecePathMap.get(piece.name) || [];
+            let finalSeamOps = (originalData?.seamAllowancePathOps || []);
+            
+            if (piece.onFold) {
+                logger.info(`   🔄 检测到 onFold 裁片 "${piece.name}"，进行对称展开...`);
+                const expanded = expandOnFoldPiece(finalPathOps, finalSeamOps, 'y');
+                finalPathOps = expanded.pathOps;
+                finalSeamOps = expanded.seamAllowancePathOps;
+            }
+            
+            // 根据cutCount生成对应数量的实例（排料模式）
+            for (let i = 0; i < cutCount; i++) {
+                const pp = placedInstances[i] || placedInstances[0];  // 如果实例不足，复用第一个
                 const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
-                const originalData = pieceOriginalData.get(piece.name);
-                
-                // 🔧 【工业标准】处理 onFold 裁片的对称展开
-                let finalPathOps = piecePathMap.get(piece.name) || [];
-                let finalSeamOps = (originalData?.seamAllowancePathOps || []);
-                let finalWidth = bbox.width;
-                let isExpanded = false;
-                
-                if (piece.onFold) {
-                    logger.info(`   🔄 检测到 onFold 裁片 "${piece.name}"，进行对称展开...`);
-                    const expanded = expandOnFoldPiece(finalPathOps, finalSeamOps, 'y');
-                    finalPathOps = expanded.pathOps;
-                    finalSeamOps = expanded.seamAllowancePathOps;
-                    finalWidth = expanded.width;
-                    isExpanded = true;
-                }
                 
                 piecesData.push({
                     name: piece.name,
-                    x: pp.x,
-                    y: pp.y,
-                    width: isExpanded ? finalWidth : bbox.width,
+                    x: pp.x + (i * 5),  // 稍微偏移避免完全重叠
+                    y: pp.y + (i * 3),
+                    width: piece.onFold ? (expandOnFoldPiece(finalPathOps, [], 'y').width) : bbox.width,
                     height: bbox.height,
                     area: pp.polygon.getArea(),
-                    cutCount: 1,
-                    onFold: isExpanded ? false : piece.onFold,  // 展开后不再是 onFold
+                    cutCount: 1,  // 每个实例都是1个
+                    onFold: false,  // 排料时已经展开
                     rotation: pp.rotation,
                     placed: true,  // 标记为已放置
                     pathOps: finalPathOps,
-                    // 🔧 【缝份修复】添加缝份数据
                     seamAllowance: originalData?.seamAllowance || 0,
                     seamAllowancePathOps: finalSeamOps
                 });

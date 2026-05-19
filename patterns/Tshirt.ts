@@ -31,14 +31,10 @@ export class TshirtPatternGenerator {
     const pieces: PatternPiece[] = [];
     
     const backPiece = this.generateBackPanel(params.backPanel, params.seamAllowance);
+    const frontPiece = this.generateFrontPanel(params.frontPanel, params.seamAllowance);
     
-    // 🔧 【工业标准】生成两个独立的前片（左+右）
-    // 前片不是对折裁片，而是两片独立剪裁
-    const leftFrontPiece = this.generateFrontPanel(params.frontPanel, params.seamAllowance, 'left');
-    const rightFrontPiece = this.generateFrontPanel(params.frontPanel, params.seamAllowance, 'right');
-    
-    // 提取前后袖窿曲线用于生成袖子（使用左前片的袖窿数据）
-    const frontArmholeOps = this.extractArmholeOps(leftFrontPiece.path);
+    // 提取前后袖窿曲线用于生成袖子（使用前片的袖窿数据）
+    const frontArmholeOps = this.extractArmholeOps(frontPiece.path);
     const backArmholeOps = this.extractArmholeOps(backPiece.path);
     
     // 使用工业袖山生成器（基于袖窿反推）
@@ -90,14 +86,12 @@ export class TshirtPatternGenerator {
       logger.info(`   前片规则: 四周都加缝份(含closure)`);
       
       backPiece.seamAllowancePath = SeamAllowanceGenerator.generate(backPiece.path, backRules);
-      leftFrontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(leftFrontPiece.path, frontRules);
-      rightFrontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(rightFrontPiece.path, frontRules);
+      frontPiece.seamAllowancePath = SeamAllowanceGenerator.generate(frontPiece.path, frontRules);
       sleevePiece.seamAllowancePath = SeamAllowanceGenerator.generate(sleevePiece.path, sleeveRules);
       
       logger.info(`   ✅ 缝份路径生成完成:`);
       logger.info(`      back: ${backPiece.seamAllowancePath?.ops?.length || 0} ops`);
-      logger.info(`      front-left: ${leftFrontPiece.seamAllowancePath?.ops?.length || 0} ops`);
-      logger.info(`      front-right: ${rightFrontPiece.seamAllowancePath?.ops?.length || 0} ops`);
+      logger.info(`      front: ${frontPiece.seamAllowancePath?.ops?.length || 0} ops`);
       logger.info(`      sleeve: ${sleevePiece.seamAllowancePath?.ops?.length || 0} ops`);
     } else {
       logger.error(`   ❌ 跳过缝份生成！seamAllowance=${params.seamAllowance}`);
@@ -105,7 +99,7 @@ export class TshirtPatternGenerator {
     
     logger.info(`=========================\n`);
 
-    pieces.push(backPiece, leftFrontPiece, rightFrontPiece, sleevePiece);
+    pieces.push(backPiece, frontPiece, sleevePiece);
     
     return pieces;
   }
@@ -234,13 +228,9 @@ export class TshirtPatternGenerator {
   }
 
   /**
-   * 前片 (Front Panel) - 生成独立的前片（左或右）
-   * 
-   * @param fp 前片参数
-   * @param seamAllowance 缝份
-   * @param side 'left' | 'left' - 指定是左前片还是右前片
+   * 前片 (Front Panel) - 半片裁片（Preview时对称显示）
    */
-  private static generateFrontPanel(fp: FrontPanelParams, seamAllowance: number, side: 'left' | 'right' = 'left'): PatternPiece {
+  private static generateFrontPanel(fp: FrontPanelParams, seamAllowance: number): PatternPiece {
     const points: Record<string, Point> = {};
     const { width: W, length: L, neckWidth: nW, neckDepth: nD, shoulderWidth: sW, armholeDepth: aD } = fp;
 
@@ -329,12 +319,12 @@ export class TshirtPatternGenerator {
     logger.info('═'.repeat(80) + '\n');
 
     return { 
-      name: side === 'left' ? 'front-left' : 'front-right', 
+      name: 'front', 
       path, 
       points, 
       seamAllowance, 
-      cutCount: 1, 
-      onFold: false,  // 前片是独立裁片，不是对折的
+      cutCount: 2,  // 前片需要2片（左+右）
+      onFold: true,  // Preview时对称显示
       frontArmholeLength: frontArmholeTotal
     };
   }
