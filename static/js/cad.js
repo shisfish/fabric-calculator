@@ -228,7 +228,23 @@ function renderPiecePreviews(result) {
     const container = document.getElementById('piece-previews-container');
     if (!container) return;
 
-    const pieces = result.pieces || [];
+    let pieces = result.pieces || [];
+    
+    // 🔧 【工业标准】Preview模式只显示3个基础裁片（对称展示）
+    // 不根据 cutCount 展开，cutCount 仅用于排料模式
+    // 强制去重：如果收到重复的名称，只保留第一个
+    const seenNames = new Set();
+    pieces = pieces.filter(piece => {
+        if (seenNames.has(piece.name)) {
+            return false;  // 过滤掉重复的
+        }
+        seenNames.add(piece.name);
+        return true;
+    });
+    
+    console.log(`[CAD] 裁片预览: 过滤前=${result.pieces?.length || 0}个, 过滤后=${pieces.length}个`, 
+                pieces.map(p => p.name));
+
     if (pieces.length === 0) {
         container.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无裁片数据</p>';
         return;
@@ -466,7 +482,21 @@ function renderSeamAllowancePreviews(result) {
     const container = document.getElementById('seam-allowance-container');
     if (!container) return;
 
-    const pieces = result.pieces || [];
+    let pieces = result.pieces || [];
+    
+    // 🔧 【工业标准】缝份预览也只显示3个基础裁片（对称展示）
+    const seenNames = new Set();
+    pieces = pieces.filter(piece => {
+        if (seenNames.has(piece.name)) {
+            return false;
+        }
+        seenNames.add(piece.name);
+        return true;
+    });
+    
+    console.log(`[CAD] 缝份预览: 过滤前=${result.pieces?.length || 0}个, 过滤后=${pieces.length}个`,
+                pieces.map(p => p.name));
+
     if (pieces.length === 0) {
         container.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无缝份数据</p>';
         return;

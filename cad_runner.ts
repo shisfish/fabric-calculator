@@ -148,86 +148,41 @@ logger.debug('=============================================\n');
 const fabricWidth = input.fabricWidth || 145;
 
 if (input.mode === 'preview') {
-    // 🔧 【工业标准】Preview模式：对onFold裁片进行对称展示
-    // Preview = 设计视图（展示对称效果），Nesting = 生产视图（实际剪裁数量）
-    const result: any[] = [];
-    
-    for (const piece of pieces) {
-        if (piece.onFold) {
-            // 对称展开 onFold 裁片（用于预览展示）
-            const expanded = expandOnFoldPiece(
-                (piece.path?.ops || []).map((op: any) => ({
-                    type: op.type,
-                    to: op.to ? { x: op.to.x, y: op.to.y } : null,
-                    cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
-                    cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-                })),
-                (piece.seamAllowancePath?.ops || [])
-                    .map((op: any) => ({
-                        type: op.type,
-                        to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
-                            ? { x: op.to.x, y: op.to.y } 
-                            : null,
-                        cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
-                            ? { x: op.cp1.x, y: op.cp1.y } 
-                            : null,
-                        cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
-                            ? { x: op.cp2.x, y: op.cp2.y } 
-                            : null
-                    }))
-                    .filter((op: any) => op.to !== null)
-            );
-            
-            result.push({
-                name: piece.name,
-                points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
-                    key,
-                    x: p.x,
-                    y: p.y
-                })),
-                pathOps: expanded.pathOps,
-                seamAllowance: piece.seamAllowance || 0,
-                seamAllowancePathOps: expanded.seamAllowancePathOps,
-                cutCount: piece.cutCount,
-                onFold: piece.onFold  // 保持标记，但数据已对称
-            });
-        } else {
-            // 非对折裁片，直接使用原始数据
-            result.push({
-                name: piece.name,
-                points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
-                    key,
-                    x: p.x,
-                    y: p.y
-                })),
-                pathOps: (piece.path?.ops || []).map((op: any) => ({
-                    type: op.type,
-                    to: op.to ? { x: op.to.x, y: op.to.y } : null,
-                    cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
-                    cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
-                })),
-                seamAllowance: piece.seamAllowance || 0,
-                seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
-                    .map((op: any) => ({
-                        type: op.type,
-                        to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
-                            ? { x: op.to.x, y: op.to.y } 
-                            : null,
-                        cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
-                            ? { x: op.cp1.x, y: op.cp1.y } 
-                            : null,
-                        cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
-                            ? { x: op.cp2.x, y: op.cp2.y } 
-                            : null
-                    }))
-                    .filter((op: any) => op.to !== null),
-                cutCount: piece.cutCount,
-                onFold: piece.onFold
-            });
-        }
-    }
+    // 🔧 【工业标准】Preview模式：显示原始单片裁片（不展开）
+    // Preview = 设计视图（展示单片纸样），Nesting = 生产视图（实际剪裁数量）
+    const result = pieces.map((piece: any) => ({
+        name: piece.name,
+        points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
+            key,
+            x: p.x,
+            y: p.y
+        })),
+        pathOps: (piece.path?.ops || []).map((op: any) => ({
+            type: op.type,
+            to: op.to ? { x: op.to.x, y: op.to.y } : null,
+            cp1: op.cp1 ? { x: op.cp1.x, y: op.cp1.y } : null,
+            cp2: op.cp2 ? { x: op.cp2.x, y: op.cp2.y } : null
+        })),
+        seamAllowance: piece.seamAllowance || 0,
+        seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
+            .map((op: any) => ({
+                type: op.type,
+                to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
+                    ? { x: op.to.x, y: op.to.y } 
+                    : null,
+                cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
+                    ? { x: op.cp1.x, y: op.cp1.y } 
+                    : null,
+                cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
+                    ? { x: op.cp2.x, y: op.cp2.y } 
+                    : null
+            }))
+            .filter((op: any) => op.to !== null),
+        cutCount: piece.cutCount,
+        onFold: piece.onFold  // 保持标记，但Preview不展开
+    }));
 
-    logger.info(`Preview模式: 生成${result.length}个裁片（对称展示）`);
+    logger.info(`Preview模式: 生成${result.length}个单片裁片`);
     
     // 🔍 【缝份调试】检查每个裁片的seamAllowance值
     for (let i = 0; i < result.length; i++) {
