@@ -330,7 +330,12 @@ def generate_cad_pieces_preview(measurements, options=None):
                 "onFold": piece['onFold'],
                 "bbox": bbox,
                 "svgPath": svg_path,
-                "area": _calculate_polygon_area(piece['points'])
+                "area": _calculate_polygon_area(piece['points']),
+                # 🔧 【关键修复】保留原始 pathOps 数据（用于前端 Canvas 渲染）
+                "pathOps": piece.get('pathOps', []),
+                "points": piece.get('points', []),
+                "seamAllowance": piece.get('seamAllowance', 0),
+                "seamAllowancePathOps": piece.get('seamAllowancePathOps', [])
             })
 
         return {"pieces": pieces_with_svg}
