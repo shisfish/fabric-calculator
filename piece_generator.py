@@ -421,14 +421,15 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
             })
 
         positions = data.get('positions', [])
+        bounds = data.get('bounds', {})
 
-        nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width)
+        nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width, bounds)
         nesting_png = _generate_nesting_png_base64(nesting_svg)
 
         # 如果SVG转换失败，使用Pillow直接生成PNG
         if not nesting_png:
             print("[PNG生成] SVG转换失败，使用Pillow直接生成...")
-            nesting_png = _generate_nesting_png_direct(data.get('pieces', []), positions, fabric_width)
+            nesting_png = _generate_nesting_png_direct(data.get('pieces', []), positions, fabric_width, bounds)
 
         return {
             "pieces": data.get('pieces', []),
@@ -731,23 +732,44 @@ def _calculate_centroid(points):
     return (cx, cy)
 
 
-def _generate_nesting_svg(pieces, positions, fabric_width):
+def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None):
     """生成排料图SVG - 基于真实Bezier路径"""
     if not positions:
         return ""
 
     scale = 1.5
     padding = 20
+    label_height = 30  # 顶部门幅标注预留空间
 
-    max_y = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
+    # 使用NestEngine返回的真实边界，确保虚线框准确包含所有裁片
+    if bounds:
+        nest_w = bounds.get('width', fabric_width)
+        nest_h = bounds.get('height', 0)
+    else:
+        nest_w = fabric_width
+        nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
-    svg_width = int(fabric_width * scale + padding * 2)
-    svg_height = int(max_y * scale + padding * 2)
+    # 如果排料高度大于门幅宽度，报告横排尺寸
+    display_w = fabric_width
+    display_h = nest_h
+
+    svg_w = int(display_w * scale + padding * 2)
+    svg_h = int(display_h * scale + padding * 2 + label_height)
 
     lines = []
-    lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_width}" height="{svg_height}">')
-    lines.append(f'<rect x="{padding}" y="{padding}" width="{fabric_width * scale}" height="{max_y * scale}" '
-                f'fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="5,3"/>')
+    lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="100%" height="auto">')
+
+    # 面料虚线框（门幅x排料长度）
+    lines.append(f'<rect x="{padding}" y="{padding + label_height}" '
+                f'width="{display_w * scale}" height="{display_h * scale}" '
+                f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
+
+    # 门幅标注 + 排料长度
+    lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
+                f'text-anchor="middle" font-size="13" fill="#555" '
+                f'font-family="sans-serif">'
+                f'面料门幅: {fabric_width} cm | 排料长度: {display_h:.1f} cm'
+                f'</text>')
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
@@ -758,7 +780,6 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
         onfold = p.get('onFold', False)
         piece_onfold_map[p.get('name', '')] = onfold
         if onfold:
-            # onFold裁片：使用原始半片路径，渲染时通过采样+镜像生成完整轮廓
             piece_path_map[p.get('name', '')] = p.get('pathOps', [])
         else:
             piece_path_map[p.get('name', '')] = p.get('expandedPathOps') or p.get('pathOps', [])
@@ -774,10 +795,8 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
-            # 使用形心作为旋转中心（必须与NestEngine一致）
             pts_list = _extract_polygon_points(path_ops)
             if onfold and pts_list:
-                # onFold: NestEngine使用完整镜像形状的形心
                 mirrored = [(-x, y) for x, y in reversed(pts_list)]
                 full_pts = pts_list + mirrored
                 cx, cy = _calculate_centroid(full_pts)
@@ -788,10 +807,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
                 cx = (bbox['minX'] + bbox['maxX']) / 2
                 cy = (bbox['minY'] + bbox['maxY']) / 2
             center_x = (pos_x + cx) * scale + padding
-            center_y = (pos_y + cy) * scale + padding
+            center_y = (pos_y + cy) * scale + padding + label_height
 
             if onfold:
-                # onFold裁片：生成连续轮廓路径（采样+镜像），避免中心线
                 path_d = _generate_onfold_full_path(path_ops, scale)
             else:
                 path_d = _convert_path_ops_to_svg_d(path_ops, scale)
@@ -803,7 +821,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
         else:
             w = 50 * scale
             h = 80 * scale
-            lines.append(f'<g transform="translate({(pos_x)*scale+padding:.1f},{(pos_y)*scale+padding:.1f}) rotate({rotation})">')
+            lines.append(f'<g transform="translate({(pos_x)*scale+padding:.1f},{(pos_y)*scale+padding+label_height:.1f}) rotate({rotation})">')
             lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
                         f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
             lines.append(f'<text x="{w/2:.1f}" y="{h/2:.1f}" text-anchor="middle" '
@@ -1015,7 +1033,7 @@ def _generate_nesting_png_base64(svg_content):
     return None
 
 
-def _generate_nesting_png_direct(pieces, positions, fabric_width):
+def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None):
     """
     直接使用Pillow生成排料PNG（不依赖外部工具）
     作为所有SVG转换方法失败时的备选方案
@@ -1025,24 +1043,48 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
 
     import base64
     import io
+    import math
     from PIL import Image, ImageDraw, ImageFont
 
     scale = 3.0
     padding = 40
+    label_height = 50  # 顶部门幅标注预留空间
 
-    max_y = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
+    # 使用NestEngine返回的真实边界
+    if bounds:
+        nest_w = bounds.get('width', fabric_width)
+        nest_h = bounds.get('height', 0)
+    else:
+        nest_w = fabric_width
+        nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
-    img_width = int(fabric_width * scale + padding * 2)
-    img_height = int(max_y * scale + padding * 2)
+    display_w = fabric_width
+    display_h = nest_h
+
+    img_width = int(display_w * scale + padding * 2)
+    img_height = int(display_h * scale + padding * 2 + label_height)
 
     img = Image.new('RGB', (img_width, img_height), '#ffffff')
     draw = ImageDraw.Draw(img)
 
-    # 绘制布料边界
-    draw.rectangle(
-        [padding, padding, padding + fabric_width * scale, padding + max_y * scale],
-        outline='#cccccc', width=2
-    )
+    # 绘制布料虚线框
+    bx1 = padding
+    by1 = padding + label_height
+    bx2 = padding + display_w * scale
+    by2 = padding + label_height + display_h * scale
+    for dash_start in range(bx1, bx2, 20):
+        dash_end = min(dash_start + 12, bx2)
+        draw.line([(dash_start, by1), (dash_end, by1)], fill='#999999', width=2)
+        draw.line([(dash_start, by2), (dash_end, by2)], fill='#999999', width=2)
+    for dash_start in range(by1, by2, 20):
+        dash_end = min(dash_start + 12, by2)
+        draw.line([(bx1, dash_start), (bx1, dash_end)], fill='#999999', width=2)
+        draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
+
+    # 门幅标注 + 排料长度
+    label_text = f"面料门幅: {fabric_width} cm | 排料长度: {display_h:.1f} cm"
+    font_label = _get_font(16)
+    draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
@@ -1054,7 +1096,6 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
         piece_path_map[p.get('name', '')] = ops
         piece_onfold_map[p.get('name', '')] = p.get('onFold', False)
 
-    font = _get_font(14)
     font_small = _get_font(10)
 
     for i, pos in enumerate(positions):
@@ -1068,7 +1109,6 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
-            # 提取多边形顶点，使用形心作为旋转中心（与NestEngine一致）
             if onfold:
                 pts = _extract_polygon_points(path_ops)
                 if pts:
@@ -1082,7 +1122,6 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
 
             if draw_pts and len(draw_pts) >= 3:
                 cx, cy = _calculate_centroid(draw_pts)
-                import math
                 rad = rotation * math.pi / 180
                 cos_r, sin_r = math.cos(rad), math.sin(rad)
                 vertices = []
@@ -1093,26 +1132,20 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
                     ry = pos_y + dx * sin_r + dy * cos_r + cy
                     vertices.append((
                         rx * scale + padding,
-                        ry * scale + padding
+                        ry * scale + padding + label_height
                     ))
                 fill_color = color + '33' if len(color) == 7 else color
                 draw.polygon(vertices, fill=fill_color, outline=color, width=2)
-                # 标签在屏幕坐标的形心位置
                 scx = sum(v[0] for v in vertices) / len(vertices)
                 scy = sum(v[1] for v in vertices) / len(vertices)
                 draw.text((scx, scy - 10), name, fill=color, font=font_small, anchor='mm')
         else:
-            # 使用bounding box作为备选
             w = 50 * scale
             h = 80 * scale
             x = pos_x * scale + padding
-            y = pos_y * scale + padding
-
+            y = pos_y * scale + padding + label_height
             draw.rectangle([x, y, x + w, y + h], fill=color + '33', outline=color, width=1)
             draw.text((x + w/2, y + h/2), f"{name}(无路径)", fill=color, font=font_small, anchor='mm')
-
-    # 绘制标题
-    draw.text((img_width // 2, 15), f"排料图 - 布宽 {fabric_width}cm", fill='#1e293b', font=font, anchor='mt')
 
     # 转换为base64
     buf = io.BytesIO()
