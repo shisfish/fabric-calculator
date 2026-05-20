@@ -734,7 +734,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
     scale = 1.5
     padding = 20
 
-    max_y = max((pos.get('y', 0) + 150) for pos in positions) if positions else 500
+    max_y = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
     svg_width = int(fabric_width * scale + padding * 2)
     svg_height = int(max_y * scale + padding * 2)
@@ -1025,7 +1025,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
     scale = 3.0
     padding = 40
 
-    max_y = max((pos.get('y', 0) + 150) for pos in positions) if positions else 500
+    max_y = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
     img_width = int(fabric_width * scale + padding * 2)
     img_height = int(max_y * scale + padding * 2)

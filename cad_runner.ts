@@ -279,7 +279,11 @@ if (input.mode === 'preview') {
             
             // 根据cutCount生成对应数量的实例（排料模式）
             for (let i = 0; i < cutCount; i++) {
-                const pp = placedInstances[i] || placedInstances[0];  // 如果实例不足，复用第一个
+                const pp = placedInstances[i];
+                if (!pp) {
+                    logger.warn(`   ⚠️ 实例${i+1}: "${piece.name}" placed ${placedInstances.length} instances but cutCount=${cutCount}, skipping`);
+                    continue;
+                }
                 const bbox = pp.polygon.translate(pp.x, pp.y).getBoundingBox();
                 
                 piecesData.push({

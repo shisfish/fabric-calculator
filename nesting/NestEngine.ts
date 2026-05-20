@@ -270,7 +270,7 @@ export class NestEngine {
           collides = true;
           // Jump below the placed piece + spacing gap, using bbox
           const pb = placedPoly.getBoundingBox();
-          const newY = pb.maxY + spacing - b.minY + 0.5;
+          const newY = pb.maxY + spacing - b.minY + 1.0;
           if (newY < lowestBelow) lowestBelow = newY;
         }
       }

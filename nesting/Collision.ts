@@ -29,7 +29,7 @@ export class SATCollision {
       return { collides: false, overlap: 0 };
     }
 
-    // Step 2: Edge intersection check (catches most overlap cases)
+    // Step 2: Edge intersection + proximity check
     const ptsA = polyA.points;
     const ptsB = polyB.points;
     const nA = ptsA.length;
@@ -43,6 +43,13 @@ export class SATCollision {
         const b2 = ptsB[(j + 1) % nB];
         if (this.segmentsIntersect(a1, a2, b1, b2)) {
           return { collides: true, overlap: 1 };
+        }
+        // Proximity check: vertex within 0.5mm of the other segment
+        // Catches near-touching cases and concave interlocking where
+        // edges pass close but don't cross
+        if (this.pointToSegmentDistance(a1, b1, b2) < 0.05 ||
+            this.pointToSegmentDistance(b1, a1, a2) < 0.05) {
+          return { collides: true, overlap: 0 };
         }
       }
     }
