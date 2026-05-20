@@ -749,12 +749,21 @@ function renderSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, piece
 
 function renderNestingWithReact(result, fabricWidth) {
     if (typeof window.renderNestingResult !== 'function') {
-        console.warn('React组件未加载，使用SVG回退');
-        const svgContainer = document.getElementById('nesting-svg-container');
-        if (result.nesting_svg) {
-            svgContainer.innerHTML = result.nesting_svg;
+        console.warn('React组件未加载，使用PNG/SVG回退');
+        const container = document.getElementById('nesting-svg-container');
+
+        // 优先显示 PNG（最终排料图）
+        if (result.nesting_png_base64) {
+            container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
+                + `<img src="${result.nesting_png_base64}" alt="排料图" `
+                + `style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>`
+                + `<a href="${result.nesting_png_base64}" download="nesting_result.png" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料图PNG</a>`
+                + `</div>`;
+        } else if (result.nesting_svg) {
+            container.innerHTML = result.nesting_svg;
         } else {
-            svgContainer.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
+            container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
         }
         return;
     }

@@ -418,11 +418,13 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         positions = data.get('positions', [])
 
         nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width)
+        nesting_png = _generate_nesting_png_base64(nesting_svg)
 
         return {
             "pieces": data.get('pieces', []),
             "positions": positions,
             "nesting_svg": nesting_svg,
+            "nesting_png_base64": nesting_png,
             "pieces_detail": pieces_detail,
             "per_piece_length_m": round(per_piece_length_m, 3),
             "total_length_m": round(total_length_m, 2),
@@ -720,27 +722,30 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
 
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
-        x = pos.get('x', 0) * scale + padding
-        y = pos.get('y', 0) * scale + padding
+        pos_x = pos.get('x', 0)
+        pos_y = pos.get('y', 0)
         rotation = pos.get('rotation', 0)
 
         path_ops = piece_path_map.get(name, [])
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
-            # 先居中再旋转再平移，与 NestingViewer.tsx 一致
+            # NestEngine 旋转是围绕形心进行，translate(x,y) 移动的是整个多边形
+            # 正确变换：形心从 (cx,cy) 移动到 (x+cx, y+cy)
             bbox = _get_path_ops_bbox(path_ops)
             cx = (bbox['minX'] + bbox['maxX']) / 2
             cy = (bbox['minY'] + bbox['maxY']) / 2
+            center_x = (pos_x + cx) * scale + padding
+            center_y = (pos_y + cy) * scale + padding
             path_d = _convert_path_ops_to_svg_d(path_ops, scale)
-            lines.append(f'<g transform="translate({x:.1f},{y:.1f}) rotate({rotation}) translate({-cx:.1f},{-cy:.1f})">')
+            lines.append(f'<g transform="translate({center_x:.1f},{center_y:.1f}) rotate({rotation}) translate({-cx*scale:.1f},{-cy*scale:.1f})">')
             lines.append(f'<path d="{path_d}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
             lines.append(f'<text x="5" y="-5" font-size="10" fill="{color}">{name}</text>')
             lines.append('</g>')
         else:
             w = 50 * scale
             h = 80 * scale
-            lines.append(f'<g transform="translate({x:.1f},{y:.1f}) rotate({rotation})">')
+            lines.append(f'<g transform="translate({(pos_x)*scale+padding:.1f},{(pos_y)*scale+padding:.1f}) rotate({rotation})">')
             lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
                         f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
             lines.append(f'<text x="{w/2:.1f}" y="{h/2:.1f}" text-anchor="middle" '
@@ -781,3 +786,55 @@ def _convert_path_ops_to_svg_d(ops, scale=1):
         elif op_type == 'close':
             d_parts.append("Z")
     return " ".join(d_parts)
+
+
+def _generate_nesting_png_base64(svg_content):
+    """将排料SVG转换为PNG base64"""
+    if not svg_content:
+        return None
+
+    import base64
+    import tempfile
+
+    # 方法1: 使用 rsvg-convert（Docker/linux 推荐）
+    rsvg_paths = ['rsvg-convert', '/usr/bin/rsvg-convert']
+    for rsvg in rsvg_paths:
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.svg', mode='w', delete=False) as f:
+                f.write(svg_content)
+                svg_path = f.name
+
+            png_path = svg_path + '.png'
+            import subprocess
+            result = subprocess.run(
+                [rsvg, '-f', 'png', '-o', png_path, svg_path],
+                capture_output=True, timeout=30
+            )
+
+            if result.returncode == 0 and os.path.exists(png_path):
+                with open(png_path, 'rb') as f:
+                    png_data = f.read()
+                os.unlink(svg_path)
+                os.unlink(png_path)
+                b64 = base64.b64encode(png_data).decode('ascii')
+                return f"data:image/png;base64,{b64}"
+            else:
+                try: os.unlink(svg_path)
+                except: pass
+                try: os.unlink(png_path)
+                except: pass
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            try: os.unlink(svg_path)
+            except: pass
+            continue
+
+    # 方法2: 尝试 cairosvg
+    try:
+        import cairosvg
+        png_data = cairosvg.svg2png(bytestring=svg_content.encode('utf-8'))
+        b64 = base64.b64encode(png_data).decode('ascii')
+        return f"data:image/png;base64,{b64}"
+    except Exception:
+        pass
+
+    return None

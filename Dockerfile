@@ -44,12 +44,13 @@ COPY --from=node-provider /usr/local/lib/node_modules /usr/local/lib/node_module
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-# 只安装 OpenCV 必需的系统库
+# 只安装 OpenCV + rsvg-convert 必需的系统库
 RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         libglib2.0-0 \
         libgl1 \
+        librsvg2-bin \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY requirements.txt .
