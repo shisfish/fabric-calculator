@@ -74,7 +74,7 @@ export class NestEngine {
           polygon = new Polygon([...pts, ...mirrored], piece.name);
         }
 
-        const simplified = PolygonConverter.simplifyPolygon(polygon, 1);
+        const simplified = PolygonConverter.simplifyPolygon(polygon, 0.3);
         const rotations = this.config.rotations.map(angle => simplified.rotate(angle));
 
         this.pieces.push({

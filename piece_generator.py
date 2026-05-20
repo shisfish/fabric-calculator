@@ -809,8 +809,12 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
     return "\n".join(lines)
 
 
-def _extract_polygon_points(ops):
-    """从PathOps提取多边形顶点（采样曲线段，忽略close操作）"""
+def _extract_polygon_points(ops, steps_per_curve=50):
+    """从PathOps提取多边形顶点（采样曲线段，忽略close操作）
+
+    steps_per_curve: 每条曲线段的采样步数，必须与TypeScript的Path.toPoints(stepsPerCurve)一致。
+    NestEngine使用默认50步，匹配此值确保形心计算精度一致。
+    """
     points = []
     current = None
     for op in ops:
@@ -830,20 +834,24 @@ def _extract_polygon_points(ops):
             cp2 = op.get('cp2')
             to = op.get('to')
             if cp1 and cp2 and to and current:
-                for t in [0.2, 0.4, 0.6, 0.8, 1.0]:
+                px0, py0 = current
+                for step in range(1, steps_per_curve + 1):
+                    t = step / steps_per_curve
                     mt = 1 - t
-                    px = mt*mt*mt*current[0] + 3*mt*mt*t*cp1['x'] + 3*mt*t*t*cp2['x'] + t*t*t*to['x']
-                    py = mt*mt*mt*current[1] + 3*mt*mt*t*cp1['y'] + 3*mt*t*t*cp2['y'] + t*t*t*to['y']
+                    px = mt*mt*mt*px0 + 3*mt*mt*t*cp1['x'] + 3*mt*t*t*cp2['x'] + t*t*t*to['x']
+                    py = mt*mt*mt*py0 + 3*mt*mt*t*cp1['y'] + 3*mt*t*t*cp2['y'] + t*t*t*to['y']
                     points.append((px, py))
                 current = (to['x'], to['y'])
         elif op_type == 'quad':
             cp1 = op.get('cp1')
             to = op.get('to')
             if cp1 and to and current:
-                for t in [0.2, 0.4, 0.6, 0.8, 1.0]:
+                px0, py0 = current
+                for step in range(1, steps_per_curve + 1):
+                    t = step / steps_per_curve
                     mt = 1 - t
-                    px = mt*mt*current[0] + 2*mt*t*cp1['x'] + t*t*to['x']
-                    py = mt*mt*current[1] + 2*mt*t*cp1['y'] + t*t*to['y']
+                    px = mt*mt*px0 + 2*mt*t*cp1['x'] + t*t*to['x']
+                    py = mt*mt*py0 + 2*mt*t*cp1['y'] + t*t*to['y']
                     points.append((px, py))
                 current = (to['x'], to['y'])
     return points
