@@ -699,6 +699,33 @@ def _get_path_ops_bbox(ops):
     return {'minX': min_x, 'minY': min_y, 'maxX': max_x, 'maxY': max_y}
 
 
+def _calculate_centroid(points):
+    """从多边形顶点列表计算形心（鞋带公式）
+
+    NestEngine使用形心作为旋转中心，SVG/PNG渲染必须使用相同的形心，
+    否则旋转后位置与碰撞检测结果不一致，导致裁片重叠。
+    """
+    n = len(points)
+    if n < 3:
+        return (0.0, 0.0)
+    area = 0.0
+    cx = 0.0
+    cy = 0.0
+    for i in range(n):
+        x0, y0 = points[i]
+        x1, y1 = points[(i + 1) % n]
+        cross = x0 * y1 - x1 * y0
+        area += cross
+        cx += (x0 + x1) * cross
+        cy += (y0 + y1) * cross
+    area *= 0.5
+    if abs(area) < 1e-10:
+        return (0.0, 0.0)
+    cx /= (6.0 * area)
+    cy /= (6.0 * area)
+    return (cx, cy)
+
+
 def _generate_nesting_svg(pieces, positions, fabric_width):
     """生成排料图SVG - 基于真实Bezier路径"""
     if not positions:
@@ -742,11 +769,19 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
-            # NestEngine 旋转是围绕形心进行，translate(x,y) 移动的是整个多边形
-            # 正确变换：形心从 (cx,cy) 移动到 (x+cx, y+cy)
-            bbox = _get_path_ops_bbox(path_ops)
-            cx = (bbox['minX'] + bbox['maxX']) / 2
-            cy = (bbox['minY'] + bbox['maxY']) / 2
+            # 使用形心作为旋转中心（必须与NestEngine一致）
+            pts_list = _extract_polygon_points(path_ops)
+            if onfold and pts_list:
+                # onFold: NestEngine使用完整镜像形状的形心
+                mirrored = [(-x, y) for x, y in reversed(pts_list)]
+                full_pts = pts_list + mirrored
+                cx, cy = _calculate_centroid(full_pts)
+            elif pts_list:
+                cx, cy = _calculate_centroid(pts_list)
+            else:
+                bbox = _get_path_ops_bbox(path_ops)
+                cx = (bbox['minX'] + bbox['maxX']) / 2
+                cy = (bbox['minY'] + bbox['maxY']) / 2
             center_x = (pos_x + cx) * scale + padding
             center_y = (pos_y + cy) * scale + padding
 
@@ -1020,42 +1055,39 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
+            # 提取多边形顶点，使用形心作为旋转中心（与NestEngine一致）
             if onfold:
-                # onFold裁片：采样半片顶点，镜像生成完整外轮廓
-                half_pts = _extract_polygon_points(path_ops)
-                if half_pts:
-                    mirrored = [(-x, y) for x, y in half_pts]
-                    full_pts = half_pts + mirrored[::-1]
-                    # 平移、缩放、旋转
-                    import math
-                    rad = rotation * math.pi / 180
-                    cos_r, sin_r = math.cos(rad), math.sin(rad)
-                    vertices = []
-                    for fx, fy in full_pts:
-                        rx = pos_x + fx * cos_r - fy * sin_r
-                        ry = pos_y + fx * sin_r + fy * cos_r
-                        vertices.append((
-                            rx * scale + padding,
-                            ry * scale + padding
-                        ))
-                    fill_color = color + '33' if len(color) == 7 else color
-                    draw.polygon(vertices, fill=fill_color, outline=color, width=2)
-                    cx = sum(v[0] for v in vertices) / len(vertices)
-                    cy = sum(v[1] for v in vertices) / len(vertices)
-                    draw.text((cx, cy - 10), name, fill=color, font=font_small, anchor='mm')
+                pts = _extract_polygon_points(path_ops)
+                if pts:
+                    mirrored = [(-x, y) for x, y in reversed(pts)]
+                    full_pts = pts + mirrored
+                else:
+                    full_pts = []
+                draw_pts = full_pts
             else:
-                # 将pathOps转换为多边形顶点（简化版，忽略曲线控制点）
-                vertices = _path_ops_to_vertices(path_ops, scale, pos_x, pos_y, padding)
+                draw_pts = _extract_polygon_points(path_ops)
 
-                if vertices and len(vertices) >= 3:
-                    # 绘制填充
-                    fill_color = color + '33' if len(color) == 7 else color
-                    draw.polygon(vertices, fill=fill_color, outline=color, width=2)
-
-                    # 绘制标签
-                    cx = sum(v[0] for v in vertices) / len(vertices)
-                    cy = sum(v[1] for v in vertices) / len(vertices)
-                    draw.text((cx, cy - 10), name, fill=color, font=font_small, anchor='mm')
+            if draw_pts and len(draw_pts) >= 3:
+                cx, cy = _calculate_centroid(draw_pts)
+                import math
+                rad = rotation * math.pi / 180
+                cos_r, sin_r = math.cos(rad), math.sin(rad)
+                vertices = []
+                for fx, fy in draw_pts:
+                    dx = fx - cx
+                    dy = fy - cy
+                    rx = pos_x + dx * cos_r - dy * sin_r + cx
+                    ry = pos_y + dx * sin_r + dy * cos_r + cy
+                    vertices.append((
+                        rx * scale + padding,
+                        ry * scale + padding
+                    ))
+                fill_color = color + '33' if len(color) == 7 else color
+                draw.polygon(vertices, fill=fill_color, outline=color, width=2)
+                # 标签在屏幕坐标的形心位置
+                scx = sum(v[0] for v in vertices) / len(vertices)
+                scy = sum(v[1] for v in vertices) / len(vertices)
+                draw.text((scx, scy - 10), name, fill=color, font=font_small, anchor='mm')
         else:
             # 使用bounding box作为备选
             w = 50 * scale

@@ -325,7 +325,7 @@ export class TshirtPatternGenerator {
       points, 
       seamAllowance, 
       cutCount: 2,  // 前片需要2片（左右各一）
-      onFold: true,  // Preview时对称显示
+      onFold: false,  // 两片独立半片，不镜像展开
       frontArmholeLength: frontArmholeTotal
     };
   }
