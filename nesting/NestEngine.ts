@@ -110,7 +110,9 @@ export class NestEngine {
       }
     }
 
-    this.compactLayout();
+    this.compactLayout(); // Final compaction pass
+    this.clampToBoundary();
+
     return this.calculateResult();
   }
 
@@ -129,7 +131,24 @@ export class NestEngine {
       const pos = this.findBLPosition(poly, pieceId);
 
       if (pos) {
-        const score = pos.y * this.config.fabricWidth + pos.x;
+        // Use overall bounding box area to score — favors layouts that grow
+        // the bounding box the least, which naturally encourages filling gaps
+        // rather than just stacking at y=0.
+        const testPoly = poly.translate(pos.x, pos.y);
+        const allBoxes = [
+          ...this.placedPieces.map(p =>
+            p.polygon.translate(p.x, p.y).getBoundingBox()
+          ),
+          testPoly.getBoundingBox()
+        ];
+
+        const maxX = Math.max(...allBoxes.map(b => b.maxX));
+        const minX = Math.min(...allBoxes.map(b => b.minX));
+        const maxY = Math.max(...allBoxes.map(b => b.maxY));
+        const minY = Math.min(...allBoxes.map(b => b.minY));
+
+        const score = (maxX - minX) * (maxY - minY);
+
         if (score < bestScore) {
           bestScore = score;
           bestPos = { x: pos.x, y: pos.y, rotation };
@@ -171,6 +190,21 @@ export class NestEngine {
       const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
       xCands.add(pb.maxX + spacing - b.minX);
       xCands.add(pb.minX - spacing - b.maxX);
+    }
+
+    // Also try intermediate positions between placed pieces (gap filling)
+    const placedBoxes = this.placedPieces
+      .filter(p => p.pieceId !== pieceId)
+      .map(p => p.polygon.translate(p.x, p.y).getBoundingBox());
+    for (let i = 0; i < placedBoxes.length; i++) {
+      for (let j = i + 1; j < placedBoxes.length; j++) {
+        const left = placedBoxes[i].maxX < placedBoxes[j].maxX ? placedBoxes[i] : placedBoxes[j];
+        const right = placedBoxes[i].maxX < placedBoxes[j].maxX ? placedBoxes[j] : placedBoxes[i];
+        const gap = right.minX - left.maxX;
+        if (gap > b.width + spacing * 2) {
+          xCands.add((left.maxX + right.minX) / 2 - (b.minX + b.maxX) / 2);
+        }
+      }
     }
 
     let best: Point | null = null;
@@ -252,9 +286,24 @@ export class NestEngine {
     return null;
   }
 
+  private clampToBoundary(): void {
+    const spacing = this.config.spacing;
+    const fw = this.config.fabricWidth;
+    for (const p of this.placedPieces) {
+      const b = p.polygon.getBoundingBox();
+      const pb = p.polygon.translate(p.x, p.y).getBoundingBox();
+      if (pb.minY < spacing) p.y = spacing - b.minY;
+      if (pb.minX < spacing) p.x = spacing - b.minX;
+      if (pb.maxX > fw - spacing) p.x = fw - spacing - b.maxX;
+    }
+  }
+
   private compactLayout(): void {
     const spacing = this.config.spacing;
     let improved = true;
+
+    // Store original positions to revert if compaction causes collision
+    const origPositions = new Map<any, { x: number; y: number }>();
 
     for (let iter = 0; iter < 15 && improved; iter++) {
       improved = false;
@@ -265,7 +314,10 @@ export class NestEngine {
 
       for (const { i: idx } of sorted) {
         const r = this.placedPieces[idx];
-        const b = r.polygon.getBoundingBox();
+        if (!origPositions.has(r)) {
+          origPositions.set(r, { x: r.x, y: r.y });
+        }
+
         let curX = r.x;
         let curY = r.y;
 
@@ -274,12 +326,16 @@ export class NestEngine {
         while (moved) {
           moved = false;
           const nx = curX - 0.5;
-          if (nx + b.minX >= spacing) {
-            const tp = r.polygon.translate(nx, curY);
+          const tp = r.polygon.translate(nx, curY);
+          const tpb = tp.getBoundingBox();
+          if (tpb.minX >= spacing) {
             let ok = true;
             for (const o of this.placedPieces) {
               if (o === r) continue;
-              if (SATCollision.testCollision(tp, o.polygon.translate(o.x, o.y).offset(spacing)).collides) {
+              const op = o.polygon.translate(o.x, o.y);
+              // Use direct SAT collision (no offset) — spacing is maintained
+              // by the boundary check and step size
+              if (SATCollision.testCollision(tp, op).collides) {
                 ok = false; break;
               }
             }
@@ -292,12 +348,14 @@ export class NestEngine {
         while (moved) {
           moved = false;
           const ny = curY - 0.5;
-          if (ny + b.minY >= spacing) {
-            const tp = r.polygon.translate(curX, ny);
+          const tp = r.polygon.translate(curX, ny);
+          const tpb = tp.getBoundingBox();
+          if (tpb.minY >= spacing) {
             let ok = true;
             for (const o of this.placedPieces) {
               if (o === r) continue;
-              if (SATCollision.testCollision(tp, o.polygon.translate(o.x, o.y).offset(spacing)).collides) {
+              const op = o.polygon.translate(o.x, o.y);
+              if (SATCollision.testCollision(tp, op).collides) {
                 ok = false; break;
               }
             }
@@ -307,6 +365,22 @@ export class NestEngine {
 
         r.x = curX;
         r.y = curY;
+      }
+    }
+
+    // Post-validation: revert any piece that ended up overlapping
+    for (const p of this.placedPieces) {
+      for (const o of this.placedPieces) {
+        if (p === o) continue;
+        const pp = p.polygon.translate(p.x, p.y);
+        const op = o.polygon.translate(o.x, o.y);
+        if (SATCollision.testCollision(pp, op).collides) {
+          // Revert to pre-compaction position
+          const orig = origPositions.get(p);
+          if (orig) { p.x = orig.x; p.y = orig.y; }
+          const origO = origPositions.get(o);
+          if (origO) { o.x = origO.x; o.y = origO.y; }
+        }
       }
     }
   }

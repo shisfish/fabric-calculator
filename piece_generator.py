@@ -302,7 +302,7 @@ def generate_cad_pieces_preview(measurements, options=None):
 
     try:
         result = subprocess.run(
-            [_find_npx(), 'tsx', 'cad_runner.ts', input_data],
+            [_find_npx(), 'tsx', '--no-cache', 'cad_runner.ts', input_data],
             capture_output=True,
             text=True,
             timeout=30,
@@ -371,7 +371,7 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
     try:
         result = subprocess.run(
-            [_find_npx(), 'tsx', 'cad_runner.ts', input_data],
+            [_find_npx(), 'tsx', '--no-cache', 'cad_runner.ts', input_data],
             capture_output=True,
             text=True,
             timeout=60,
@@ -419,6 +419,11 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
         nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width)
         nesting_png = _generate_nesting_png_base64(nesting_svg)
+
+        # 如果SVG转换失败，使用Pillow直接生成PNG
+        if not nesting_png:
+            print("[PNG生成] SVG转换失败，使用Pillow直接生成...")
+            nesting_png = _generate_nesting_png_direct(data.get('pieces', []), positions, fabric_width)
 
         return {
             "pieces": data.get('pieces', []),
@@ -699,7 +704,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
     if not positions:
         return ""
 
-    scale = 0.5
+    scale = 1.5
     padding = 20
 
     max_y = max((pos.get('y', 0) + 150) for pos in positions) if positions else 500
@@ -808,7 +813,7 @@ def _generate_nesting_png_base64(svg_content):
 
             png_path = svg_path + '.png'
             result = subprocess.run(
-                [rsvg, '-f', 'png', '-o', png_path, svg_path],
+                [rsvg, '-w', '2048', '-f', 'png', '-o', png_path, svg_path],
                 capture_output=True, timeout=30
             )
 
@@ -838,7 +843,7 @@ def _generate_nesting_png_base64(svg_content):
             svg_path = f.name
 
         result = subprocess.run(
-            ['qlmanage', '-t', '-s', '1024', '-o', os.path.dirname(svg_path), svg_path],
+            ['qlmanage', '-t', '-s', '4096', '-o', os.path.dirname(svg_path), svg_path],
             capture_output=True, timeout=30
         )
 
@@ -855,7 +860,7 @@ def _generate_nesting_png_base64(svg_content):
         else:
             try: os.unlink(svg_path)
             except: pass
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (FileNotFoundError, subprocess.TimeoutExpired, PermissionError):
         try: os.unlink(svg_path)
         except: pass
         pass
@@ -870,3 +875,164 @@ def _generate_nesting_png_base64(svg_content):
         pass
 
     return None
+
+
+def _generate_nesting_png_direct(pieces, positions, fabric_width):
+    """
+    直接使用Pillow生成排料PNG（不依赖外部工具）
+    作为所有SVG转换方法失败时的备选方案
+    """
+    if not positions:
+        return None
+
+    import base64
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+
+    scale = 3.0
+    padding = 40
+
+    max_y = max((pos.get('y', 0) + 150) for pos in positions) if positions else 500
+
+    img_width = int(fabric_width * scale + padding * 2)
+    img_height = int(max_y * scale + padding * 2)
+
+    img = Image.new('RGB', (img_width, img_height), '#ffffff')
+    draw = ImageDraw.Draw(img)
+
+    # 绘制布料边界
+    draw.rectangle(
+        [padding, padding, padding + fabric_width * scale, padding + max_y * scale],
+        outline='#cccccc', width=2
+    )
+
+    piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+
+    # 构建piece路径映射
+    piece_path_map = {}
+    for p in pieces:
+        ops = p.get('expandedPathOps') or p.get('pathOps', [])
+        piece_path_map[p.get('name', '')] = ops
+
+    font = _get_font(14)
+    font_small = _get_font(10)
+
+    for i, pos in enumerate(positions):
+        name = pos.get('name', '')
+        pos_x = pos.get('x', 0)
+        pos_y = pos.get('y', 0)
+        rotation = pos.get('rotation', 0)
+
+        path_ops = piece_path_map.get(name, [])
+        color = piece_colors[i % len(piece_colors)]
+
+        if path_ops:
+            # 将pathOps转换为多边形顶点（简化版，忽略曲线控制点）
+            vertices = _path_ops_to_vertices(path_ops, scale, pos_x, pos_y, padding)
+
+            if vertices and len(vertices) >= 3:
+                # 绘制填充
+                fill_color = color + '33' if len(color) == 7 else color
+                draw.polygon(vertices, fill=fill_color, outline=color, width=2)
+
+                # 绘制标签
+                cx = sum(v[0] for v in vertices) / len(vertices)
+                cy = sum(v[1] for v in vertices) / len(vertices)
+                draw.text((cx, cy - 10), name, fill=color, font=font_small, anchor='mm')
+        else:
+            # 使用bounding box作为备选
+            w = 50 * scale
+            h = 80 * scale
+            x = pos_x * scale + padding
+            y = pos_y * scale + padding
+
+            draw.rectangle([x, y, x + w, y + h], fill=color + '33', outline=color, width=1)
+            draw.text((x + w/2, y + h/2), f"{name}(无路径)", fill=color, font=font_small, anchor='mm')
+
+    # 绘制标题
+    draw.text((img_width // 2, 15), f"排料图 - 布宽 {fabric_width}cm", fill='#1e293b', font=font, anchor='mt')
+
+    # 转换为base64
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    b64 = base64.b64encode(buf.read()).decode('ascii')
+    return f"data:image/png;base64,{b64}"
+
+
+def _path_ops_to_vertices(ops, scale, offset_x, offset_y, padding):
+    """
+    将pathOps转换为多边形顶点列表（用于Pillow绘制）
+    简化版：曲线段采样为多个点
+    """
+    if not ops:
+        return []
+
+    vertices = []
+    current_x, current_y = 0, 0
+
+    for op in ops:
+        op_type = op.get('type')
+
+        if op_type == 'move':
+            to = op.get('to')
+            if to:
+                current_x = to['x']
+                current_y = to['y']
+                vertices.append((
+                    (current_x + offset_x) * scale + padding,
+                    (current_y + offset_y) * scale + padding
+                ))
+
+        elif op_type == 'line':
+            to = op.get('to')
+            if to:
+                current_x = to['x']
+                current_y = to['y']
+                vertices.append((
+                    (current_x + offset_x) * scale + padding,
+                    (current_y + offset_y) * scale + padding
+                ))
+
+        elif op_type == 'curve':
+            # 简化：曲线采样为多个点
+            cp1 = op.get('cp1')
+            cp2 = op.get('cp2')
+            to = op.get('to')
+            if cp1 and cp2 and to:
+                # 采样5个点
+                for t in [0.2, 0.4, 0.6, 0.8, 1.0]:
+                    t2 = t * t
+                    t3 = t2 * t
+                    mt = 1 - t
+                    mt2 = mt * mt
+                    mt3 = mt2 * mt
+
+                    px = mt3 * current_x + 3 * mt2 * t * cp1['x'] + 3 * mt * t2 * cp2['x'] + t3 * to['x']
+                    py = mt3 * current_y + 3 * mt2 * t * cp1['y'] + 3 * mt * t2 * cp2['y'] + t3 * to['y']
+                    vertices.append((
+                        (px + offset_x) * scale + padding,
+                        (py + offset_y) * scale + padding
+                    ))
+                current_x = to['x']
+                current_y = to['y']
+
+        elif op_type == 'quad':
+            cp1 = op.get('cp1')
+            to = op.get('to')
+            if cp1 and to:
+                for t in [0.25, 0.5, 0.75, 1.0]:
+                    mt = 1 - t
+                    px = mt * mt * current_x + 2 * mt * t * cp1['x'] + t * t * to['x']
+                    py = mt * mt * current_y + 2 * mt * t * cp1['y'] + t * t * to['y']
+                    vertices.append((
+                        (px + offset_x) * scale + padding,
+                        (py + offset_y) * scale + padding
+                    ))
+                current_x = to['x']
+                current_y = to['y']
+
+        elif op_type == 'close':
+            pass
+
+    return vertices

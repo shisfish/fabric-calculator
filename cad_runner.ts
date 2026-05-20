@@ -197,7 +197,7 @@ if (input.mode === 'preview') {
     
     console.log(JSON.stringify(result)); // 唯一的stdout输出点 - API响应
 } else {
-    const engine = new NestEngine({ fabricWidth });
+    const engine = new NestEngine({ fabricWidth, spacing: 3, rotations: [0, 90, 180, 270] });
 
     for (const piece of pieces) {
         engine.addPiece(piece);
@@ -245,15 +245,19 @@ if (input.mode === 'preview') {
 
     // 🔧 【关键修复】为每个原始piece生成数据（包括未排料的）
     const piecesData: any[] = [];
-    
+
     for (const piece of pieces) {
         const originalData = pieceOriginalData.get(piece.name);
         const cutCount = piece.cutCount || 1;
-        
+
         // 查找该piece的所有已放置实例
-        const placedInstances = placedPolygons.filter(pp => 
+        const placedInstances = placedPolygons.filter(pp =>
             pp.id.startsWith(piece.name + '_')
         );
+
+        for (let di = 0; di < placedInstances.length; di++) {
+            const pp_ = placedInstances[di];
+        }
         
         if (placedInstances.length > 0) {
             // ✅ 已成功排料：使用实际位置
