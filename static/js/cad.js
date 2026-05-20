@@ -760,7 +760,9 @@ function renderNestingWithReact(result, fabricWidth) {
     }
 
     const pieces = (result.pieces || []).map(p => {
-        const pathOps = p.pathOps;
+        // 🔧 【工业标准】排料图使用展开后的完整形状（expandedPathOps）
+        // 如果是 onFold 裁片且有 expandedPathOps，则使用展开后的数据
+        const pathOps = (p.onFold && p.expandedPathOps) ? p.expandedPathOps : p.pathOps;
         if (!pathOps || pathOps.length === 0) {
             console.warn(`裁片 ${p.name} 缺少pathOps数据，将无法正确渲染`);
         }

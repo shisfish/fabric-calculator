@@ -258,9 +258,13 @@ if (input.mode === 'preview') {
         if (placedInstances.length > 0) {
             // ✅ 已成功排料：使用实际位置
             
-            // 🔧 【工业标准】处理 onFold 裁片的对称展开
-            let finalPathOps = piecePathMap.get(piece.name) || [];
-            let finalSeamOps = (originalData?.seamAllowancePathOps || []);
+            // 🔧 【工业标准】保存原始半片数据（用于预览模块①②）
+            const originalPathOps = piecePathMap.get(piece.name) || [];
+            const originalSeamOps = (originalData?.seamAllowancePathOps || []);
+            
+            // 🔧 【工业标准】处理 onFold 裁片的对称展开（用于排料模块③）
+            let finalPathOps = originalPathOps;
+            let finalSeamOps = originalSeamOps;
             
             if (piece.onFold) {
                 logger.info(`   🔄 检测到 onFold 裁片 "${piece.name}"，进行对称展开...`);
@@ -282,12 +286,14 @@ if (input.mode === 'preview') {
                     height: bbox.height,
                     area: pp.polygon.getArea(),
                     cutCount: 1,  // 每个实例都是1个
-                    onFold: false,  // 排料时已经展开
+                    onFold: piece.onFold,  // 保持原始标记，让前端知道这是对折裁片
                     rotation: pp.rotation,
                     placed: true,  // 标记为已放置
-                    pathOps: finalPathOps,
+                    pathOps: originalPathOps,  // 📌 原始半片（用于预览）
+                    expandedPathOps: piece.onFold ? finalPathOps : null,  // 📌 展开后完整（用于排料图）
                     seamAllowance: originalData?.seamAllowance || 0,
-                    seamAllowancePathOps: finalSeamOps
+                    seamAllowancePathOps: originalSeamOps,  // 📌 原始缝份（半片）
+                    expandedSeamAllowancePathOps: piece.onFold ? finalSeamOps : null  // 📌 展开后缝份（完整）
                 });
             }
         } else {
