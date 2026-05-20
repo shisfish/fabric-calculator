@@ -788,6 +788,7 @@ def cad_nesting():
         wastage_rate = float(fabric_params.get("wastageRate", 8))
         fabric_weight_gsm = float(fabric_params.get("weightGsm", 0))
         quantity = int(fabric_params.get("quantity", 1))
+        fabric_nap = fabric_params.get("fabricNap", False)
 
         print(f"[CAD] 收到排料请求: 品类={category}, 门幅={fabric_width}cm, 数量={quantity}")
 
@@ -799,7 +800,8 @@ def cad_nesting():
             shrinkage_rate=shrinkage_rate,
             wastage_rate=wastage_rate,
             fabric_weight_gsm=fabric_weight_gsm,
-            quantity=quantity
+            quantity=quantity,
+            fabric_nap=fabric_nap
         )
 
         record_id = datetime.now().strftime("%Y%m%d%H%M%S")

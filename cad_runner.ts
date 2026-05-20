@@ -146,6 +146,7 @@ if (pieces.length < 3) {
 logger.debug('=============================================\n');
 
 const fabricWidth = input.fabricWidth || 145;
+const fabricNap = input.fabricNap === true || input.fabricNap === 'true';
 
 if (input.mode === 'preview') {
     // 🔧 【工业标准】Preview模式：显示原始单片裁片（不展开）
@@ -197,10 +198,15 @@ if (input.mode === 'preview') {
     
     console.log(JSON.stringify(result)); // 唯一的stdout输出点 - API响应
 } else {
-    const engine = new NestEngine({ fabricWidth, spacing: 3, rotations: [0, 90, 180, 270] });
+    const engine = new NestEngine({ fabricWidth, spacing: 3, rotations: [0, 180], fabricNap });
 
-    for (const piece of pieces) {
-        engine.addPiece(piece);
+    try {
+        for (const piece of pieces) {
+            engine.addPiece(piece);
+        }
+    } catch (e: any) {
+        console.log(JSON.stringify({ error: e.message || '排料引擎初始化错误', errorType: 'GRAIN_LINE_VIOLATION' }));
+        process.exit(0);
     }
 
     const result = engine.nest();

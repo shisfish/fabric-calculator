@@ -95,6 +95,7 @@ function getFabricParams() {
         shrinkageRate: parseFloat(document.getElementById('shrinkage-rate').value) || 3,
         wastageRate: parseFloat(document.getElementById('wastage-rate').value) || 8,
         quantity: parseInt(document.getElementById('quantity').value) || 100,
+        fabricNap: document.getElementById('fabric-nap')?.checked || false,
     };
 }
 

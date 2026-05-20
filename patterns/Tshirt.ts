@@ -24,6 +24,10 @@ export interface PatternPiece {
   frontArmholeLength?: number;
   backArmholeLength?: number;
   ease?: number;
+
+  // 布纹线方向约束（工业排料）
+  allowedRotations?: number[];  // 允许的旋转角度，如 [0, 180]
+  isMirrorable?: boolean;       // 对称裁片标记
 }
 
 export class TshirtPatternGenerator {
@@ -216,14 +220,16 @@ export class TshirtPatternGenerator {
     logger.info(`   宽×高: ${W} × ${L} cm`);
     logger.info('═'.repeat(80) + '\n');
 
-    return { 
-      name: 'back', 
-      path, 
-      points, 
-      seamAllowance, 
-      cutCount: 1, 
+    return {
+      name: 'back',
+      path,
+      points,
+      seamAllowance,
+      cutCount: 1,
       onFold: true,
-      backArmholeLength: backArmholeTotal
+      backArmholeLength: backArmholeTotal,
+      allowedRotations: [0, 180],
+      isMirrorable: false
     };
   }
 
@@ -319,14 +325,16 @@ export class TshirtPatternGenerator {
     logger.info(`   宽×高: ${W} × ${L} cm`);
     logger.info('═'.repeat(80) + '\n');
 
-    return { 
-      name: 'front', 
-      path, 
-      points, 
-      seamAllowance, 
+    return {
+      name: 'front',
+      path,
+      points,
+      seamAllowance,
       cutCount: 2,  // 前片需要2片（左右各一）
       onFold: false,  // 两片独立半片，不镜像展开
-      frontArmholeLength: frontArmholeTotal
+      frontArmholeLength: frontArmholeTotal,
+      allowedRotations: [0, 180],
+      isMirrorable: false
     };
   }
 
@@ -452,7 +460,9 @@ export class TshirtPatternGenerator {
       totalCapLength: sleeveResult.totalCapLength,
       frontArmholeLength: sleeveResult.frontArmholeLength,
       backArmholeLength: sleeveResult.backArmholeLength,
-      ease: sleeveResult.ease
+      ease: sleeveResult.ease,
+      allowedRotations: [0, 180],
+      isMirrorable: true
     };
 
     // 🔍 【调试日志】最终sleevePiece输出检查

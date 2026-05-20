@@ -14,6 +14,7 @@ export interface NestConfig {
   mutationRate: number;
   iterations: number;
   placementGap: number;
+  fabricNap?: boolean;
 }
 
 export interface NestResult {
@@ -45,6 +46,7 @@ export const DEFAULT_NEST_CONFIG: NestConfig = {
   mutationRate: 0.1,
   iterations: 100,
   placementGap: 10,
+  fabricNap: false,
 };
 
 export class NestEngine {
@@ -75,7 +77,32 @@ export class NestEngine {
         }
 
         const simplified = PolygonConverter.simplifyPolygon(polygon, 0.3);
-        const rotations = this.config.rotations.map(angle => simplified.rotate(angle));
+
+        // 根据布纹线方向约束过滤允许的旋转角度
+        // 优先级: fabricNap(顺毛) > piece.allowedRotations > config.rotations
+        let allowedRotations: number[];
+        if (this.config.fabricNap) {
+          allowedRotations = [0];
+        } else if (piece.allowedRotations && piece.allowedRotations.length > 0) {
+          allowedRotations = piece.allowedRotations;
+        } else {
+          allowedRotations = this.config.rotations;
+        }
+
+        // 与全局配置做交集，确保安全
+        const effectiveRotations = allowedRotations.filter(
+          a => this.config.rotations.includes(a)
+        );
+
+        if (effectiveRotations.length === 0) {
+          const errorMsg = `方向违规：裁片${piece.name}旋转角度[${this.config.rotations.join(',')}]不被允许`;
+          logger.error(`   ❌ ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+
+        logger.info(`   ✅ 裁片"${piece.name}" 允许旋转角度: [${effectiveRotations.join(', ')}]`);
+
+        const rotations = effectiveRotations.map(angle => simplified.rotate(angle));
 
         this.pieces.push({
           id: piece.name,
@@ -88,6 +115,7 @@ export class NestEngine {
       }
     } catch (e) {
       logger.error(`   ❌ 添加piece "${piece.name}" 时出错:`, e);
+      throw e;
     }
   }
 

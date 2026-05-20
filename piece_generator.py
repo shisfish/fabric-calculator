@@ -348,7 +348,7 @@ def generate_cad_pieces_preview(measurements, options=None):
 
 
 def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate, 
-                                 wastage_rate, fabric_weight_gsm, quantity):
+                                 wastage_rate, fabric_weight_gsm, quantity, fabric_nap=False):
     """
     CAD排料计算 - 基于实物测量数据生成裁片并排料
     """
@@ -364,7 +364,8 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         "mode": "nesting",
         "garmentInput": garment_input,
         "options": options,
-        "fabricWidth": fabric_width
+        "fabricWidth": fabric_width,
+        "fabricNap": fabric_nap
     })
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -387,6 +388,10 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
             print(result.stderr, end='')
 
         data = json.loads(result.stdout.strip())
+
+        # 检测排料引擎返回的结构化错误（如方向违规）
+        if isinstance(data, dict) and 'error' in data:
+            raise Exception(f"排料引擎错误: {data.get('error', '未知错误')}")
 
         total_area_cm2 = data.get('totalArea', 0)
         used_area_cm2 = data.get('usedArea', 0)
