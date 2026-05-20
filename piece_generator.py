@@ -816,17 +816,17 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
             lines.append(f'<g transform="translate({center_x:.1f},{center_y:.1f}) rotate({rotation}) translate({-cx*scale:.1f},{-cy*scale:.1f})">')
             lines.append(f'<path d="{path_d}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
-            lines.append(f'<text x="5" y="-5" font-size="10" fill="{color}">{name}</text>')
             lines.append('</g>')
+            lines.append(f'<text x="{center_x:.1f}" y="{center_y - 5:.1f}" text-anchor="middle" font-size="10" fill="{color}">{name}</text>')
         else:
             w = 50 * scale
             h = 80 * scale
             lines.append(f'<g transform="translate({(pos_x)*scale+padding:.1f},{(pos_y)*scale+padding+label_height:.1f}) rotate({rotation})">')
             lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
                         f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
-            lines.append(f'<text x="{w/2:.1f}" y="{h/2:.1f}" text-anchor="middle" '
-                        f'dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
             lines.append('</g>')
+            lines.append(f'<text x="{(pos_x + w/2)*scale+padding:.1f}" y="{(pos_y + h/2)*scale+padding+label_height:.1f}" '
+                        f'text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
 
     lines.append('</svg>')
     return "\n".join(lines)
