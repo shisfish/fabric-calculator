@@ -675,56 +675,78 @@ def _calculate_polygon_area(points):
     return abs(area) / 2
 
 
+def _get_path_ops_bbox(ops):
+    """计算PathOperation数组的包围盒"""
+    min_x, min_y = float('inf'), float('inf')
+    max_x, max_y = float('-inf'), float('-inf')
+    for op in ops:
+        for key in ('to', 'cp1', 'cp2'):
+            pt = op.get(key)
+            if pt and 'x' in pt and 'y' in pt:
+                min_x = min(min_x, pt['x'])
+                min_y = min(min_y, pt['y'])
+                max_x = max(max_x, pt['x'])
+                max_y = max(max_y, pt['y'])
+    if min_x == float('inf'):
+        return {'minX': 0, 'minY': 0, 'maxX': 0, 'maxY': 0}
+    return {'minX': min_x, 'minY': min_y, 'maxX': max_x, 'maxY': max_y}
+
+
 def _generate_nesting_svg(pieces, positions, fabric_width):
     """生成排料图SVG - 基于真实Bezier路径"""
     if not positions:
         return ""
-    
+
     scale = 0.5
     padding = 20
-    
-    max_x = fabric_width
+
     max_y = max((pos.get('y', 0) + 150) for pos in positions) if positions else 500
-    
+
     svg_width = int(fabric_width * scale + padding * 2)
     svg_height = int(max_y * scale + padding * 2)
-    
+
     lines = []
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_width}" height="{svg_height}">')
     lines.append(f'<rect x="{padding}" y="{padding}" width="{fabric_width * scale}" height="{max_y * scale}" '
                 f'fill="none" stroke="#ccc" stroke-width="1" stroke-dasharray="5,3"/>')
-    
+
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-    
+
+    # 使用展开后的路径（expandedPathOps），兼容新旧数据
     piece_path_map = {}
     for p in pieces:
-        piece_path_map[p.get('name', '')] = p.get('pathOps', [])
-    
+        ops = p.get('expandedPathOps') or p.get('pathOps', [])
+        piece_path_map[p.get('name', '')] = ops
+
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
         x = pos.get('x', 0) * scale + padding
         y = pos.get('y', 0) * scale + padding
         rotation = pos.get('rotation', 0)
-        
+
         path_ops = piece_path_map.get(name, [])
         color = piece_colors[i % len(piece_colors)]
-        
+
         if path_ops:
+            # 先居中再旋转再平移，与 NestingViewer.tsx 一致
+            bbox = _get_path_ops_bbox(path_ops)
+            cx = (bbox['minX'] + bbox['maxX']) / 2
+            cy = (bbox['minY'] + bbox['maxY']) / 2
             path_d = _convert_path_ops_to_svg_d(path_ops, scale)
-            lines.append(f'<g transform="translate({x:.1f}, {y:.1f}) rotate({rotation})">')
+            lines.append(f'<g transform="translate({x:.1f},{y:.1f}) rotate({rotation}) translate({-cx:.1f},{-cy:.1f})">')
             lines.append(f'<path d="{path_d}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
             lines.append(f'<text x="5" y="-5" font-size="10" fill="{color}">{name}</text>')
             lines.append('</g>')
         else:
             w = 50 * scale
             h = 80 * scale
-            lines.append(f'<g transform="translate({x:.1f}, {y:.1f}) rotate({rotation})">')
+            lines.append(f'<g transform="translate({x:.1f},{y:.1f}) rotate({rotation})">')
             lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
                         f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
             lines.append(f'<text x="{w/2:.1f}" y="{h/2:.1f}" text-anchor="middle" '
                         f'dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
             lines.append('</g>')
-    
+
     lines.append('</svg>')
     return "\n".join(lines)
 
