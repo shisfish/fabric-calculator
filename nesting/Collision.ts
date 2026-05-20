@@ -9,6 +9,81 @@ export interface CollisionResult {
 }
 
 export class SATCollision {
+  /**
+   * 鲁棒的碰撞检测 - 同时适用于凸多边形和凹多边形
+   *
+   * 组合检测策略：
+   * 1. 边界盒快速预检（剔除远距离对）
+   * 2. 线段交叉检测（高精度）
+   * 3. 点包含检测（处理完全包含场景）
+   *
+   * 服装裁片（前片/后片/袖子）的袖窿曲线形成凹形区域，
+   * 纯SAT只对凸多边形保证正确，必须使用此方法避免漏检。
+   */
+  static testCollisionRobust(polyA: Polygon, polyB: Polygon): CollisionResult {
+    // Step 1: Bounding box pre-check
+    const bbA = polyA.getBoundingBox();
+    const bbB = polyB.getBoundingBox();
+    if (bbA.maxX < bbB.minX || bbA.minX > bbB.maxX ||
+        bbA.maxY < bbB.minY || bbA.minY > bbB.maxY) {
+      return { collides: false, overlap: 0 };
+    }
+
+    // Step 2: Edge intersection check (catches most overlap cases)
+    const ptsA = polyA.points;
+    const ptsB = polyB.points;
+    const nA = ptsA.length;
+    const nB = ptsB.length;
+
+    for (let i = 0; i < nA; i++) {
+      const a1 = ptsA[i];
+      const a2 = ptsA[(i + 1) % nA];
+      for (let j = 0; j < nB; j++) {
+        const b1 = ptsB[j];
+        const b2 = ptsB[(j + 1) % nB];
+        if (this.segmentsIntersect(a1, a2, b1, b2)) {
+          return { collides: true, overlap: 1 };
+        }
+      }
+    }
+
+    // Step 3: Point-in-polygon check (one entirely inside the other)
+    for (const p of ptsA) {
+      if (this.testPointInPolygon(p, polyB)) {
+        return { collides: true, overlap: 1 };
+      }
+    }
+    for (const p of ptsB) {
+      if (this.testPointInPolygon(p, polyA)) {
+        return { collides: true, overlap: 1 };
+      }
+    }
+
+    return { collides: false, overlap: 0 };
+  }
+
+  /**
+   * 判断两条线段是否相交
+   * 使用方向叉积法，排除共线和平行情况
+   */
+  private static segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+    const d1x = a2.x - a1.x;
+    const d1y = a2.y - a1.y;
+    const d2x = b2.x - b1.x;
+    const d2y = b2.y - b1.y;
+
+    const cross = d1x * d2y - d1y * d2x;
+    if (Math.abs(cross) < 1e-10) return false; // parallel
+
+    const dx = b1.x - a1.x;
+    const dy = b1.y - a1.y;
+
+    const t = (dx * d2y - dy * d2x) / cross;
+    const u = (dx * d1y - dy * d1x) / cross;
+
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+  }
+
   static testCollision(polyA: Polygon, polyB: Polygon): CollisionResult {
     const axesA = this.getAxes(polyA);
     const axesB = this.getAxes(polyB);

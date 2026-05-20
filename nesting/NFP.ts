@@ -140,7 +140,7 @@ export class NFP {
           );
 
           const testPoly = orbitingPoly.translate(newOffset.x, newOffset.y);
-          const collision = SATCollision.testCollision(staticPoly, testPoly);
+          const collision = SATCollision.testCollisionRobust(staticPoly, testPoly);
 
           if (!collision.collides || collision.overlap < 0.1) {
             const dist = Math.sqrt(

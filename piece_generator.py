@@ -721,9 +721,15 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
 
     # 使用展开后的路径（expandedPathOps），兼容新旧数据
     piece_path_map = {}
+    piece_onfold_map = {}
     for p in pieces:
-        ops = p.get('expandedPathOps') or p.get('pathOps', [])
-        piece_path_map[p.get('name', '')] = ops
+        onfold = p.get('onFold', False)
+        piece_onfold_map[p.get('name', '')] = onfold
+        if onfold:
+            # onFold裁片：使用原始半片路径，渲染时通过采样+镜像生成完整轮廓
+            piece_path_map[p.get('name', '')] = p.get('pathOps', [])
+        else:
+            piece_path_map[p.get('name', '')] = p.get('expandedPathOps') or p.get('pathOps', [])
 
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
@@ -732,6 +738,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
         rotation = pos.get('rotation', 0)
 
         path_ops = piece_path_map.get(name, [])
+        onfold = piece_onfold_map.get(name, False)
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
@@ -742,7 +749,13 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
             cy = (bbox['minY'] + bbox['maxY']) / 2
             center_x = (pos_x + cx) * scale + padding
             center_y = (pos_y + cy) * scale + padding
-            path_d = _convert_path_ops_to_svg_d(path_ops, scale)
+
+            if onfold:
+                # onFold裁片：生成连续轮廓路径（采样+镜像），避免中心线
+                path_d = _generate_onfold_full_path(path_ops, scale)
+            else:
+                path_d = _convert_path_ops_to_svg_d(path_ops, scale)
+
             lines.append(f'<g transform="translate({center_x:.1f},{center_y:.1f}) rotate({rotation}) translate({-cx*scale:.1f},{-cy*scale:.1f})">')
             lines.append(f'<path d="{path_d}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
             lines.append(f'<text x="5" y="-5" font-size="10" fill="{color}">{name}</text>')
@@ -759,6 +772,83 @@ def _generate_nesting_svg(pieces, positions, fabric_width):
 
     lines.append('</svg>')
     return "\n".join(lines)
+
+
+def _extract_polygon_points(ops):
+    """从PathOps提取多边形顶点（采样曲线段，忽略close操作）"""
+    points = []
+    current = None
+    for op in ops:
+        op_type = op.get('type')
+        if op_type == 'move':
+            to = op.get('to')
+            if to:
+                current = (to['x'], to['y'])
+                points.append(current)
+        elif op_type == 'line':
+            to = op.get('to')
+            if to:
+                current = (to['x'], to['y'])
+                points.append(current)
+        elif op_type == 'curve':
+            cp1 = op.get('cp1')
+            cp2 = op.get('cp2')
+            to = op.get('to')
+            if cp1 and cp2 and to and current:
+                for t in [0.2, 0.4, 0.6, 0.8, 1.0]:
+                    mt = 1 - t
+                    px = mt*mt*mt*current[0] + 3*mt*mt*t*cp1['x'] + 3*mt*t*t*cp2['x'] + t*t*t*to['x']
+                    py = mt*mt*mt*current[1] + 3*mt*mt*t*cp1['y'] + 3*mt*t*t*cp2['y'] + t*t*t*to['y']
+                    points.append((px, py))
+                current = (to['x'], to['y'])
+        elif op_type == 'quad':
+            cp1 = op.get('cp1')
+            to = op.get('to')
+            if cp1 and to and current:
+                for t in [0.2, 0.4, 0.6, 0.8, 1.0]:
+                    mt = 1 - t
+                    px = mt*mt*current[0] + 2*mt*t*cp1['x'] + t*t*to['x']
+                    py = mt*mt*current[1] + 2*mt*t*cp1['y'] + t*t*to['y']
+                    points.append((px, py))
+                current = (to['x'], to['y'])
+    return points
+
+
+def _generate_onfold_full_path(half_ops, scale=1):
+    """
+    为onFold裁片生成完整的镜像轮廓SVG路径字符串。
+
+    核心思路：
+    1. 从半片pathOps提取多边形顶点（采样曲线段）
+    2. 沿Y轴（x=0）镜像得到另一半顶点
+    3. 合并为完整外轮廓（不包含中心线）
+    4. 返回SVG path d属性
+
+    这样避免了两条子路径拼接导致的中心线可见问题。
+    """
+    # 提取半片顶点
+    half_points = _extract_polygon_points(half_ops)
+
+    if not half_points:
+        return ""
+
+    # 排除最后一点到第一点的闭合线（即中心线）
+    # 半片路径的最后一个点通常在中心线（x≈0）上
+    # 镜像反转后的另一半从中心线终点开始，沿外侧回到中心线起点
+    mirrored = [(-x, y) for x, y in half_points]
+
+    # 合并：半片 + 镜像反转（不包含首尾重复点）
+    # half_points: 从 center-neck 顺时针到 center-hem
+    # mirrored[::-1]: 从 center-hem 逆时针回到 center-neck
+    combined = half_points + mirrored[::-1]
+
+    # 构建单个连续SVG路径
+    x0, y0 = combined[0]
+    d = f"M {x0 * scale:.2f},{y0 * scale:.2f}"
+    for x, y in combined[1:]:
+        d += f" L {x * scale:.2f},{y * scale:.2f}"
+    d += " Z"
+    return d
 
 
 def _convert_path_ops_to_svg_d(ops, scale=1):
@@ -910,9 +1000,11 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
 
     # 构建piece路径映射
     piece_path_map = {}
+    piece_onfold_map = {}
     for p in pieces:
         ops = p.get('expandedPathOps') or p.get('pathOps', [])
         piece_path_map[p.get('name', '')] = ops
+        piece_onfold_map[p.get('name', '')] = p.get('onFold', False)
 
     font = _get_font(14)
     font_small = _get_font(10)
@@ -924,21 +1016,46 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width):
         rotation = pos.get('rotation', 0)
 
         path_ops = piece_path_map.get(name, [])
+        onfold = piece_onfold_map.get(name, False)
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
-            # 将pathOps转换为多边形顶点（简化版，忽略曲线控制点）
-            vertices = _path_ops_to_vertices(path_ops, scale, pos_x, pos_y, padding)
+            if onfold:
+                # onFold裁片：采样半片顶点，镜像生成完整外轮廓
+                half_pts = _extract_polygon_points(path_ops)
+                if half_pts:
+                    mirrored = [(-x, y) for x, y in half_pts]
+                    full_pts = half_pts + mirrored[::-1]
+                    # 平移、缩放、旋转
+                    import math
+                    rad = rotation * math.pi / 180
+                    cos_r, sin_r = math.cos(rad), math.sin(rad)
+                    vertices = []
+                    for fx, fy in full_pts:
+                        rx = pos_x + fx * cos_r - fy * sin_r
+                        ry = pos_y + fx * sin_r + fy * cos_r
+                        vertices.append((
+                            rx * scale + padding,
+                            ry * scale + padding
+                        ))
+                    fill_color = color + '33' if len(color) == 7 else color
+                    draw.polygon(vertices, fill=fill_color, outline=color, width=2)
+                    cx = sum(v[0] for v in vertices) / len(vertices)
+                    cy = sum(v[1] for v in vertices) / len(vertices)
+                    draw.text((cx, cy - 10), name, fill=color, font=font_small, anchor='mm')
+            else:
+                # 将pathOps转换为多边形顶点（简化版，忽略曲线控制点）
+                vertices = _path_ops_to_vertices(path_ops, scale, pos_x, pos_y, padding)
 
-            if vertices and len(vertices) >= 3:
-                # 绘制填充
-                fill_color = color + '33' if len(color) == 7 else color
-                draw.polygon(vertices, fill=fill_color, outline=color, width=2)
+                if vertices and len(vertices) >= 3:
+                    # 绘制填充
+                    fill_color = color + '33' if len(color) == 7 else color
+                    draw.polygon(vertices, fill=fill_color, outline=color, width=2)
 
-                # 绘制标签
-                cx = sum(v[0] for v in vertices) / len(vertices)
-                cy = sum(v[1] for v in vertices) / len(vertices)
-                draw.text((cx, cy - 10), name, fill=color, font=font_small, anchor='mm')
+                    # 绘制标签
+                    cx = sum(v[0] for v in vertices) / len(vertices)
+                    cy = sum(v[1] for v in vertices) / len(vertices)
+                    draw.text((cx, cy - 10), name, fill=color, font=font_small, anchor='mm')
         else:
             # 使用bounding box作为备选
             w = 50 * scale

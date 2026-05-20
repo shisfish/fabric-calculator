@@ -131,23 +131,22 @@ export class NestEngine {
       const pos = this.findBLPosition(poly, pieceId);
 
       if (pos) {
-        // Use overall bounding box area to score — favors layouts that grow
-        // the bounding box the least, which naturally encourages filling gaps
-        // rather than just stacking at y=0.
+        // 评分：优先最小化总长度(maxY)，其次优化宽度利用率(maxX)
+        // 实际用料 = 裁片面积 / (总长度 × 门幅宽)，总长度对利用率影响最大
         const testPoly = poly.translate(pos.x, pos.y);
-        const allBoxes = [
-          ...this.placedPieces.map(p =>
-            p.polygon.translate(p.x, p.y).getBoundingBox()
-          ),
-          testPoly.getBoundingBox()
-        ];
+        const testBb = testPoly.getBoundingBox();
 
-        const maxX = Math.max(...allBoxes.map(b => b.maxX));
-        const minX = Math.min(...allBoxes.map(b => b.minX));
-        const maxY = Math.max(...allBoxes.map(b => b.maxY));
-        const minY = Math.min(...allBoxes.map(b => b.minY));
+        let currentMaxY = testBb.maxY;
+        let currentMaxX = testBb.maxX;
+        for (const placed of this.placedPieces) {
+          const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+          currentMaxY = Math.max(currentMaxY, pb.maxY);
+          currentMaxX = Math.max(currentMaxX, pb.maxX);
+        }
 
-        const score = (maxX - minX) * (maxY - minY);
+        // 主要: 总长度(maxY) × 门幅权重, 次要: 宽度占用(maxX)作为tiebreaker
+        const fw = this.config.fabricWidth;
+        const score = currentMaxY * fw + currentMaxX;
 
         if (score < bestScore) {
           bestScore = score;
@@ -266,7 +265,7 @@ export class NestEngine {
       for (const placed of this.placedPieces) {
         if (placed.pieceId === pieceId) continue;
         const placedPoly = placed.polygon.translate(placed.x, placed.y);
-        const result = SATCollision.testCollision(testPoly, placedPoly);
+        const result = SATCollision.testCollisionRobust(testPoly, placedPoly);
         if (result.collides) {
           collides = true;
           // Jump below the placed piece + spacing gap, using bbox
@@ -335,7 +334,7 @@ export class NestEngine {
               const op = o.polygon.translate(o.x, o.y);
               // Use direct SAT collision (no offset) — spacing is maintained
               // by the boundary check and step size
-              if (SATCollision.testCollision(tp, op).collides) {
+              if (SATCollision.testCollisionRobust(tp, op).collides) {
                 ok = false; break;
               }
             }
@@ -355,7 +354,7 @@ export class NestEngine {
             for (const o of this.placedPieces) {
               if (o === r) continue;
               const op = o.polygon.translate(o.x, o.y);
-              if (SATCollision.testCollision(tp, op).collides) {
+              if (SATCollision.testCollisionRobust(tp, op).collides) {
                 ok = false; break;
               }
             }
@@ -374,7 +373,7 @@ export class NestEngine {
         if (p === o) continue;
         const pp = p.polygon.translate(p.x, p.y);
         const op = o.polygon.translate(o.x, o.y);
-        if (SATCollision.testCollision(pp, op).collides) {
+        if (SATCollision.testCollisionRobust(pp, op).collides) {
           // Revert to pre-compaction position
           const orig = origPositions.get(p);
           if (orig) { p.x = orig.x; p.y = orig.y; }

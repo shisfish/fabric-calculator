@@ -324,7 +324,7 @@ export class TshirtPatternGenerator {
       path, 
       points, 
       seamAllowance, 
-      cutCount: 1,  // onFold展开后已是完整前片，只需1份
+      cutCount: 2,  // 前片需要2片（左右各一）
       onFold: true,  // Preview时对称显示
       frontArmholeLength: frontArmholeTotal
     };
