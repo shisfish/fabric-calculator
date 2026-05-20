@@ -794,7 +794,9 @@ def _generate_nesting_png_base64(svg_content):
         return None
 
     import base64
+    import subprocess
     import tempfile
+    import os
 
     # 方法1: 使用 rsvg-convert（Docker/linux 推荐）
     rsvg_paths = ['rsvg-convert', '/usr/bin/rsvg-convert']
@@ -805,7 +807,6 @@ def _generate_nesting_png_base64(svg_content):
                 svg_path = f.name
 
             png_path = svg_path + '.png'
-            import subprocess
             result = subprocess.run(
                 [rsvg, '-f', 'png', '-o', png_path, svg_path],
                 capture_output=True, timeout=30
@@ -814,8 +815,10 @@ def _generate_nesting_png_base64(svg_content):
             if result.returncode == 0 and os.path.exists(png_path):
                 with open(png_path, 'rb') as f:
                     png_data = f.read()
-                os.unlink(svg_path)
-                os.unlink(png_path)
+                try: os.unlink(svg_path)
+                except: pass
+                try: os.unlink(png_path)
+                except: pass
                 b64 = base64.b64encode(png_data).decode('ascii')
                 return f"data:image/png;base64,{b64}"
             else:
@@ -828,7 +831,36 @@ def _generate_nesting_png_base64(svg_content):
             except: pass
             continue
 
-    # 方法2: 尝试 cairosvg
+    # 方法2: macOS 使用 qlmanage
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.svg', mode='w', delete=False) as f:
+            f.write(svg_content)
+            svg_path = f.name
+
+        result = subprocess.run(
+            ['qlmanage', '-t', '-s', '1024', '-o', os.path.dirname(svg_path), svg_path],
+            capture_output=True, timeout=30
+        )
+
+        ql_png = svg_path + '.png'
+        if os.path.exists(ql_png):
+            with open(ql_png, 'rb') as f:
+                png_data = f.read()
+            try: os.unlink(svg_path)
+            except: pass
+            try: os.unlink(ql_png)
+            except: pass
+            b64 = base64.b64encode(png_data).decode('ascii')
+            return f"data:image/png;base64,{b64}"
+        else:
+            try: os.unlink(svg_path)
+            except: pass
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        try: os.unlink(svg_path)
+        except: pass
+        pass
+
+    # 方法3: 尝试 cairosvg
     try:
         import cairosvg
         png_data = cairosvg.svg2png(bytestring=svg_content.encode('utf-8'))

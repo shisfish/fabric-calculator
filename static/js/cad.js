@@ -798,6 +798,17 @@ function renderNestingWithReact(result, fabricWidth) {
     };
 
     window.renderNestingResult(pieces, nestingResult, fabricWidth);
+
+    // 同时在 SVG 容器中显示可下载的 PNG
+    const svgContainer = document.getElementById('nesting-svg-container');
+    if (svgContainer && result.nesting_png_base64) {
+        svgContainer.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px;">`
+            + `<img src="${result.nesting_png_base64}" alt="排料图" `
+            + `style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>`
+            + `<a href="${result.nesting_png_base64}" download="nesting_result.png" `
+            + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果PNG</a>`
+            + `</div>`;
+    }
 }
 
 function exportResult() {

@@ -160,14 +160,18 @@ export const NestingViewer: React.FC<NestingViewerProps> = ({
     
     const bbox = getBoundingBox(pathOps);
     if (!bbox) return null;
-    
+
     const color = getPieceColor(position.name);
     const isHovered = hoveredPiece === position.name;
-    
-    const centeredOps = translatePathOps(pathOps, -bbox.min.x, -bbox.min.y);
+
+    // NestEngine 围绕形心 (cx,cy) 旋转，translate(x,y) 移动整个多边形
+    // 形心最终位置 = (x + cx, y + cy)
+    const cx = (bbox.min.x + bbox.max.x) / 2;
+    const cy = (bbox.min.y + bbox.max.y) / 2;
+    const centeredOps = translatePathOps(pathOps, -cx, -cy);
     const rotatedOps = rotatePathOps(centeredOps, position.rotation);
-    const finalOps = translatePathOps(rotatedOps, position.x, position.y);
-    
+    const finalOps = translatePathOps(rotatedOps, position.x + cx, position.y + cy);
+
     const pathD = pathOpsToSVGPath(finalOps);
     
     return (
@@ -186,8 +190,8 @@ export const NestingViewer: React.FC<NestingViewerProps> = ({
         />
         {isHovered && (
           <text
-            x={position.x + (bbox.max.x - bbox.min.x) / 2}
-            y={position.y - 5}
+            x={position.x + cx}
+            y={position.y + cy - 10}
             textAnchor="middle"
             fontSize="10"
             fontFamily="sans-serif"
