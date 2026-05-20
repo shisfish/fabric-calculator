@@ -423,13 +423,13 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         positions = data.get('positions', [])
         bounds = data.get('bounds', {})
 
-        nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width, bounds)
+        nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width, bounds, utilization_rate)
         nesting_png = _generate_nesting_png_base64(nesting_svg)
 
         # 如果SVG转换失败，使用Pillow直接生成PNG
         if not nesting_png:
             print("[PNG生成] SVG转换失败，使用Pillow直接生成...")
-            nesting_png = _generate_nesting_png_direct(data.get('pieces', []), positions, fabric_width, bounds)
+            nesting_png = _generate_nesting_png_direct(data.get('pieces', []), positions, fabric_width, bounds, utilization_rate)
 
         return {
             "pieces": data.get('pieces', []),
@@ -732,7 +732,7 @@ def _calculate_centroid(points):
     return (cx, cy)
 
 
-def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None):
+def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilization=0):
     """生成排料图SVG - 基于真实Bezier路径"""
     if not positions:
         return ""
@@ -764,11 +764,11 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None):
                 f'width="{display_w * scale}" height="{display_h * scale}" '
                 f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
 
-    # 门幅标注 + 排料长度
+    # 门幅标注 + 排料长度 + 利用率
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
                 f'text-anchor="middle" font-size="13" fill="#555" '
                 f'font-family="sans-serif">'
-                f'面料门幅: {fabric_width} cm | 排料长度: {display_h:.1f} cm'
+                f'面料门幅: {fabric_width} cm | 排料长度: {display_h:.1f} cm | 利用率: {utilization:.1f}%'
                 f'</text>')
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
@@ -1033,7 +1033,7 @@ def _generate_nesting_png_base64(svg_content):
     return None
 
 
-def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None):
+def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, utilization=0):
     """
     直接使用Pillow生成排料PNG（不依赖外部工具）
     作为所有SVG转换方法失败时的备选方案
@@ -1082,7 +1082,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None):
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
     # 门幅标注 + 排料长度
-    label_text = f"面料门幅: {fabric_width} cm | 排料长度: {display_h:.1f} cm"
+    label_text = f"面料门幅: {fabric_width} cm | 排料长度: {display_h:.1f} cm | 利用率: {utilization:.1f}%"
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
 

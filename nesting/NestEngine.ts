@@ -138,6 +138,7 @@ export class NestEngine {
       }
     }
 
+    this.postOptimizeRotations(); // 多实例裁片的旋转组合优化
     this.compactLayout(); // Final compaction pass
     this.clampToBoundary();
 
@@ -474,6 +475,67 @@ export class NestEngine {
       }
     }
     return bestResult;
+  }
+
+  /**
+   * 多实例裁片的旋转组合优化
+   * 对 quantity >= 2 的裁片（如袖子×2、前片×2），尝试交换/翻转各实例的旋转角度，
+   * 使裁片之间能够交错排列，减少总排料长度。
+   */
+  private postOptimizeRotations(): void {
+    for (const piece of this.pieces) {
+      if (piece.quantity < 2 || piece.rotations.length < 2) continue;
+
+      const instances = this.placedPieces.filter(p => p.pieceId.startsWith(piece.id));
+      if (instances.length < 2) continue;
+
+      for (let iter = 0; iter < 5; iter++) {
+        let improved = false;
+
+        for (const inst of instances) {
+          // 找到当前旋转角度在配置中的索引
+          const currentRi = this.config.rotations.indexOf(inst.rotation);
+          if (currentRi < 0 || piece.rotations.length <= 1) continue;
+
+          // 尝试下一个可用的旋转角度
+          const otherRi = (currentRi + 1) % piece.rotations.length;
+          if (otherRi === currentRi) continue;
+
+          const altPoly = piece.rotations[otherRi];
+          const altAngle = this.config.rotations[otherRi];
+          const testPoly = altPoly.translate(inst.x, inst.y);
+
+          // 检查碰撞
+          let collides = false;
+          for (const other of this.placedPieces) {
+            if (other === inst) continue;
+            const op = other.polygon.translate(other.x, other.y);
+            if (SATCollision.testCollisionRobust(testPoly, op).collides) {
+              collides = true;
+              break;
+            }
+          }
+
+          if (!collides) {
+            // 检查是否改善了布局
+            const beforeMaxY = Math.max(...this.placedPieces.map(p =>
+              p.polygon.translate(p.x, p.y).getBoundingBox().maxY));
+            const afterBb = testPoly.getBoundingBox();
+            const otherMaxY = Math.max(...this.placedPieces.filter(p => p !== inst).map(p =>
+              p.polygon.translate(p.x, p.y).getBoundingBox().maxY));
+            const afterMaxY = Math.max(afterBb.maxY, otherMaxY);
+
+            if (afterMaxY <= beforeMaxY + 0.5) {
+              inst.polygon = altPoly;
+              inst.rotation = altAngle;
+              improved = true;
+            }
+          }
+        }
+
+        if (!improved) break;
+      }
+    }
   }
 
   private shufflePieces(): void {
