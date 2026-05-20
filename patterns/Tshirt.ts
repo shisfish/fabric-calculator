@@ -271,6 +271,7 @@ export class TshirtPatternGenerator {
       .curve(points.armholeBottomCp1, points.armholeBottomCp2, points.armholeEnd).segment('armhole')
       .line(points.sideBottom).segment('sideSeam')
       .quad(points.hemCp, points.hemFold).segment('hem')
+      .line(points.cfNeck).segment('closure')
       .close();
 
     // ======================================================

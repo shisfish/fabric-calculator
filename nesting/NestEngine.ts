@@ -64,22 +64,18 @@ export class NestEngine {
 
   addPiece(piece: PatternPiece): void {
     try {
-      logger.debug(`\n🔧 NestEngine.addPiece: ${piece.name}`);
-      logger.debug(`   cutCount: ${piece.cutCount}`);
-      logger.debug(`   path存在: ${!!piece.path}`);
-      
       if (piece.path && piece.path.ops) {
-        logger.debug(`   path.ops数量: ${piece.path.ops.length}`);
-        
-        const polygon = PolygonConverter.pathToPolygon(piece.path, piece.name);
-        logger.debug(`   转换后polygon点数: ${polygon.points.length}`);
-        logger.debug(`   polygon面积: ${polygon.getArea().toFixed(2)}`);
-        
+        let polygon = PolygonConverter.pathToPolygon(piece.path, piece.name);
+
+        // Expand on-fold half-pieces to full pieces by mirroring across fold (x=0)
+        if (piece.onFold) {
+          const pts = polygon.points;
+          const mirrored = pts.map(p => new Point(-p.x, p.y)).reverse();
+          polygon = new Polygon([...pts, ...mirrored], piece.name);
+        }
+
         const simplified = PolygonConverter.simplifyPolygon(polygon, 1);
-        logger.debug(`   简化后polygon点数: ${simplified.points.length}`);
-        
         const rotations = this.config.rotations.map(angle => simplified.rotate(angle));
-        logger.debug(`   生成${rotations.length}个旋转版本`);
 
         this.pieces.push({
           id: piece.name,
@@ -87,8 +83,6 @@ export class NestEngine {
           quantity: piece.cutCount,
           rotations,
         });
-        
-        logger.debug(`   ✅ piece "${piece.name}" 添加成功`);
       } else {
         logger.error(`   ❌ piece "${piece.name}" 的path无效或不存在！`);
       }
@@ -105,27 +99,18 @@ export class NestEngine {
 
   nest(): NestResult {
     this.placedPieces = [];
-
     const sortedPieces = this.sortPiecesByArea();
-
-    logger.debug('\n===== NestEngine 开始排料 =====');
-    logger.debug(`   待排料pieces数量: ${sortedPieces.length}`);
-    logger.debug(`   fabricWidth: ${this.config.fabricWidth}, fabricHeight: ${this.config.fabricHeight}`);
 
     for (const nestingPiece of sortedPieces) {
       for (let q = 0; q < nestingPiece.quantity; q++) {
         const success = this.placePiece(nestingPiece, q);
         if (!success) {
-          logger.error(`      ❌ 实例${q+1}: 放置失败！无法找到合适位置`);
+          logger.error(`      ❌ 实例${q+1}: ${nestingPiece.id} 放置失败`);
         }
       }
     }
 
-    // 后置压缩
     this.compactLayout();
-
-    logger.debug(`\n📊 排料结果: 成功放置${this.placedPieces.length}个实例`);
-
     return this.calculateResult();
   }
 
@@ -135,113 +120,131 @@ export class NestEngine {
 
   private placePiece(nestingPiece: NestingPiece, index: number): boolean {
     const pieceId = `${nestingPiece.id}_${index}`;
-    let bestPosition: { x: number; y: number; rotation: number } | null = null;
+    let bestPos: { x: number; y: number; rotation: number } | null = null;
     let bestScore = Infinity;
 
-    for (let rotationIndex = 0; rotationIndex < nestingPiece.rotations.length; rotationIndex++) {
-      const rotatedPolygon = nestingPiece.rotations[rotationIndex];
-      const rotation = this.config.rotations[rotationIndex];
+    for (let ri = 0; ri < nestingPiece.rotations.length; ri++) {
+      const poly = nestingPiece.rotations[ri];
+      const rotation = this.config.rotations[ri];
+      const pos = this.findBLPosition(poly, pieceId);
 
-      const position = this.findBestPosition(rotatedPolygon, pieceId);
-
-      if (position) {
-        const score = position.y * this.config.fabricWidth + position.x;
+      if (pos) {
+        const score = pos.y * this.config.fabricWidth + pos.x;
         if (score < bestScore) {
           bestScore = score;
-          bestPosition = { x: position.x, y: position.y, rotation };
+          bestPos = { x: pos.x, y: pos.y, rotation };
         }
       }
     }
 
-    if (bestPosition) {
-      const rotationIndex = this.config.rotations.indexOf(bestPosition.rotation);
-      const rotatedPolygon = nestingPiece.rotations[rotationIndex >= 0 ? rotationIndex : 0];
-
-      this.placedPieces.push({
-        pieceId,
-        polygon: rotatedPolygon,
-        x: bestPosition.x,
-        y: bestPosition.y,
-        rotation: bestPosition.rotation,
-      });
-
+    if (bestPos) {
+      const ri = this.config.rotations.indexOf(bestPos.rotation);
+      const poly = nestingPiece.rotations[ri >= 0 ? ri : 0];
+      this.placedPieces.push({ pieceId, polygon: poly, x: bestPos.x, y: bestPos.y, rotation: bestPos.rotation });
       return true;
     }
-
     return false;
   }
 
-  private findBestPosition(polygon: Polygon, pieceId: string): Point | null {
-    const bbox = polygon.getBoundingBox();
+  /**
+   * Bottom-Left Fill placement.
+   * Uses polygon-local bounding box to compute correct global boundaries.
+   *
+   * Piece origin = (x, y). Actual occupied area:
+   *   left   = x + localBbox.minX
+   *   right  = x + localBbox.maxX
+   *   top    = y + localBbox.minY
+   *   bottom = y + localBbox.maxY
+   */
+  private findBLPosition(polygon: Polygon, pieceId: string): Point | null {
     const spacing = this.config.spacing;
     const fw = this.config.fabricWidth;
-    const pw = bbox.width;
+    const b = polygon.getBoundingBox();
 
-    if (pw + spacing * 2 > fw) return null;
+    if (b.width + spacing * 2 > fw) return null;
 
-    // Collect X candidates: left edge, right edges of placed pieces, left edges minus width
-    const candidates = new Set<number>();
-    candidates.add(spacing);
+    const xCands = new Set<number>();
+    xCands.add(spacing - b.minX);
+
     for (const placed of this.placedPieces) {
       if (placed.pieceId === pieceId) continue;
       const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
-      candidates.add(pb.maxX + spacing);
-      candidates.add(pb.minX - pw - spacing);
+      xCands.add(pb.maxX + spacing - b.minX);
+      xCands.add(pb.minX - spacing - b.maxX);
     }
 
-    let bestPos: Point | null = null;
+    let best: Point | null = null;
     let bestScore = Infinity;
 
-    for (const cx of candidates) {
-      if (cx < spacing || cx + pw + spacing > fw) continue;
-      const cy = this.findLowestYAtX(polygon, cx, pieceId);
+    for (const cx of xCands) {
+      if (cx + b.minX < spacing) continue;
+      if (cx + b.maxX > fw - spacing) continue;
+
+      const cy = this.dropY(polygon, cx, pieceId);
       if (cy !== null) {
         const score = cy * fw + cx;
         if (score < bestScore) {
           bestScore = score;
-          bestPos = new Point(cx, cy);
+          best = new Point(cx, cy);
         }
       }
     }
-    return bestPos;
+    return best;
   }
 
-  private findLowestYAtX(polygon: Polygon, baseX: number, pieceId: string): number | null {
+  private dropY(polygon: Polygon, baseX: number, pieceId: string): number | null {
     const spacing = this.config.spacing;
-    const bbox = polygon.getBoundingBox();
-    const pw = bbox.width;
+    const b = polygon.getBoundingBox();
+    const fw = this.config.fabricWidth;
+    const fh = this.config.fabricHeight;
 
-    if (baseX < spacing || baseX + pw + spacing > this.config.fabricWidth) return null;
+    let testY = Math.max(spacing - b.minY, 0);
+
+    // Quick reject: piece too tall for fabric
+    if (b.height + spacing * 2 > fh) return null;
 
     const visited = new Set<number>();
-    let testY = spacing;
-    const fh = this.config.fabricHeight;
 
     while (testY < fh) {
       const yKey = Math.round(testY * 10);
       if (visited.has(yKey)) break;
       visited.add(yKey);
 
+      // Top boundary: piece's top edge must be >= spacing
+      if (testY + b.minY < spacing) {
+        testY = spacing - b.minY;
+        continue;
+      }
+      // Bottom boundary: piece's bottom edge must be <= fh - spacing
+      if (testY + b.maxY > fh - spacing) break;
+
       const testPoly = polygon.translate(baseX, testY);
-      let collision = false;
+      // Validate with actual translated bounding box
+      const bb = testPoly.getBoundingBox();
+      if (bb.minX < spacing || bb.maxX > fw - spacing || bb.minY < spacing || bb.maxY > fh - spacing) {
+        testY += 10;
+        continue;
+      }
+
+      let collides = false;
       let lowestBelow = Infinity;
 
       for (const placed of this.placedPieces) {
         if (placed.pieceId === pieceId) continue;
         const placedPoly = placed.polygon.translate(placed.x, placed.y);
-        const expanded = placedPoly.offset(spacing);
-        const result = SATCollision.testCollision(testPoly, expanded);
+        const result = SATCollision.testCollision(testPoly, placedPoly);
         if (result.collides) {
-          collision = true;
+          collides = true;
+          // Jump below the placed piece + spacing gap, using bbox
           const pb = placedPoly.getBoundingBox();
-          const newY = pb.maxY + spacing;
+          const newY = pb.maxY + spacing - b.minY + 0.5;
           if (newY < lowestBelow) lowestBelow = newY;
         }
       }
 
-      if (!collision) return testY;
+      if (!collides) return testY;
       if (lowestBelow > testY + 0.01) {
-        testY = lowestBelow;
+        testY = Math.max(lowestBelow, 0);
       } else {
         break;
       }
@@ -253,58 +256,52 @@ export class NestEngine {
     const spacing = this.config.spacing;
     let improved = true;
 
-    for (let iteration = 0; iteration < 15 && improved; iteration++) {
+    for (let iter = 0; iter < 15 && improved; iter++) {
       improved = false;
 
-      // Sort: process pieces from top to bottom
-      const sortedIndices = this.placedPieces
+      const sorted = this.placedPieces
         .map((p, i) => ({ i, y: p.polygon.translate(p.x, p.y).getBoundingBox().minY }))
         .sort((a, b) => a.y - b.y);
 
-      for (const { i: idx } of sortedIndices) {
+      for (const { i: idx } of sorted) {
         const r = this.placedPieces[idx];
+        const b = r.polygon.getBoundingBox();
         let curX = r.x;
         let curY = r.y;
 
-        // Push left (0.5mm steps)
+        // Push left (0.5 steps)
         let moved = true;
         while (moved) {
           moved = false;
-          const newX = curX - 0.5;
-          if (newX >= spacing) {
-            const testPoly = r.polygon.translate(newX, curY);
-            let valid = true;
-            for (const other of this.placedPieces) {
-              if (other === r) continue;
-              const otherPoly = other.polygon.translate(other.x, other.y);
-              const expanded = otherPoly.offset(spacing);
-              if (SATCollision.testCollision(testPoly, expanded).collides) {
-                valid = false;
-                break;
+          const nx = curX - 0.5;
+          if (nx + b.minX >= spacing) {
+            const tp = r.polygon.translate(nx, curY);
+            let ok = true;
+            for (const o of this.placedPieces) {
+              if (o === r) continue;
+              if (SATCollision.testCollision(tp, o.polygon.translate(o.x, o.y).offset(spacing)).collides) {
+                ok = false; break;
               }
             }
-            if (valid) { curX = newX; moved = true; improved = true; }
+            if (ok) { curX = nx; moved = true; improved = true; }
           }
         }
 
-        // Push up (0.5mm steps)
+        // Push up (0.5 steps)
         moved = true;
         while (moved) {
           moved = false;
-          const newY = curY - 0.5;
-          if (newY >= spacing) {
-            const testPoly = r.polygon.translate(curX, newY);
-            let valid = true;
-            for (const other of this.placedPieces) {
-              if (other === r) continue;
-              const otherPoly = other.polygon.translate(other.x, other.y);
-              const expanded = otherPoly.offset(spacing);
-              if (SATCollision.testCollision(testPoly, expanded).collides) {
-                valid = false;
-                break;
+          const ny = curY - 0.5;
+          if (ny + b.minY >= spacing) {
+            const tp = r.polygon.translate(curX, ny);
+            let ok = true;
+            for (const o of this.placedPieces) {
+              if (o === r) continue;
+              if (SATCollision.testCollision(tp, o.polygon.translate(o.x, o.y).offset(spacing)).collides) {
+                ok = false; break;
               }
             }
-            if (valid) { curY = newY; moved = true; improved = true; }
+            if (ok) { curY = ny; moved = true; improved = true; }
           }
         }
 
@@ -320,17 +317,17 @@ export class NestEngine {
     let maxX = 0;
     let maxY = 0;
 
-    for (const nestingPiece of this.pieces) {
-      totalArea += nestingPiece.polygon.getArea() * nestingPiece.quantity;
+    for (const p of this.pieces) {
+      totalArea += p.polygon.getArea() * p.quantity;
     }
 
     const positions: NestResult['positions'] = [];
 
     for (const placed of this.placedPieces) {
       usedArea += placed.polygon.getArea();
-      const bbox = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
-      maxX = Math.max(maxX, bbox.maxX);
-      maxY = Math.max(maxY, bbox.maxY);
+      const bb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      maxX = Math.max(maxX, bb.maxX);
+      maxY = Math.max(maxY, bb.maxY);
 
       positions.push({
         pieceId: placed.pieceId,
@@ -340,16 +337,16 @@ export class NestEngine {
       });
     }
 
-    const boundsWidth = maxX + this.config.spacing;
-    const boundsHeight = maxY + this.config.spacing;
-    const fabricArea = boundsWidth * boundsHeight;
+    const bw = maxX + this.config.spacing;
+    const bh = maxY + this.config.spacing;
+    const fa = bw * bh;
 
     return {
       positions,
-      utilization: fabricArea > 0 ? (usedArea / fabricArea) * 100 : 0,
+      utilization: fa > 0 ? (usedArea / fa) * 100 : 0,
       totalArea,
       usedArea,
-      bounds: { width: boundsWidth, height: boundsHeight },
+      bounds: { width: bw, height: bh },
     };
   }
 
@@ -365,18 +362,16 @@ export class NestEngine {
 
   optimize(iterations: number = 10): NestResult {
     let bestResult = this.nest();
-    let bestUtilization = bestResult.utilization;
+    let bestUtil = bestResult.utilization;
 
     for (let i = 0; i < iterations; i++) {
       this.shufflePieces();
-      const result = this.nest();
-
-      if (result.utilization > bestUtilization) {
-        bestResult = result;
-        bestUtilization = result.utilization;
+      const r = this.nest();
+      if (r.utilization > bestUtil) {
+        bestResult = r;
+        bestUtil = r.utilization;
       }
     }
-
     return bestResult;
   }
 
@@ -387,10 +382,7 @@ export class NestEngine {
     }
   }
 
-  static nestPieces(
-    pieces: PatternPiece[],
-    config: Partial<NestConfig> = {}
-  ): NestResult {
+  static nestPieces(pieces: PatternPiece[], config: Partial<NestConfig> = {}): NestResult {
     const engine = new NestEngine(config);
     engine.addPieces(pieces);
     return engine.nest();

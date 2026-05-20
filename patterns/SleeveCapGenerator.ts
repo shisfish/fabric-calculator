@@ -389,47 +389,47 @@ export class SleeveCapGenerator {
     const capPath = new Path()
       .move(capTop)
 
-      // 前袖
+      // 前袖山
       .curve(
         ufCp1,
         ufCp2,
         frontPitch
       )
-      .segment('armhole')
+      .segment('sleeveCap')
 
       .curve(
         lfCp1,
         lfCp2,
         frontAxilla
       )
-      .segment('armhole')
+      .segment('sleeveCap')
 
       // 前侧缝
       .line(frontCuff)
-      .segment('sideSeam')
+      .segment('frontSeam')
 
       // 袖口
       .line(backCuff)
-      .segment('hem')
+      .segment('sleeveHem')
 
       // 后侧缝
       .line(backAxilla)
-      .segment('sideSeam')
+      .segment('backSeam')
 
-      // 后袖
+      // 后袖山
       .curve(
         lbCp1,
         lbCp2,
         backPitch
       )
-      .segment('armhole')
+      .segment('sleeveCap')
 
       .curve(
         ubCp1,
         ubCp2,
         capTop
       )
-      .segment('armhole')
+      .segment('sleeveCap')
 
       .close();
 
