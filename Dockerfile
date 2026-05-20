@@ -66,6 +66,9 @@ RUN npm install -g tsx && \
 
 COPY . .
 
+# 清理旧编译JS文件，确保 tsx 运行时代码解析到最新的 .ts 源码
+RUN rm -rf dist/
+
 COPY --from=frontend-builder /frontend/static/js/cad/bundle.js ./static/js/cad/bundle.js
 
 RUN mkdir -p /opt/fabric-data/uploads && \

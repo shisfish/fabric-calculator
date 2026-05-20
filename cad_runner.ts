@@ -280,8 +280,8 @@ if (input.mode === 'preview') {
                 
                 piecesData.push({
                     name: piece.name,
-                    x: pp.x + (i * 5),  // 稍微偏移避免完全重叠
-                    y: pp.y + (i * 3),
+                    x: pp.x,
+                    y: pp.y,
                     width: piece.onFold ? (expandOnFoldPiece(finalPathOps, [], 'y').width) : bbox.width,
                     height: bbox.height,
                     area: pp.polygon.getArea(),
