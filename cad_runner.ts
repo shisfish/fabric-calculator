@@ -209,7 +209,7 @@ if (input.mode === 'preview') {
         process.exit(0);
     }
 
-    const result = engine.nest();
+    const result = engine.optimize(30);
     const placedPolygons = engine.getPlacedPolygons();
 
     // 🔧 【关键修复】构建完整的pathOps映射

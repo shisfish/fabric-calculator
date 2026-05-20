@@ -125,11 +125,11 @@ export class NestEngine {
     }
   }
 
-  nest(): NestResult {
+  nest(sortByArea: boolean = true): NestResult {
     this.placedPieces = [];
-    const sortedPieces = this.sortPiecesByArea();
+    const piecesToPlace = sortByArea ? this.sortPiecesByArea() : [...this.pieces];
 
-    for (const nestingPiece of sortedPieces) {
+    for (const nestingPiece of piecesToPlace) {
       for (let q = 0; q < nestingPiece.quantity; q++) {
         const success = this.placePiece(nestingPiece, q);
         if (!success) {
@@ -467,7 +467,7 @@ export class NestEngine {
 
     for (let i = 0; i < iterations; i++) {
       this.shufflePieces();
-      const r = this.nest();
+      const r = this.nest(false);  // 使用随机顺序（不按面积排序），使旋转组合多样化
       if (r.utilization > bestUtil) {
         bestResult = r;
         bestUtil = r.utilization;
