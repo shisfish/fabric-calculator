@@ -200,6 +200,30 @@
                 </div>
             </div>
 
+            <!-- 自定义配件（口袋/其他） -->
+            <div class="card" style="margin-top:20px;">
+                <h3>自定义配件</h3>
+                <p class="panel-desc" style="margin-bottom:12px;">添加口袋、配件等矩形裁片（默认矩形，缝份1.5cm）</p>
+                <div class="toolbar" style="margin-bottom:10px;">
+                    <button class="btn btn-sm btn-outline" onclick="addCustomPiece()">+ 添加裁片</button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="custom-pieces-table">
+                        <thead>
+                            <tr>
+                                <th>裁片名称</th>
+                                <th>长度(cm)</th>
+                                <th>宽度(cm)</th>
+                                <th>数量</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="custom-pieces-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="btn-group">
                 <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>
                 <button class="btn btn-primary" onclick="goStep(3)">下一步：面料参数</button>

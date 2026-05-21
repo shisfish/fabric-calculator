@@ -347,8 +347,9 @@ def generate_cad_pieces_preview(measurements, options=None):
         return {"pieces": [], "error": str(e)}
 
 
-def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate, 
-                                 wastage_rate, fabric_weight_gsm, quantity, fabric_nap=False):
+def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate,
+                                 wastage_rate, fabric_weight_gsm, quantity, fabric_nap=False,
+                                 custom_pieces=None):
     """
     CAD排料计算 - 基于实物测量数据生成裁片并排料
     """
@@ -406,10 +407,115 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
         utilization_rate = data.get('utilization', 0)
 
+        pieces = data.get('pieces', [])
+        positions = data.get('positions', [])
+        bounds = data.get('bounds', {})
+
+        # ===== 处理自定义裁片（口袋、配件等矩形裁片） =====
+        if custom_pieces:
+            from rectpack import newPacker, MaxRectsBssf, SORT_AREA
+
+            main_nest_h = bounds.get('height', 0) if bounds else 0
+            custom_piece_data = []
+            for cp in custom_pieces:
+                name = cp.get('name', '配件')
+                w = float(cp.get('width', 10))
+                h = float(cp.get('height', 10))
+                count = int(cp.get('count', 1))
+                if w <= 0 or h <= 0:
+                    continue
+                seam = 1.5
+                path_ops = _generate_rectangle_path_ops(w, h)
+                seam_ops = _generate_rectangle_seam_ops(w, h, seam)
+                area = w * h
+                for i in range(count):
+                    custom_piece_data.append({
+                        "name": name,
+                        "width": w,
+                        "height": h,
+                        "area": area,
+                        "cutCount": 1,
+                        "onFold": False,
+                        "seamAllowance": seam,
+                        "pathOps": path_ops,
+                        "seamAllowancePathOps": seam_ops,
+                        "_custom": True,
+                    })
+
+            if custom_piece_data:
+                # 使用 rectpack 对自定义裁片进行排料
+                packer = newPacker(pack_algo=MaxRectsBssf, rotation=True, sort_algo=SORT_AREA)
+                max_len = sum(p["height"] * p["width"] for p in custom_piece_data) / fabric_width * 2 + main_nest_h
+                packer.add_bin(fabric_width, max_len, count=1)
+                for idx, cp in enumerate(custom_piece_data):
+                    packer.add_rect(cp["width"], cp["height"], idx)
+                packer.pack()
+
+                # 计算自定义裁片的偏移量（从主排料底部开始）
+                custom_offset_y = main_nest_h + 10  # 10cm gap
+
+                # 收集自定义裁片位置
+                placed_customs = set()
+                for bin in packer:
+                    for rect in bin:
+                        rid = rect.rid
+                        if rid in placed_customs:
+                            continue
+                        placed_customs.add(rid)
+                        cp = custom_piece_data[rid]
+                        pos_x = rect.x
+                        pos_y = rect.y + custom_offset_y
+                        cp_width = cp["width"]
+                        cp_height = cp["height"]
+                        # 检查是否旋转
+                        rotated = (rect.width == cp_height and rect.height == cp_width)
+                        if rotated:
+                            cp_width, cp_height = cp_height, cp_width
+                        custom_piece_data[rid].update({
+                            "x": pos_x,
+                            "y": pos_y,
+                            "placed": True,
+                            "rotation": 90 if rotated else 0,
+                        })
+                        # 计算此裁片实例的边界框
+                        bbox_height = cp_height
+                        custom_piece_data[rid]["bbox_height"] = bbox_height
+                        positions.append({
+                            "name": name,
+                            "x": pos_x,
+                            "y": pos_y,
+                            "rotation": 90 if rotated else 0,
+                        })
+
+                # 追加到主裁片列表
+                pieces.extend(custom_piece_data)
+
+                # 更新 bounds
+                total_height = custom_offset_y + max(
+                    (p.get("y", 0) + p.get("bbox_height", p.get("height", 0))) for p in custom_piece_data if p.get("placed", False)
+                ) if custom_piece_data else main_nest_h
+                bounds = {
+                    "width": fabric_width,
+                    "height": max(main_nest_h, total_height),
+                }
+
+                # 更新统计
+                custom_area = sum(p["area"] for p in custom_piece_data)
+                custom_used_area = custom_area
+                total_area_cm2 = total_area_cm2 + custom_area
+                used_area_cm2 = used_area_cm2 + custom_used_area
+                total_area_m2 = total_area_cm2 / 10000
+                per_piece_length_m = bounds["height"] / 100
+                total_length_m = per_piece_length_m * quantity
+                main_util = data.get('utilization', 0)
+                total_util = used_area_cm2 / (fabric_width * bounds["height"]) * 100 if bounds["height"] > 0 else 0
+                utilization_rate = total_util
+
         pieces_detail = []
-        for p in data.get('pieces', []):
+        for p in pieces:
             area_cm2 = p.get('area', 0)
-            pieces_detail.append({
+            is_custom = p.get('_custom', False)
+            pd = {
                 "name": p.get('name', ''),
                 "original_length": round(p.get('height', 0), 2),
                 "original_width": round(p.get('width', 0), 2),
@@ -417,22 +523,21 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
                 "area_cm2": round(area_cm2, 2),
                 "area_with_shrinkage_cm2": round(area_cm2 * (1 + shrinkage_rate / 100), 2),
                 "material": "main",
-                "on_fold": p.get('onFold', False)
-            })
+                "on_fold": p.get('onFold', False),
+                "is_custom": is_custom,
+            }
+            pieces_detail.append(pd)
 
-        positions = data.get('positions', [])
-        bounds = data.get('bounds', {})
-
-        nesting_svg = _generate_nesting_svg(data.get('pieces', []), positions, fabric_width, bounds, utilization_rate)
+        nesting_svg = _generate_nesting_svg(pieces, positions, fabric_width, bounds, utilization_rate)
         nesting_png = _generate_nesting_png_base64(nesting_svg)
 
         # 如果SVG转换失败，使用Pillow直接生成PNG
         if not nesting_png:
             print("[PNG生成] SVG转换失败，使用Pillow直接生成...")
-            nesting_png = _generate_nesting_png_direct(data.get('pieces', []), positions, fabric_width, bounds, utilization_rate)
+            nesting_png = _generate_nesting_png_direct(pieces, positions, fabric_width, bounds, utilization_rate)
 
         return {
-            "pieces": data.get('pieces', []),
+            "pieces": pieces,
             "positions": positions,
             "nesting_svg": nesting_svg,
             "nesting_png_base64": nesting_png,
@@ -469,6 +574,29 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         raise Exception(f"解析结果失败: {str(e)}")
     except Exception as e:
         raise e
+
+
+def _generate_rectangle_path_ops(w, h):
+    """生成矩形裁片的 pathOps（用于前端 Canvas 渲染）"""
+    return [
+        {"type": "move", "to": {"x": 0, "y": 0}},
+        {"type": "line", "to": {"x": w, "y": 0}},
+        {"type": "line", "to": {"x": w, "y": h}},
+        {"type": "line", "to": {"x": 0, "y": h}},
+        {"type": "close"},
+    ]
+
+
+def _generate_rectangle_seam_ops(w, h, seam_allowance=1.5):
+    """生成矩形裁片的缝份 pathOps"""
+    sa = seam_allowance
+    return [
+        {"type": "move", "to": {"x": -sa, "y": -sa}},
+        {"type": "line", "to": {"x": w + sa, "y": -sa}},
+        {"type": "line", "to": {"x": w + sa, "y": h + sa}},
+        {"type": "line", "to": {"x": -sa, "y": h + sa}},
+        {"type": "close"},
+    ]
 
 
 def _calculate_industrial_biceps_width(cuff_width, chest_width, sleeve_length):

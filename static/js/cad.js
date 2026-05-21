@@ -17,6 +17,7 @@ let currentResult = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     renderCategories();
+    initCustomPieces();
     loadEditRecord();
 });
 
@@ -99,6 +100,56 @@ function getFabricParams() {
     };
 }
 
+// ===== 自定义裁片管理 =====
+let customPieces = [];
+
+function initCustomPieces() {
+    customPieces = [
+        { name: '口袋', length: 15, width: 15, count: 2 },
+        { name: '其他配件', length: 10, width: 10, count: 2 },
+    ];
+    renderCustomPieces();
+}
+
+function renderCustomPieces() {
+    const tbody = document.getElementById('custom-pieces-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = customPieces.map((p, i) => `
+        <tr>
+            <td><input type="text" value="${p.name}" class="input-inline" style="width:100px;" data-idx="${i}" data-field="name" onchange="updateCustomPiece(${i}, 'name', this.value)"></td>
+            <td><input type="number" value="${p.length}" class="input-inline" style="width:70px;" step="0.5" min="1" data-idx="${i}" data-field="length" onchange="updateCustomPiece(${i}, 'length', parseFloat(this.value) || 10)"></td>
+            <td><input type="number" value="${p.width}" class="input-inline" style="width:70px;" step="0.5" min="1" data-idx="${i}" data-field="width" onchange="updateCustomPiece(${i}, 'width', parseFloat(this.value) || 10)"></td>
+            <td><input type="number" value="${p.count}" class="input-inline" style="width:60px;" step="1" min="1" data-idx="${i}" data-field="count" onchange="updateCustomPiece(${i}, 'count', parseInt(this.value) || 1)"></td>
+            <td><button class="btn btn-sm btn-danger" onclick="removeCustomPiece(${i})" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;">删除</button></td>
+        </tr>
+    `).join('');
+}
+
+function updateCustomPiece(idx, field, value) {
+    if (idx >= 0 && idx < customPieces.length) {
+        customPieces[idx][field] = value;
+    }
+}
+
+function addCustomPiece() {
+    customPieces.push({ name: '新配件', length: 10, width: 10, count: 1 });
+    renderCustomPieces();
+}
+
+function removeCustomPiece(idx) {
+    customPieces.splice(idx, 1);
+    renderCustomPieces();
+}
+
+function getCustomPiecesData() {
+    return customPieces.filter(p => p.length > 0 && p.width > 0).map(p => ({
+        name: p.name,
+        width: p.length,
+        height: p.width,
+        count: p.count,
+    }));
+}
+
 async function calculateNesting() {
     if (!currentCategory) {
         alert('请先选择品类');
@@ -109,11 +160,15 @@ async function calculateNesting() {
 
     try {
         const frontOnly = document.getElementById('front-only-mode')?.checked || false;
+        const customPiecesData = getCustomPiecesData();
         const requestBody = {
             category: currentCategory,
             garmentInput: getGarmentInput(),
             fabricParams: getFabricParams(),
+            customPieces: customPiecesData,
         };
+
+        console.log(`[CAD] 发送排料请求: 自定义裁片 ${customPiecesData.length} 个`, customPiecesData);
 
         if (frontOnly) {
             requestBody.frontOnly = true;
@@ -215,12 +270,12 @@ function renderResult(result) {
     const pieces = result.pieces_detail || [];
     piecesTbody.innerHTML = pieces.map(p => `
         <tr>
-            <td>${p.name}</td>
+            <td>${p.name}${p.is_custom ? ' <span style="color:#f59e0b;font-size:11px;">(配件)</span>' : ''}</td>
             <td>${p.original_length} × ${p.original_width}</td>
             <td>${p.count}</td>
             <td>${p.area_cm2}</td>
             <td>${p.area_with_shrinkage_cm2}</td>
-            <td>${p.on_fold ? '是' : '否'}</td>
+            <td>${p.on_fold ? '是' : p.is_custom ? '—' : '否'}</td>
         </tr>
     `).join('');
 }

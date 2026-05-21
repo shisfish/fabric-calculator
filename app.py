@@ -7,8 +7,6 @@ Fabric Consumption Quick Calculator
 from flask import Flask, render_template, request, jsonify, send_file
 from calculator_engine import FabricCalculator, QuotationEngine
 from curved_engine import CurvedPieceCalculator
-from polygon_nesting import polygon_nesting
-from image_engine import measurement_engine
 from db_manager import db_manager
 import json
 import os
@@ -271,6 +269,7 @@ def clear_history():
 def image_upload():
     """上传图片"""
     try:
+        from image_engine import measurement_engine
         session_id = request.form.get('session_id')
         image_data = request.form.get('image_data')
 
@@ -292,6 +291,7 @@ def image_upload():
 def image_calibrate():
     """标定参照物"""
     try:
+        from image_engine import measurement_engine
         data = request.get_json()
         session_id = data.get('session_id')
         ref_rect = data.get('ref_rect')  # {x1, y1, x2, y2}
@@ -310,6 +310,7 @@ def image_calibrate():
 def image_measure():
     """测量裁片区域"""
     try:
+        from image_engine import measurement_engine
         data = request.get_json()
         session_id = data.get('session_id')
         pieces_data = data.get('pieces', [])  # [{name, rect: {x1,y1,x2,y2}}, ...]
@@ -327,6 +328,7 @@ def image_measure():
 def image_annotate():
     """获取标注后的图片"""
     try:
+        from image_engine import measurement_engine
         data = request.get_json()
         session_id = data.get('session_id')
         img_base64 = measurement_engine.draw_annotations(session_id)
@@ -338,6 +340,7 @@ def image_annotate():
 @app.route('/api/image/session/<session_id>', methods=['GET'])
 def image_session(session_id):
     """获取会话状态"""
+    from image_engine import measurement_engine
     state = measurement_engine.get_session_state(session_id)
     return jsonify({"success": True, "data": state})
 
@@ -494,27 +497,28 @@ def polygon_nesting_page():
 def api_polygon_nesting():
     """多边形排料API"""
     import time
+    from polygon_nesting import polygon_nesting
     start_time = time.time()
     try:
         data = request.get_json()
         if not data:
             return jsonify({"success": False, "message": "请求数据为空"}), 400
-        
+
         pieces = data.get("pieces", [])
         fabric_width = float(data.get("fabric_width", 140))
         shrinkage_rate = float(data.get("shrinkage_rate", 3))
         wastage_rate = float(data.get("wastage_rate", 8))
         fabric_weight_gsm = float(data.get("fabric_weight_gsm", 0))
         quantity = int(data.get("quantity", 1))
-        
+
         print(f"[API] 收到排料请求: {len(pieces)}种裁片, 门幅{fabric_width}cm")
-        
+
         from piece_generator import generate_all_pieces_images
-        
+
         piece_images = generate_all_pieces_images(pieces, fabric_width_cm=fabric_width, save_to_file=True)
-        
+
         print(f"[API] 生成 {len(piece_images)} 个裁片图形")
-        
+
         nesting_result = polygon_nesting(pieces, fabric_width)
         
         # 构建裁片明细
@@ -789,8 +793,9 @@ def cad_nesting():
         fabric_weight_gsm = float(fabric_params.get("weightGsm", 0))
         quantity = int(fabric_params.get("quantity", 1))
         fabric_nap = fabric_params.get("fabricNap", False)
+        custom_pieces = data.get("customPieces", [])
 
-        print(f"[CAD] 收到排料请求: 品类={category}, 门幅={fabric_width}cm, 数量={quantity}")
+        print(f"[CAD] 收到排料请求: 品类={category}, 门幅={fabric_width}cm, 数量={quantity}, 自定义裁片={len(custom_pieces)}个")
 
         from piece_generator import generate_cad_nesting_result
         result = generate_cad_nesting_result(
@@ -801,7 +806,8 @@ def cad_nesting():
             wastage_rate=wastage_rate,
             fabric_weight_gsm=fabric_weight_gsm,
             quantity=quantity,
-            fabric_nap=fabric_nap
+            fabric_nap=fabric_nap,
+            custom_pieces=custom_pieces if custom_pieces else None,
         )
 
         record_id = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -829,7 +835,10 @@ def cad_nesting():
             "input_data": data,
             "full_result": result,
         }
-        db_manager.save_record(record)
+        try:
+            db_manager.save_record(record)
+        except Exception as e:
+            print(f"[CAD] 保存历史记录失败: {e}")
 
         elapsed = time.time() - start_time
         print(f"[CAD] 排料完成: 单件{result.get('per_piece_length_m')}m, 利用率{result.get('utilization_rate')}%, 耗时{elapsed:.3f}秒")
