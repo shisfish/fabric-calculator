@@ -467,8 +467,12 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
                         pos_y = rect.y + custom_offset_y
                         cp_width = cp["width"]
                         cp_height = cp["height"]
-                        # 检查是否旋转
-                        rotated = (rect.width == cp_height and rect.height == cp_width)
+                        # 检查 rectpack 是否旋转了裁片（仅对非正方形有效）
+                        original_w = cp["width"]
+                        original_h = cp["height"]
+                        rotated = False
+                        if abs(original_w - original_h) > 0.01:
+                            rotated = (rect.width == original_h and rect.height == original_w)
                         if rotated:
                             cp_width, cp_height = cp_height, cp_width
                         custom_piece_data[rid].update({
@@ -481,7 +485,7 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
                         bbox_height = cp_height
                         custom_piece_data[rid]["bbox_height"] = bbox_height
                         positions.append({
-                            "name": name,
+                            "name": cp["name"],
                             "x": pos_x,
                             "y": pos_y,
                             "rotation": 90 if rotated else 0,
@@ -539,6 +543,7 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         return {
             "pieces": pieces,
             "positions": positions,
+            "bounds": bounds,
             "nesting_svg": nesting_svg,
             "nesting_png_base64": nesting_png,
             "pieces_detail": pieces_detail,
