@@ -733,15 +733,20 @@ def _calculate_centroid(points):
 
 
 def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilization=0):
-    """生成排料图SVG - 基于真实Bezier路径"""
+    """生成排料图SVG - 横向排列，门幅在左侧
+
+    坐标系说明：
+    - NestEngine原始坐标：X=门幅方向(0~fabricWidth)，Y=排料长度方向(0~length)
+    - 屏幕横向排列：X=排料长度方向(水平)，Y=门幅方向(垂直，从上到下)
+    - 变换公式：screenX = origY * scale + padding, screenY = origX * scale + padding + label_height
+    """
     if not positions:
         return ""
 
     scale = 1.5
     padding = 20
-    label_height = 30  # 顶部门幅标注预留空间
+    label_height = 30
 
-    # 使用NestEngine返回的真实边界，确保虚线框准确包含所有裁片
     if bounds:
         nest_w = bounds.get('width', fabric_width)
         nest_h = bounds.get('height', 0)
@@ -749,11 +754,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
-    # 门幅在左：直接坐标交换，不使用SVG transform旋转
-    # 原始坐标系：X=门幅方向，Y=排料长度方向
-    # 屏幕坐标系：X=排料长度方向(水平)，Y=门幅方向(垂直) — 门幅显示在左侧
-    svg_w = int(nest_h * scale + padding * 2)       # 排料长度 → 水平方向
-    svg_h = int(fabric_width * scale + padding * 2 + label_height)  # 门幅 → 垂直方向
+    # 横向排列：排料长度→水平，门幅→垂直
+    svg_w = int(nest_h * scale + padding * 2)
+    svg_h = int(fabric_width * scale + padding * 2 + label_height)
 
     lines = []
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="100%" height="auto">')
@@ -765,10 +768,25 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 f'门幅: {fabric_width} cm | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%'
                 f'</text>')
 
-    # 面料虚线框（坐标交换：门幅→Y，排料长度→X）
+    # 面料虚线框（横向：宽=排料长度，高=门幅）
     lines.append(f'<rect x="{padding}" y="{padding + label_height}" '
                 f'width="{nest_h * scale}" height="{fabric_width * scale}" '
                 f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
+
+    # 门幅标注（左侧竖向）
+    mid_y = padding + label_height + fabric_width * scale / 2
+    lines.append(f'<text x="{padding - 5}" y="{mid_y}" '
+                f'text-anchor="end" font-size="10" fill="#999" '
+                f'writing-mode="tb" glyph-orientation-vertical="0">'
+                f'{fabric_width}cm'
+                f'</text>')
+
+    # 排料长度标注（底部横向）
+    mid_x = padding + nest_h * scale / 2
+    lines.append(f'<text x="{mid_x}" y="{padding + label_height + fabric_width * scale + 15}" '
+                f'text-anchor="middle" font-size="10" fill="#999">'
+                f'{nest_h:.1f}cm'
+                f'</text>')
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
@@ -798,35 +816,60 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
             if onfold and pts_list:
                 mirrored = [(-x, y) for x, y in reversed(pts_list)]
                 full_pts = pts_list + mirrored
-                cx, cy = _calculate_centroid(full_pts)
             elif pts_list:
-                cx, cy = _calculate_centroid(pts_list)
+                full_pts = pts_list
             else:
+                full_pts = []
+
+            if full_pts and len(full_pts) >= 3:
+                cx, cy = _calculate_centroid(full_pts)
+                import math
+                rad = rotation * math.pi / 180
+                cos_r, sin_r = math.cos(rad), math.sin(rad)
+
+                # 旋转 + 平移 + 坐标交换(X/Y) 一步完成
+                # 1. 旋转：围绕形心(cx,cy)旋转
+                # 2. 平移：加上排料位置(pos_x,pos_y)
+                # 3. 坐标交换：origX→screenY, origY→screenX
+                screen_pts = []
+                for fx, fy in full_pts:
+                    dx = fx - cx
+                    dy = fy - cy
+                    rx = pos_x + dx * cos_r - dy * sin_r + cx
+                    ry = pos_y + dx * sin_r + dy * cos_r + cy
+                    # 坐标交换：origX→screenY, origY→screenX
+                    sx = ry * scale + padding
+                    sy = rx * scale + padding + label_height
+                    screen_pts.append((sx, sy))
+
+                # 构建SVG polygon（用采样点，曲线精度足够）
+                points_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in screen_pts)
+                lines.append(f'<polygon points="{points_str}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
+
+                # 标签
+                scx = sum(p[0] for p in screen_pts) / len(screen_pts)
+                scy = sum(p[1] for p in screen_pts) / len(screen_pts)
+                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}">{name}</text>')
+            else:
+                # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
-                cx = (bbox['minX'] + bbox['maxX']) / 2
-                cy = (bbox['minY'] + bbox['maxY']) / 2
-            # 坐标交换：原始X(门幅) → 屏幕Y，原始Y(排料长度) → 屏幕X
-            center_x = (pos_y + cy) * scale + padding
-            center_y = (pos_x + cx) * scale + padding + label_height
-
-            if onfold:
-                path_d = _generate_onfold_full_path(path_ops, scale)
-            else:
-                path_d = _convert_path_ops_to_svg_d(path_ops, scale)
-
-            lines.append(f'<g transform="translate({center_x:.1f},{center_y:.1f}) rotate({rotation}) translate({-cy*scale:.1f},{-cx*scale:.1f})">')
-            lines.append(f'<path d="{path_d}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
-            lines.append('</g>')
-            lines.append(f'<text x="{center_x:.1f}" y="{center_y - 5:.1f}" text-anchor="middle" font-size="10" fill="{color}">{name}</text>')
+                bw = (bbox['maxX'] - bbox['minX']) * scale
+                bh = (bbox['maxY'] - bbox['minY']) * scale
+                # 坐标交换后：bw→高，bh→宽
+                sx = pos_y * scale + padding
+                sy = pos_x * scale + padding + label_height
+                lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{bh:.1f}" height="{bw:.1f}" '
+                            f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
+                lines.append(f'<text x="{sx + bh/2:.1f}" y="{sy + bw/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}">{name}(简化)</text>')
         else:
+            # 无路径fallback
             w = 50 * scale
             h = 80 * scale
-            lines.append(f'<g transform="translate({(pos_y)*scale+padding:.1f},{(pos_x)*scale+padding+label_height:.1f}) rotate({rotation})">')
-            lines.append(f'<rect x="0" y="0" width="{w:.1f}" height="{h:.1f}" '
+            sx = pos_y * scale + padding
+            sy = pos_x * scale + padding + label_height
+            lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{w:.1f}" height="{h:.1f}" '
                         f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
-            lines.append('</g>')
-            lines.append(f'<text x="{(pos_y + w/2)*scale+padding:.1f}" y="{(pos_x + h/2)*scale+padding+label_height:.1f}" '
-                        f'text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
+            lines.append(f'<text x="{sx + w/2:.1f}" y="{sy + h/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
 
     lines.append('</svg>')
     return "\n".join(lines)
@@ -1036,7 +1079,12 @@ def _generate_nesting_png_base64(svg_content):
 def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, utilization=0):
     """
     直接使用Pillow生成排料PNG（不依赖外部工具）
-    作为所有SVG转换方法失败时的备选方案
+    横向排列，门幅在左侧
+
+    坐标系与SVG一致：
+    - NestEngine原始坐标：X=门幅方向，Y=排料长度方向
+    - 屏幕坐标：X=排料长度(水平)，Y=门幅(垂直)
+    - 变换：screenX = origY * scale + padding, screenY = origX * scale + padding + label_height
     """
     if not positions:
         return None
@@ -1048,9 +1096,8 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
 
     scale = 3.0
     padding = 40
-    label_height = 50  # 顶部门幅标注预留空间
+    label_height = 50
 
-    # 使用NestEngine返回的真实边界
     if bounds:
         nest_w = bounds.get('width', fabric_width)
         nest_h = bounds.get('height', 0)
@@ -1058,20 +1105,18 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
-    # 门幅在左：坐标交换
-    # 原始坐标：X=门幅方向，Y=排料长度方向
-    # 屏幕坐标：X=排料长度(水平)，Y=门幅(垂直)
+    # 横向排列：排料长度→水平，门幅→垂直
     img_width = int(nest_h * scale + padding * 2)
     img_height = int(fabric_width * scale + padding * 2 + label_height)
 
     img = Image.new('RGB', (img_width, img_height), '#ffffff')
     draw = ImageDraw.Draw(img)
 
-    # 绘制面料虚线框（坐标交换：门幅→Y，排料长度→X）
-    bx1 = padding
-    by1 = padding + label_height
-    bx2 = padding + nest_h * scale
-    by2 = padding + label_height + fabric_width * scale
+    # 绘制面料虚线框（横向：宽=排料长度，高=门幅）
+    bx1 = int(padding)
+    by1 = int(padding + label_height)
+    bx2 = int(padding + nest_h * scale)
+    by2 = int(padding + label_height + fabric_width * scale)
     for dash_start in range(bx1, bx2, 20):
         dash_end = min(dash_start + 12, bx2)
         draw.line([(dash_start, by1), (dash_end, by1)], fill='#999999', width=2)
@@ -1081,20 +1126,32 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(bx1, dash_start), (bx1, dash_end)], fill='#999999', width=2)
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
-    # 门幅标注 + 排料长度
+    # 顶部标注
     label_text = f"门幅: {fabric_width} cm | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%"
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
 
+    # 门幅标注（左侧竖向）
+    font_dim = _get_font(12)
+    mid_y = padding + label_height + fabric_width * scale / 2
+    draw.text((padding - 5, mid_y), f"{fabric_width}cm", fill='#999999', font=font_dim, anchor='rm')
+
+    # 排料长度标注（底部横向）
+    mid_x = padding + nest_h * scale / 2
+    draw.text((mid_x, by2 + 10), f"{nest_h:.1f}cm", fill='#999999', font=font_dim, anchor='mt')
+
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
-    # 构建piece路径映射
+    # 构建piece路径映射（与SVG逻辑一致：onFold用pathOps+镜像，否则用expandedPathOps）
     piece_path_map = {}
     piece_onfold_map = {}
     for p in pieces:
-        ops = p.get('expandedPathOps') or p.get('pathOps', [])
-        piece_path_map[p.get('name', '')] = ops
-        piece_onfold_map[p.get('name', '')] = p.get('onFold', False)
+        onfold = p.get('onFold', False)
+        piece_onfold_map[p.get('name', '')] = onfold
+        if onfold:
+            piece_path_map[p.get('name', '')] = p.get('pathOps', [])
+        else:
+            piece_path_map[p.get('name', '')] = p.get('expandedPathOps') or p.get('pathOps', [])
 
     font_small = _get_font(10)
 
@@ -1109,44 +1166,43 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         color = piece_colors[i % len(piece_colors)]
 
         if path_ops:
-            if onfold:
-                pts = _extract_polygon_points(path_ops)
-                if pts:
-                    mirrored = [(-x, y) for x, y in reversed(pts)]
-                    full_pts = pts + mirrored
-                else:
-                    full_pts = []
-                draw_pts = full_pts
+            pts_list = _extract_polygon_points(path_ops)
+            if onfold and pts_list:
+                mirrored = [(-x, y) for x, y in reversed(pts_list)]
+                full_pts = pts_list + mirrored
+            elif pts_list:
+                full_pts = pts_list
             else:
-                draw_pts = _extract_polygon_points(path_ops)
+                full_pts = []
 
-            if draw_pts and len(draw_pts) >= 3:
-                cx, cy = _calculate_centroid(draw_pts)
+            if full_pts and len(full_pts) >= 3:
+                cx, cy = _calculate_centroid(full_pts)
                 rad = rotation * math.pi / 180
                 cos_r, sin_r = math.cos(rad), math.sin(rad)
+                # 旋转 + 平移 + 坐标交换(X/Y)
                 vertices = []
-                for fx, fy in draw_pts:
+                for fx, fy in full_pts:
                     dx = fx - cx
                     dy = fy - cy
                     rx = pos_x + dx * cos_r - dy * sin_r + cx
                     ry = pos_y + dx * sin_r + dy * cos_r + cy
-                    sz = padding + label_height
+                    # 坐标交换：origX→screenY, origY→screenX
                     vertices.append((
-                        ry * scale + padding,   # 排料长度 → 屏幕X
-                        rx * scale + sz         # 门幅 → 屏幕Y
+                        ry * scale + padding,
+                        rx * scale + padding + label_height
                     ))
                 fill_color = color + '33' if len(color) == 7 else color
                 draw.polygon(vertices, fill=fill_color, outline=color, width=2)
                 scx = sum(v[0] for v in vertices) / len(vertices)
                 scy = sum(v[1] for v in vertices) / len(vertices)
-                draw.text((scx, scy - 10), name, fill=color, font=font_small, anchor='mm')
+                draw.text((scx, scy), name, fill=color, font=font_small, anchor='mm')
         else:
             w = 50 * scale
             h = 80 * scale
-            x = pos_y * scale + padding  # 排料长度 → 屏幕X
-            y = pos_x * scale + padding + label_height  # 门幅 → 屏幕Y
-            draw.rectangle([x, y, x + w, y + h], fill=color + '33', outline=color, width=1)
-            draw.text((x + w/2, y + h/2), f"{name}(无路径)", fill=color, font=font_small, anchor='mm')
+            sx = pos_y * scale + padding
+            sy = pos_x * scale + padding + label_height
+            draw.rectangle([sx, sy, sx + w, sy + h], fill=color + '33', outline=color, width=1)
+            draw.text((sx + w/2, sy + h/2), f"{name}(无路径)", fill=color, font=font_small, anchor='mm')
 
     # 转换为base64
     buf = io.BytesIO()
