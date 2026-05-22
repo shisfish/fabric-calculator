@@ -836,9 +836,8 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
     # 横向排列：排料长度→水平，门幅→垂直
-    # 使用实际使用的门幅宽度(nest_w)裁剪画布高度，避免下方大量空白
     svg_w = int(nest_h * scale + padding * 2)
-    svg_h = int(nest_w * scale + padding * 2 + label_height)
+    svg_h = int(fabric_width * scale + padding * 2 + label_height)
 
     ff = _get_svg_font_family()
 
@@ -852,22 +851,30 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%'
                 f'</text>')
 
-    # 面料虚线框（横向：宽=排料长度，高=实际使用门幅）
+    # 图例：净样 vs 毛样
+    leg_y = padding + label_height - 5
+    leg_x = padding + 10
+    lines.append(f'<line x1="{leg_x}" y1="{leg_y}" x2="{leg_x + 20}" y2="{leg_y}" stroke="#666" stroke-width="1.5"/>'
+                f'<text x="{leg_x + 24}" y="{leg_y + 1}" font-size="9" fill="#666" {ff}>净样(缝合线)</text>')
+    lines.append(f'<line x1="{leg_x + 90}" y1="{leg_y}" x2="{leg_x + 110}" y2="{leg_y}" stroke="#666" stroke-dasharray="4,3" stroke-width="1" opacity="0.6"/>'
+                f'<text x="{leg_x + 114}" y="{leg_y + 1}" font-size="9" fill="#666" {ff}>毛样(裁剪线)</text>')
+
+    # 面料虚线框（横向：宽=排料长度，高=门幅）
     lines.append(f'<rect x="{padding}" y="{padding + label_height}" '
-                f'width="{nest_h * scale}" height="{nest_w * scale}" '
+                f'width="{nest_h * scale}" height="{fabric_width * scale}" '
                 f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
 
-    # 门幅标注（左侧竖向）- 显示实际使用宽度
-    mid_y = padding + label_height + nest_w * scale / 2
+    # 门幅标注（左侧竖向）
+    mid_y = padding + label_height + fabric_width * scale / 2
     lines.append(f'<text x="{padding - 5}" y="{mid_y}" '
                 f'text-anchor="end" font-size="10" fill="#999" '
                 f'{ff}>'
-                f'{nest_w:.0f}cm'
+                f'{fabric_width}cm'
                 f'</text>')
 
     # 排料长度标注（底部横向）
     mid_x = padding + nest_h * scale / 2
-    lines.append(f'<text x="{mid_x}" y="{padding + label_height + nest_w * scale + 15}" '
+    lines.append(f'<text x="{mid_x}" y="{padding + label_height + fabric_width * scale + 15}" '
                 f'text-anchor="middle" font-size="10" fill="#999" '
                 f'{ff}>'
                 f'{nest_h:.1f}cm'
@@ -875,16 +882,25 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
-    # 使用展开后的路径（expandedPathOps），兼容新旧数据
+    # 构建路径映射：净样(缝合线) + 毛样(裁剪线含缝份)
     piece_path_map = {}
+    piece_seam_path_map = {}
+    piece_seam_value_map = {}
     piece_onfold_map = {}
     for p in pieces:
+        name = p.get('name', '')
         onfold = p.get('onFold', False)
-        piece_onfold_map[p.get('name', '')] = onfold
+        piece_onfold_map[name] = onfold
+        # 净样路径（缝合线）
         if onfold:
-            piece_path_map[p.get('name', '')] = p.get('pathOps', [])
+            piece_path_map[name] = p.get('pathOps', [])
         else:
-            piece_path_map[p.get('name', '')] = p.get('expandedPathOps') or p.get('pathOps', [])
+            piece_path_map[name] = p.get('expandedPathOps') or p.get('pathOps', [])
+        # 毛样路径（裁剪线，含缝份）
+        # 缝份路径：所有裁片统一使用seamAllowancePathOps
+        # onFold裁片用半片路径，在渲染时统一镜像（与净样pathOps逻辑一致）
+        piece_seam_path_map[name] = p.get('seamAllowancePathOps', [])
+        piece_seam_value_map[name] = p.get('seamAllowance', 0)
 
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
@@ -912,29 +928,47 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 rad = rotation * math.pi / 180
                 cos_r, sin_r = math.cos(rad), math.sin(rad)
 
-                # 旋转 + 平移 + 坐标交换(X/Y) 一步完成
-                # 1. 旋转：围绕形心(cx,cy)旋转
-                # 2. 平移：加上排料位置(pos_x,pos_y)
-                # 3. 坐标交换：origX→screenY, origY→screenX
-                screen_pts = []
-                for fx, fy in full_pts:
-                    dx = fx - cx
-                    dy = fy - cy
-                    rx = pos_x + dx * cos_r - dy * sin_r + cx
-                    ry = pos_y + dx * sin_r + dy * cos_r + cy
-                    # 坐标交换：origX→screenY, origY→screenX
-                    sx = ry * scale + padding
-                    sy = rx * scale + padding + label_height
-                    screen_pts.append((sx, sy))
+                # 辅助函数：将原始点集变换到屏幕坐标
+                def _transform_pts(pts):
+                    result = []
+                    for fx, fy in pts:
+                        dx = fx - cx
+                        dy = fy - cy
+                        rx = pos_x + dx * cos_r - dy * sin_r + cx
+                        ry = pos_y + dx * sin_r + dy * cos_r + cy
+                        result.append((
+                            ry * scale + padding,
+                            rx * scale + padding + label_height
+                        ))
+                    return result
 
-                # 构建SVG polygon（用采样点，曲线精度足够）
+                # 第一步：绘制毛样（裁剪线，含缝份）— 虚线
+                seam_ops = piece_seam_path_map.get(name, [])
+                seam_value = piece_seam_value_map.get(name, 0)
+                if seam_ops and seam_value > 0:
+                    seam_pts_list = _extract_polygon_points(seam_ops)
+                    if onfold and seam_pts_list:
+                        seam_mirrored = [(-x, y) for x, y in reversed(seam_pts_list)]
+                        seam_full_pts = seam_pts_list + seam_mirrored
+                    else:
+                        seam_full_pts = seam_pts_list
+                    if seam_full_pts and len(seam_full_pts) >= 3:
+                        seam_screen = _transform_pts(seam_full_pts)
+                        seam_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in seam_screen)
+                        lines.append(f'<polygon points="{seam_str}" fill="none" stroke="{color}" stroke-dasharray="4,3" stroke-width="1" opacity="0.6"/>')
+
+                # 第二步：绘制净样（缝合线）— 实线
+                screen_pts = _transform_pts(full_pts)
                 points_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in screen_pts)
                 lines.append(f'<polygon points="{points_str}" fill="none" stroke="{color}" stroke-width="1.5"/>')
 
-                # 标签
+                # 标签：裁片名 + 缝份信息
                 scx = sum(p[0] for p in screen_pts) / len(screen_pts)
                 scy = sum(p[1] for p in screen_pts) / len(screen_pts)
-                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}" {ff}>{name}</text>')
+                label_text = name
+                if seam_value > 0:
+                    label_text += f" ({seam_value}缝)"
+                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}" {ff}>{label_text}</text>')
             else:
                 # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
@@ -1191,18 +1225,17 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
     # 横向排列：排料长度→水平，门幅→垂直
-    # 使用实际使用的门幅宽度(nest_w)裁剪画布高度，避免下方大量空白
     img_width = int(nest_h * scale + padding * 2)
-    img_height = int(nest_w * scale + padding * 2 + label_height)
+    img_height = int(fabric_width * scale + padding * 2 + label_height)
 
     img = Image.new('RGB', (img_width, img_height), '#ffffff')
     draw = ImageDraw.Draw(img)
 
-    # 绘制面料虚线框（横向：宽=排料长度，高=实际使用门幅）
+    # 绘制面料虚线框（横向：宽=排料长度，高=门幅）
     bx1 = int(padding)
     by1 = int(padding + label_height)
     bx2 = int(padding + nest_h * scale)
-    by2 = int(padding + label_height + nest_w * scale)
+    by2 = int(padding + label_height + fabric_width * scale)
     for dash_start in range(bx1, bx2, 20):
         dash_end = min(dash_start + 12, bx2)
         draw.line([(dash_start, by1), (dash_end, by1)], fill='#999999', width=2)
@@ -1217,10 +1250,10 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
 
-    # 门幅标注（左侧竖向）- 显示实际使用宽度
+    # 门幅标注（左侧竖向）
     font_dim = _get_font(12)
-    mid_y = padding + label_height + nest_w * scale / 2
-    draw.text((padding - 5, mid_y), f"{nest_w:.0f}cm", fill='#999999', font=font_dim, anchor='rm')
+    mid_y = padding + label_height + fabric_width * scale / 2
+    draw.text((padding - 5, mid_y), f"{fabric_width}cm", fill='#999999', font=font_dim, anchor='rm')
 
     # 排料长度标注（底部横向）
     mid_x = padding + nest_h * scale / 2
@@ -1228,18 +1261,37 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
-    # 构建piece路径映射（与SVG逻辑一致：onFold用pathOps+镜像，否则用expandedPathOps）
+    # 构建路径映射：净样 + 毛样(含缝份)
     piece_path_map = {}
+    piece_seam_path_map = {}
+    piece_seam_value_map = {}
     piece_onfold_map = {}
     for p in pieces:
+        name = p.get('name', '')
         onfold = p.get('onFold', False)
-        piece_onfold_map[p.get('name', '')] = onfold
+        piece_onfold_map[name] = onfold
         if onfold:
-            piece_path_map[p.get('name', '')] = p.get('pathOps', [])
+            piece_path_map[name] = p.get('pathOps', [])
         else:
-            piece_path_map[p.get('name', '')] = p.get('expandedPathOps') or p.get('pathOps', [])
+            piece_path_map[name] = p.get('expandedPathOps') or p.get('pathOps', [])
+        # 缝份路径：所有裁片统一使用seamAllowancePathOps
+        # onFold裁片用半片路径，在渲染时统一镜像（与净样pathOps逻辑一致）
+        piece_seam_path_map[name] = p.get('seamAllowancePathOps', [])
+        piece_seam_value_map[name] = p.get('seamAllowance', 0)
 
+    # 图例：净样 vs 毛样
     font_small = _get_font(10)
+    font_legend = _get_font(9)
+    leg_y = padding + label_height - 8
+    leg_x = padding + 5
+    # 净样图例
+    draw.line([(leg_x, leg_y), (leg_x + 16, leg_y)], fill='#666666', width=2)
+    draw.text((leg_x + 20, leg_y - 4), '净样(缝合线)', fill='#666666', font=font_legend)
+    # 毛样图例
+    for dash_start in range(leg_x + 90, leg_x + 106, 8):
+        dash_end = min(dash_start + 4, leg_x + 106)
+        draw.line([(dash_start, leg_y), (dash_end, leg_y)], fill='#666666', width=1)
+    draw.text((leg_x + 110, leg_y - 4), '毛样(裁剪线)', fill='#666666', font=font_legend)
 
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
@@ -1250,6 +1302,19 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         path_ops = piece_path_map.get(name, [])
         onfold = piece_onfold_map.get(name, False)
         color = piece_colors[i % len(piece_colors)]
+
+        def _to_screen_pts(pts):
+            result = []
+            for fx, fy in pts:
+                dx = fx - cx
+                dy = fy - cy
+                rx = pos_x + dx * cos_r - dy * sin_r + cx
+                ry = pos_y + dx * sin_r + dy * cos_r + cy
+                result.append((
+                    round(ry * scale + padding),
+                    round(rx * scale + padding + label_height)
+                ))
+            return result
 
         if path_ops:
             pts_list = _extract_polygon_points(path_ops)
@@ -1265,22 +1330,46 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
                 cx, cy = _calculate_centroid(full_pts)
                 rad = rotation * math.pi / 180
                 cos_r, sin_r = math.cos(rad), math.sin(rad)
-                # 旋转 + 平移 + 坐标交换(X/Y)
-                vertices = []
-                for fx, fy in full_pts:
-                    dx = fx - cx
-                    dy = fy - cy
-                    rx = pos_x + dx * cos_r - dy * sin_r + cx
-                    ry = pos_y + dx * sin_r + dy * cos_r + cy
-                    # 坐标交换：origX→screenY, origY→screenX
-                    vertices.append((
-                        round(ry * scale + padding),
-                        round(rx * scale + padding + label_height)
-                    ))
+
+                # 第一步：绘制毛样（裁剪线，含缝份）— 虚线
+                seam_ops = piece_seam_path_map.get(name, [])
+                seam_value = piece_seam_value_map.get(name, 0)
+                if seam_ops and seam_value > 0:
+                    seam_pts_list = _extract_polygon_points(seam_ops)
+                    if onfold and seam_pts_list:
+                        seam_mirrored = [(-x, y) for x, y in reversed(seam_pts_list)]
+                        seam_full_pts = seam_pts_list + seam_mirrored
+                    else:
+                        seam_full_pts = seam_pts_list
+                    if seam_full_pts and len(seam_full_pts) >= 3:
+                        seam_verts = _to_screen_pts(seam_full_pts)
+                        # Pillow中虚线通过逐个短线段绘制
+                        for vi in range(len(seam_verts)):
+                            vj = (vi + 1) % len(seam_verts)
+                            dash_dx = seam_verts[vj][0] - seam_verts[vi][0]
+                            dash_dy = seam_verts[vj][1] - seam_verts[vi][1]
+                            dash_len = math.sqrt(dash_dx**2 + dash_dy**2)
+                            if dash_len < 1:
+                                continue
+                            segs = max(1, int(dash_len / 8))
+                            for s in range(0, segs, 2):
+                                t0 = s / segs
+                                t1 = min(s + 1, segs) / segs
+                                x0 = round(seam_verts[vi][0] + dash_dx * t0)
+                                y0 = round(seam_verts[vi][1] + dash_dy * t0)
+                                x1 = round(seam_verts[vi][0] + dash_dx * t1)
+                                y1 = round(seam_verts[vi][1] + dash_dy * t1)
+                                draw.line([(x0, y0), (x1, y1)], fill=color, width=1)
+
+                # 第二步：绘制净样（缝合线）— 实线
+                vertices = _to_screen_pts(full_pts)
                 draw.polygon(vertices, fill=None, outline=color, width=2)
                 scx = sum(v[0] for v in vertices) / len(vertices)
                 scy = sum(v[1] for v in vertices) / len(vertices)
-                draw.text((scx, scy), name, fill=color, font=font_small, anchor='mm')
+                label_text = name
+                if seam_value > 0:
+                    label_text += f" ({seam_value}缝)"
+                draw.text((scx, scy), label_text, fill=color, font=font_small, anchor='mm')
         else:
             w = 50 * scale
             h = 80 * scale
