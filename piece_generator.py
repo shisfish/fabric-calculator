@@ -889,7 +889,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
                 # 构建SVG polygon（用采样点，曲线精度足够）
                 points_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in screen_pts)
-                lines.append(f'<polygon points="{points_str}" fill="{color}33" stroke="{color}" stroke-width="1"/>')
+                lines.append(f'<polygon points="{points_str}" fill="none" stroke="{color}" stroke-width="1.5"/>')
 
                 # 标签
                 scx = sum(p[0] for p in screen_pts) / len(screen_pts)
@@ -904,7 +904,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 sx = pos_y * scale + padding
                 sy = pos_x * scale + padding + label_height
                 lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{bh:.1f}" height="{bw:.1f}" '
-                            f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
+                            f'fill="none" stroke="{color}" stroke-width="1.5" stroke-dasharray="3,2"/>')
                 lines.append(f'<text x="{sx + bh/2:.1f}" y="{sy + bw/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}" {ff}>{name}(简化)</text>')
         else:
             # 无路径fallback
@@ -913,7 +913,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
             sx = pos_y * scale + padding
             sy = pos_x * scale + padding + label_height
             lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{w:.1f}" height="{h:.1f}" '
-                        f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
+                        f'fill="none" stroke="{color}" stroke-width="1.5" stroke-dasharray="3,2"/>')
             lines.append(f'<text x="{sx + w/2:.1f}" y="{sy + h/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}" {ff}>{name}(无路径)</text>')
 
     lines.append('</svg>')
@@ -1236,8 +1236,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
                         ry * scale + padding,
                         rx * scale + padding + label_height
                     ))
-                fill_color = color + '33' if len(color) == 7 else color
-                draw.polygon(vertices, fill=fill_color, outline=color, width=2)
+                draw.polygon(vertices, fill=None, outline=color, width=2)
                 scx = sum(v[0] for v in vertices) / len(vertices)
                 scy = sum(v[1] for v in vertices) / len(vertices)
                 draw.text((scx, scy), name, fill=color, font=font_small, anchor='mm')
@@ -1246,7 +1245,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
             h = 80 * scale
             sx = pos_y * scale + padding
             sy = pos_x * scale + padding + label_height
-            draw.rectangle([sx, sy, sx + w, sy + h], fill=color + '33', outline=color, width=1)
+            draw.rectangle([sx, sy, sx + w, sy + h], fill=None, outline=color, width=2)
             draw.text((sx + w/2, sy + h/2), f"{name}(无路径)", fill=color, font=font_small, anchor='mm')
 
     # 转换为base64
