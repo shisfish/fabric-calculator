@@ -349,9 +349,11 @@ export class NestEngine {
         let curX = r.x;
         let curY = r.y;
 
-        // Push left (0.5 steps)
+        // Push left (0.5 steps, max 100 steps)
+        let pushSteps = 0;
         let moved = true;
-        while (moved) {
+        while (moved && pushSteps < 100) {
+          pushSteps++;
           moved = false;
           const nx = curX - 0.5;
           const tp = r.polygon.translate(nx, curY);
@@ -361,8 +363,6 @@ export class NestEngine {
             for (const o of this.placedPieces) {
               if (o === r) continue;
               const op = o.polygon.translate(o.x, o.y);
-              // Use direct SAT collision (no offset) — spacing is maintained
-              // by the boundary check and step size
               if (SATCollision.testCollisionRobust(tp, op).collides) {
                 ok = false; break;
               }
@@ -371,9 +371,11 @@ export class NestEngine {
           }
         }
 
-        // Push up (0.5 steps)
+        // Push up (0.5 steps, max 100 steps)
+        pushSteps = 0;
         moved = true;
-        while (moved) {
+        while (moved && pushSteps < 100) {
+          pushSteps++;
           moved = false;
           const ny = curY - 0.5;
           const tp = r.polygon.translate(curX, ny);

@@ -236,7 +236,7 @@ if (input.mode === 'preview') {
     
     console.log(JSON.stringify(result)); // 唯一的stdout输出点 - API响应
 } else {
-    const engine = new NestEngine({ fabricWidth, spacing: 3, rotations: [0, 180], fabricNap });
+    const engine = new NestEngine({ fabricWidth, spacing: 3, rotations: [0, 180], fabricNap, fabricHeight: 500 });
 
     try {
         for (const piece of pieces) {
@@ -247,7 +247,7 @@ if (input.mode === 'preview') {
         process.exit(0);
     }
 
-    const result = engine.optimize(30);
+    const result = engine.optimize(15);
     const placedPolygons = engine.getPlacedPolygons();
 
     // 🔧 【关键修复】构建完整的pathOps映射
