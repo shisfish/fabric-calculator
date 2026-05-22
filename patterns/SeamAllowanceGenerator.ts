@@ -46,7 +46,7 @@ function sanitizePathOps(ops: Array<any>): Array<any> {
     // 验证并清洗 to 坐标
     if (op.to) {
       if (isValidPoint(op.to)) {
-        sanitizedOp.to = { x: op.to.x, y: op.to.y };
+        sanitizedOp.to = new Point(op.to.x, op.to.y);
       } else {
         removedCount++;
         seamWarn(`操作 [${i}] ${op.type}: 无效的 to 坐标 (${JSON.stringify(op.to)})，已移除`);
@@ -57,7 +57,7 @@ function sanitizePathOps(ops: Array<any>): Array<any> {
     // 验证并清洗 cp1 坐标
     if (op.cp1) {
       if (isValidPoint(op.cp1)) {
-        sanitizedOp.cp1 = { x: op.cp1.x, y: op.cp1.y };
+        sanitizedOp.cp1 = new Point(op.cp1.x, op.cp1.y);
       } else {
         sanitizedOp.cp1 = null;
         seamWarn(`操作 [${i}] ${op.type}: 无效的 cp1 坐标，已设为 null`);
@@ -69,7 +69,7 @@ function sanitizePathOps(ops: Array<any>): Array<any> {
     // 验证并清洗 cp2 坐标
     if (op.cp2) {
       if (isValidPoint(op.cp2)) {
-        sanitizedOp.cp2 = { x: op.cp2.x, y: op.cp2.y };
+        sanitizedOp.cp2 = new Point(op.cp2.x, op.cp2.y);
       } else {
         sanitizedOp.cp2 = null;
         seamWarn(`操作 [${i}] ${op.type}: 无效的 cp2 坐标，已设为 null`);

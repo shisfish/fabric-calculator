@@ -67,7 +67,7 @@ export class NestEngine {
   addPiece(piece: PatternPiece): void {
     try {
       if (piece.path && piece.path.ops) {
-        let polygon = PolygonConverter.pathToPolygon(piece.path, piece.name);
+        let polygon = PolygonConverter.pathToPolygon(piece.seamAllowancePath || piece.path, piece.name);
 
         // Expand on-fold half-pieces to full pieces by mirroring across fold (x=0)
         if (piece.onFold) {
