@@ -61,11 +61,16 @@ def _get_font(size=14):
             (os.path.join(font_dir, "simhei.ttf"), 0),
         ]
     else:
+        # Linux — common Docker / server paths
         candidates = [
             ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0),
             ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
             ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", 0),
             ("/usr/share/fonts/truetype/arphic/uming.ttc", 0),
+            ("/usr/local/share/fonts/NotoSansSC-Regular.otf", 0),
+            ("/usr/local/share/fonts/wqy-zenhei.ttc", 0),
+            ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 0),
+            ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
         ]
 
     for path, index in candidates:
@@ -76,6 +81,25 @@ def _get_font(size=14):
                 return font
             except (IOError, OSError):
                 continue
+
+    # Linux fallback: try fc-match to find any CJK-supporting font
+    if system != "Darwin" and system != "Windows":
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['fc-match', '-f', '%{file}', 'sans:lang=zh'],
+                capture_output=True, text=True, timeout=5
+            )
+            font_path = result.stdout.strip()
+            if font_path and os.path.exists(font_path):
+                try:
+                    font = ImageFont.truetype(font_path, size)
+                    _FONT_CACHE[cache_key] = font
+                    return font
+                except (IOError, OSError):
+                    pass
+        except Exception:
+            pass
 
     default = ImageFont.load_default()
     _FONT_CACHE[cache_key] = default
@@ -1233,8 +1257,8 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
                     ry = pos_y + dx * sin_r + dy * cos_r + cy
                     # 坐标交换：origX→screenY, origY→screenX
                     vertices.append((
-                        ry * scale + padding,
-                        rx * scale + padding + label_height
+                        round(ry * scale + padding),
+                        round(rx * scale + padding + label_height)
                     ))
                 draw.polygon(vertices, fill=None, outline=color, width=2)
                 scx = sum(v[0] for v in vertices) / len(vertices)
@@ -1243,9 +1267,9 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         else:
             w = 50 * scale
             h = 80 * scale
-            sx = pos_y * scale + padding
-            sy = pos_x * scale + padding + label_height
-            draw.rectangle([sx, sy, sx + w, sy + h], fill=None, outline=color, width=2)
+            sx = round(pos_y * scale + padding)
+            sy = round(pos_x * scale + padding + label_height)
+            draw.rectangle([sx, sy, sx + round(w), sy + round(h)], fill=None, outline=color, width=2)
             draw.text((sx + w/2, sy + h/2), f"{name}(无路径)", fill=color, font=font_small, anchor='mm')
 
     # 转换为base64
