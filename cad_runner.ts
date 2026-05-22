@@ -130,6 +130,44 @@ if (input.frontOnly && input.frontParams) {
   pieces = TshirtPatternGenerator.generatePattern(params);
 }
 
+// ===== 自定义裁片（口袋、配件等矩形裁片） =====
+if (input.customPieces && Array.isArray(input.customPieces)) {
+    logger.info(`\n📦 处理自定义裁片: ${input.customPieces.length} 种`);
+    for (const cp of input.customPieces) {
+        const w = parseFloat(cp.width) || 10;
+        const h = parseFloat(cp.height) || 10;
+        const count = parseInt(cp.count) || 1;
+        const name = cp.name || '配件';
+
+        // 创建矩形路径
+        const rectPath = Path.rectangle(w, h);
+
+        // 创建缝份路径（简单矩形扩大）
+        const seam = 1.5;
+        const seamPath = new Path()
+            .move(new Point(-seam, -seam))
+            .line(new Point(w + seam, -seam))
+            .line(new Point(w + seam, h + seam))
+            .line(new Point(-seam, h + seam))
+            .close();
+
+        pieces.push({
+            name: name,
+            path: rectPath,
+            points: {},
+            cutCount: count,
+            onFold: false,
+            seamAllowance: seam,
+            seamAllowancePath: seamPath,
+            allowedRotations: [0, 180],
+            _custom: true,  // 标记为自定义裁片
+        });
+
+        logger.info(`   ➕ 添加自定义裁片: "${name}" ${w}×${h}cm ×${count}`);
+    }
+    logger.info(`   📊 合计裁片数: ${pieces.length}`);
+}
+
 // 🔍 【关键验证】检查TshirtPatternGenerator返回的原始pieces
 logger.debug('\n🔍 ===== TshirtPatternGenerator 原始输出验证 =====');
 logger.debug(`   原始pieces数量: ${pieces.length}`);
@@ -227,6 +265,7 @@ if (input.mode === 'preview') {
         piecePathMap.set(piece.name, pathOps);
         
         // 保存原始数据用于未排料时的fallback（包含缝份数据）
+        const isCustom = (piece as any)._custom === true;
         pieceOriginalData.set(piece.name, {
             cutCount: piece.cutCount || 1,
             onFold: piece.onFold || false,
@@ -234,18 +273,19 @@ if (input.mode === 'preview') {
             seamAllowancePathOps: (piece.seamAllowancePath?.ops || [])
                 .map((op: any) => ({
                     type: op.type,
-                    to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) 
-                        ? { x: op.to.x, y: op.to.y } 
+                    to: (op.to && typeof op.to.x === 'number' && typeof op.to.y === 'number' && Number.isFinite(op.to.x) && Number.isFinite(op.to.y))
+                        ? { x: op.to.x, y: op.to.y }
                         : null,
-                    cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y)) 
-                        ? { x: op.cp1.x, y: op.cp1.y } 
+                    cp1: (op.cp1 && typeof op.cp1.x === 'number' && typeof op.cp1.y === 'number' && Number.isFinite(op.cp1.x) && Number.isFinite(op.cp1.y))
+                        ? { x: op.cp1.x, y: op.cp1.y }
                         : null,
-                    cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) 
-                        ? { x: op.cp2.x, y: op.cp2.y } 
+                    cp2: (op.cp2 && typeof op.cp2.x === 'number' && typeof op.cp2.y === 'number' && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y))
+                        ? { x: op.cp2.x, y: op.cp2.y }
                         : null
                 }))
                 .filter((op: any) => op.to !== null),
-            points: piece.points || {}
+            points: piece.points || {},
+            _custom: isCustom
         });
     }
 
@@ -307,7 +347,8 @@ if (input.mode === 'preview') {
                     expandedPathOps: piece.onFold ? finalPathOps : null,  // 📌 展开后完整（用于排料图）
                     seamAllowance: originalData?.seamAllowance || 0,
                     seamAllowancePathOps: originalSeamOps,  // 📌 原始缝份（半片）
-                    expandedSeamAllowancePathOps: piece.onFold ? finalSeamOps : null  // 📌 展开后缝份（完整）
+                    expandedSeamAllowancePathOps: piece.onFold ? finalSeamOps : null,  // 📌 展开后缝份（完整）
+                    _custom: (originalData?._custom) || false,
                 });
             }
         } else {
@@ -367,7 +408,8 @@ if (input.mode === 'preview') {
                     pathOps: pathOps,
                     // 🔧 【缝份修复】添加缝份数据
                     seamAllowance: originalPiece.seamAllowance || 0,
-                    seamAllowancePathOps: originalPiece.seamAllowancePathOps || []
+                    seamAllowancePathOps: originalPiece.seamAllowancePathOps || [],
+                    _custom: (originalPiece as any)._custom || false,
                 });
             }
         }

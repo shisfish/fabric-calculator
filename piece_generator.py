@@ -49,6 +49,7 @@ def _get_font(size=14):
             ("/System/Library/Fonts/PingFang.ttc", 0),
             ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
             ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
+            ("/System/Library/Fonts/AppleSDGothicNeo.ttc", 0),
         ]
     elif system == "Windows":
         windir = os.environ.get("SystemRoot", "C:\\Windows")
@@ -79,6 +80,13 @@ def _get_font(size=14):
     default = ImageFont.load_default()
     _FONT_CACHE[cache_key] = default
     return default
+
+
+def _get_svg_font_family():
+    """返回支持中文的SVG font-family字符串"""
+    return ('font-family="PingFang SC, STHeiti, Hiragino Sans GB, '
+            'Arial Unicode MS, AppleSDGothicNeo, Microsoft YaHei, '
+            'WenQuanYi Zen Hei, Noto Sans CJK SC, sans-serif"')
 
 
 def generate_piece_vertices(w, h, shape, shoulder_width=0, sleeve_cap_width=0, cuff_width=0):
@@ -361,13 +369,16 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
     garment_input = _normalize_garment_input(measurements)
 
-    input_data = json.dumps({
+    ts_input = {
         "mode": "nesting",
         "garmentInput": garment_input,
         "options": options,
         "fabricWidth": fabric_width,
-        "fabricNap": fabric_nap
-    })
+        "fabricNap": fabric_nap,
+    }
+    if custom_pieces:
+        ts_input["customPieces"] = custom_pieces
+    input_data = json.dumps(ts_input)
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -411,114 +422,11 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         positions = data.get('positions', [])
         bounds = data.get('bounds', {})
 
-        # ===== 处理自定义裁片（口袋、配件等矩形裁片） =====
-        if custom_pieces:
-            from rectpack import newPacker, MaxRectsBssf, SORT_AREA
-
-            main_nest_h = bounds.get('height', 0) if bounds else 0
-            custom_piece_data = []
-            for cp in custom_pieces:
-                name = cp.get('name', '配件')
-                w = float(cp.get('width', 10))
-                h = float(cp.get('height', 10))
-                count = int(cp.get('count', 1))
-                if w <= 0 or h <= 0:
-                    continue
-                seam = 1.5
-                path_ops = _generate_rectangle_path_ops(w, h)
-                seam_ops = _generate_rectangle_seam_ops(w, h, seam)
-                area = w * h
-                for i in range(count):
-                    custom_piece_data.append({
-                        "name": name,
-                        "width": w,
-                        "height": h,
-                        "area": area,
-                        "cutCount": 1,
-                        "onFold": False,
-                        "seamAllowance": seam,
-                        "pathOps": path_ops,
-                        "seamAllowancePathOps": seam_ops,
-                        "_custom": True,
-                    })
-
-            if custom_piece_data:
-                # 使用 rectpack 对自定义裁片进行排料
-                packer = newPacker(pack_algo=MaxRectsBssf, rotation=True, sort_algo=SORT_AREA)
-                max_len = sum(p["height"] * p["width"] for p in custom_piece_data) / fabric_width * 2 + main_nest_h
-                packer.add_bin(fabric_width, max_len, count=1)
-                for idx, cp in enumerate(custom_piece_data):
-                    packer.add_rect(cp["width"], cp["height"], idx)
-                packer.pack()
-
-                # 计算自定义裁片的偏移量（从主排料底部开始）
-                custom_offset_y = main_nest_h + 10  # 10cm gap
-
-                # 收集自定义裁片位置
-                placed_customs = set()
-                for bin in packer:
-                    for rect in bin:
-                        rid = rect.rid
-                        if rid in placed_customs:
-                            continue
-                        placed_customs.add(rid)
-                        cp = custom_piece_data[rid]
-                        pos_x = rect.x
-                        pos_y = rect.y + custom_offset_y
-                        cp_width = cp["width"]
-                        cp_height = cp["height"]
-                        # 检查 rectpack 是否旋转了裁片（仅对非正方形有效）
-                        original_w = cp["width"]
-                        original_h = cp["height"]
-                        rotated = False
-                        if abs(original_w - original_h) > 0.01:
-                            rotated = (rect.width == original_h and rect.height == original_w)
-                        if rotated:
-                            cp_width, cp_height = cp_height, cp_width
-                        custom_piece_data[rid].update({
-                            "x": pos_x,
-                            "y": pos_y,
-                            "placed": True,
-                            "rotation": 90 if rotated else 0,
-                        })
-                        # 计算此裁片实例的边界框
-                        bbox_height = cp_height
-                        custom_piece_data[rid]["bbox_height"] = bbox_height
-                        positions.append({
-                            "name": cp["name"],
-                            "x": pos_x,
-                            "y": pos_y,
-                            "rotation": 90 if rotated else 0,
-                        })
-
-                # 追加到主裁片列表
-                pieces.extend(custom_piece_data)
-
-                # 更新 bounds
-                total_height = custom_offset_y + max(
-                    (p.get("y", 0) + p.get("bbox_height", p.get("height", 0))) for p in custom_piece_data if p.get("placed", False)
-                ) if custom_piece_data else main_nest_h
-                bounds = {
-                    "width": fabric_width,
-                    "height": max(main_nest_h, total_height),
-                }
-
-                # 更新统计
-                custom_area = sum(p["area"] for p in custom_piece_data)
-                custom_used_area = custom_area
-                total_area_cm2 = total_area_cm2 + custom_area
-                used_area_cm2 = used_area_cm2 + custom_used_area
-                total_area_m2 = total_area_cm2 / 10000
-                per_piece_length_m = bounds["height"] / 100
-                total_length_m = per_piece_length_m * quantity
-                main_util = data.get('utilization', 0)
-                total_util = used_area_cm2 / (fabric_width * bounds["height"]) * 100 if bounds["height"] > 0 else 0
-                utilization_rate = total_util
-
         pieces_detail = []
+        custom_name_set = {cp.get('name') for cp in (custom_pieces or [])}
         for p in pieces:
             area_cm2 = p.get('area', 0)
-            is_custom = p.get('_custom', False)
+            is_custom = p.get('_custom', False) or p.get('name', '') in custom_name_set
             pd = {
                 "name": p.get('name', ''),
                 "original_length": round(p.get('height', 0), 2),
@@ -533,12 +441,13 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
             pieces_detail.append(pd)
 
         nesting_svg = _generate_nesting_svg(pieces, positions, fabric_width, bounds, utilization_rate)
-        nesting_png = _generate_nesting_png_base64(nesting_svg)
 
-        # 如果SVG转换失败，使用Pillow直接生成PNG
+        # 优先使用Pillow直接生成PNG（中文渲染可靠）
+        # SVG转换PNG作为备选（外部工具可能缺少中文字体）
+        nesting_png = _generate_nesting_png_direct(pieces, positions, fabric_width, bounds, utilization_rate)
         if not nesting_png:
-            print("[PNG生成] SVG转换失败，使用Pillow直接生成...")
-            nesting_png = _generate_nesting_png_direct(pieces, positions, fabric_width, bounds, utilization_rate)
+            print("[PNG生成] Pillow渲染失败，改用SVG转换...")
+            nesting_png = _generate_nesting_png_base64(nesting_svg)
 
         return {
             "pieces": pieces,
@@ -891,13 +800,15 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     svg_w = int(nest_h * scale + padding * 2)
     svg_h = int(fabric_width * scale + padding * 2 + label_height)
 
+    ff = _get_svg_font_family()
+
     lines = []
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="100%" height="auto">')
 
     # 顶部标注
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
                 f'text-anchor="middle" font-size="13" fill="#555" '
-                f'font-family="sans-serif">'
+                f'{ff}>'
                 f'门幅: {fabric_width} cm | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%'
                 f'</text>')
 
@@ -910,14 +821,15 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     mid_y = padding + label_height + fabric_width * scale / 2
     lines.append(f'<text x="{padding - 5}" y="{mid_y}" '
                 f'text-anchor="end" font-size="10" fill="#999" '
-                f'writing-mode="tb" glyph-orientation-vertical="0">'
+                f'{ff}>'
                 f'{fabric_width}cm'
                 f'</text>')
 
     # 排料长度标注（底部横向）
     mid_x = padding + nest_h * scale / 2
     lines.append(f'<text x="{mid_x}" y="{padding + label_height + fabric_width * scale + 15}" '
-                f'text-anchor="middle" font-size="10" fill="#999">'
+                f'text-anchor="middle" font-size="10" fill="#999" '
+                f'{ff}>'
                 f'{nest_h:.1f}cm'
                 f'</text>')
 
@@ -982,7 +894,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 # 标签
                 scx = sum(p[0] for p in screen_pts) / len(screen_pts)
                 scy = sum(p[1] for p in screen_pts) / len(screen_pts)
-                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}">{name}</text>')
+                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}" {ff}>{name}</text>')
             else:
                 # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
@@ -993,7 +905,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 sy = pos_x * scale + padding + label_height
                 lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{bh:.1f}" height="{bw:.1f}" '
                             f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
-                lines.append(f'<text x="{sx + bh/2:.1f}" y="{sy + bw/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}">{name}(简化)</text>')
+                lines.append(f'<text x="{sx + bh/2:.1f}" y="{sy + bw/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}" {ff}>{name}(简化)</text>')
         else:
             # 无路径fallback
             w = 50 * scale
@@ -1002,7 +914,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
             sy = pos_x * scale + padding + label_height
             lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{w:.1f}" height="{h:.1f}" '
                         f'fill="{color}33" stroke="{color}" stroke-width="1" stroke-dasharray="3,2"/>')
-            lines.append(f'<text x="{sx + w/2:.1f}" y="{sy + h/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}">{name}(无路径)</text>')
+            lines.append(f'<text x="{sx + w/2:.1f}" y="{sy + h/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}" {ff}>{name}(无路径)</text>')
 
     lines.append('</svg>')
     return "\n".join(lines)
