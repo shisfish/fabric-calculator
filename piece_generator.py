@@ -836,8 +836,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
     # 横向排列：排料长度→水平，门幅→垂直
+    # 使用实际使用的门幅宽度(nest_w)裁剪画布高度，避免下方大量空白
     svg_w = int(nest_h * scale + padding * 2)
-    svg_h = int(fabric_width * scale + padding * 2 + label_height)
+    svg_h = int(nest_w * scale + padding * 2 + label_height)
 
     ff = _get_svg_font_family()
 
@@ -848,25 +849,25 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
                 f'text-anchor="middle" font-size="13" fill="#555" '
                 f'{ff}>'
-                f'门幅: {fabric_width} cm | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%'
+                f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%'
                 f'</text>')
 
-    # 面料虚线框（横向：宽=排料长度，高=门幅）
+    # 面料虚线框（横向：宽=排料长度，高=实际使用门幅）
     lines.append(f'<rect x="{padding}" y="{padding + label_height}" '
-                f'width="{nest_h * scale}" height="{fabric_width * scale}" '
+                f'width="{nest_h * scale}" height="{nest_w * scale}" '
                 f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
 
-    # 门幅标注（左侧竖向）
-    mid_y = padding + label_height + fabric_width * scale / 2
+    # 门幅标注（左侧竖向）- 显示实际使用宽度
+    mid_y = padding + label_height + nest_w * scale / 2
     lines.append(f'<text x="{padding - 5}" y="{mid_y}" '
                 f'text-anchor="end" font-size="10" fill="#999" '
                 f'{ff}>'
-                f'{fabric_width}cm'
+                f'{nest_w:.0f}cm'
                 f'</text>')
 
     # 排料长度标注（底部横向）
     mid_x = padding + nest_h * scale / 2
-    lines.append(f'<text x="{mid_x}" y="{padding + label_height + fabric_width * scale + 15}" '
+    lines.append(f'<text x="{mid_x}" y="{padding + label_height + nest_w * scale + 15}" '
                 f'text-anchor="middle" font-size="10" fill="#999" '
                 f'{ff}>'
                 f'{nest_h:.1f}cm'
@@ -1190,17 +1191,18 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
     # 横向排列：排料长度→水平，门幅→垂直
+    # 使用实际使用的门幅宽度(nest_w)裁剪画布高度，避免下方大量空白
     img_width = int(nest_h * scale + padding * 2)
-    img_height = int(fabric_width * scale + padding * 2 + label_height)
+    img_height = int(nest_w * scale + padding * 2 + label_height)
 
     img = Image.new('RGB', (img_width, img_height), '#ffffff')
     draw = ImageDraw.Draw(img)
 
-    # 绘制面料虚线框（横向：宽=排料长度，高=门幅）
+    # 绘制面料虚线框（横向：宽=排料长度，高=实际使用门幅）
     bx1 = int(padding)
     by1 = int(padding + label_height)
     bx2 = int(padding + nest_h * scale)
-    by2 = int(padding + label_height + fabric_width * scale)
+    by2 = int(padding + label_height + nest_w * scale)
     for dash_start in range(bx1, bx2, 20):
         dash_end = min(dash_start + 12, bx2)
         draw.line([(dash_start, by1), (dash_end, by1)], fill='#999999', width=2)
@@ -1211,14 +1213,14 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
     # 顶部标注
-    label_text = f"门幅: {fabric_width} cm | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%"
+    label_text = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%"
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
 
-    # 门幅标注（左侧竖向）
+    # 门幅标注（左侧竖向）- 显示实际使用宽度
     font_dim = _get_font(12)
-    mid_y = padding + label_height + fabric_width * scale / 2
-    draw.text((padding - 5, mid_y), f"{fabric_width}cm", fill='#999999', font=font_dim, anchor='rm')
+    mid_y = padding + label_height + nest_w * scale / 2
+    draw.text((padding - 5, mid_y), f"{nest_w:.0f}cm", fill='#999999', font=font_dim, anchor='rm')
 
     # 排料长度标注（底部横向）
     mid_x = padding + nest_h * scale / 2
