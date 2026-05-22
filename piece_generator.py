@@ -478,15 +478,9 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
         nesting_svg = _generate_nesting_svg(pieces, positions, fabric_width, bounds, utilization_rate)
 
-        # 优先使用Pillow直接生成PNG（需要系统有CJK字体）
-        if _CJK_FONT_AVAILABLE:
-            nesting_png = _generate_nesting_png_direct(pieces, positions, fabric_width, bounds, utilization_rate)
-            if not nesting_png:
-                print("[PNG生成] Pillow渲染失败，改用SVG转换...")
-                nesting_png = _generate_nesting_png_base64(nesting_svg)
-        else:
-            print("[PNG生成] 未找到CJK字体，使用SVG data URI直出（浏览器渲染中文）")
-            nesting_png = _svg_to_data_uri(nesting_svg)
+        # 使用SVG data URI（浏览器渲染中文，兼容性最好）
+        # 浏览器通过CSS font-family列表支持CJK字体，避免Pillow字体问题
+        nesting_png = _svg_to_data_uri(nesting_svg)
 
         return {
             "pieces": pieces,
