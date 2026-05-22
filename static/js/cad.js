@@ -808,13 +808,15 @@ function renderNestingWithReact(result, fabricWidth) {
         console.warn('React组件未加载，使用PNG/SVG回退');
         const container = document.getElementById('nesting-svg-container');
 
-        // 优先显示 PNG（最终排料图）
+        // 优先显示排料图（SVG data URI 或 PNG base64）
         if (result.nesting_png_base64) {
+            const isSvgData = result.nesting_png_base64.startsWith('data:image/svg');
+            const ext = isSvgData ? 'svg' : 'png';
             container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
                 + `<img src="${result.nesting_png_base64}" alt="排料图" `
                 + `style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>`
-                + `<a href="${result.nesting_png_base64}" download="nesting_result.png" `
-                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料图PNG</a>`
+                + `<a href="${result.nesting_png_base64}" download="nesting_result.${ext}" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料图</a>`
                 + `</div>`;
         } else if (result.nesting_svg) {
             container.innerHTML = result.nesting_svg;
@@ -861,8 +863,11 @@ function renderNestingWithReact(result, fabricWidth) {
         svgContainer.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px;">`
             + `<img src="${result.nesting_png_base64}" alt="排料图" `
             + `style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>`
-            + `<a href="${result.nesting_png_base64}" download="nesting_result.png" `
-            + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果PNG</a>`
+            + (result.nesting_png_base64.startsWith('data:image/svg')
+                ? `<a href="${result.nesting_png_base64}" download="nesting_result.svg" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果</a>`
+                : `<a href="${result.nesting_png_base64}" download="nesting_result.png" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果</a>`)
             + `</div>`;
     }
 }

@@ -17,6 +17,7 @@ import shutil
 from PIL import Image, ImageDraw, ImageFont
 
 _FONT_CACHE = {}
+_CJK_FONT_AVAILABLE = True  # 默认为True，_get_font未找到CJK字体会设为False
 
 def _find_npx():
     """查找npx可执行文件路径"""
@@ -39,6 +40,9 @@ def _get_font(size=14):
     cache_key = size
     if cache_key in _FONT_CACHE:
         return _FONT_CACHE[cache_key]
+
+    global _CJK_FONT_AVAILABLE
+    _CJK_FONT_AVAILABLE = True  # 先假设找到，找不到才改False
 
     system = platform.system()
     candidates = []
@@ -102,6 +106,7 @@ def _get_font(size=14):
             pass
 
     default = ImageFont.load_default()
+    _CJK_FONT_AVAILABLE = False  # 无CJK字体，后续会降级为SVG渲染
     _FONT_CACHE[cache_key] = default
     return default
 
@@ -111,6 +116,13 @@ def _get_svg_font_family():
     return ('font-family="PingFang SC, STHeiti, Hiragino Sans GB, '
             'Arial Unicode MS, AppleSDGothicNeo, Microsoft YaHei, '
             'WenQuanYi Zen Hei, Noto Sans CJK SC, sans-serif"')
+
+
+def _svg_to_data_uri(svg_content):
+    """将SVG内容转换为data:image/svg+xml;base64 URI（浏览器直接渲染，中文显示正常）"""
+    import base64
+    b64 = base64.b64encode(svg_content.encode('utf-8')).decode('ascii')
+    return f"data:image/svg+xml;base64,{b64}"
 
 
 def generate_piece_vertices(w, h, shape, shoulder_width=0, sleeve_cap_width=0, cuff_width=0):
@@ -466,12 +478,15 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
         nesting_svg = _generate_nesting_svg(pieces, positions, fabric_width, bounds, utilization_rate)
 
-        # 优先使用Pillow直接生成PNG（中文渲染可靠）
-        # SVG转换PNG作为备选（外部工具可能缺少中文字体）
-        nesting_png = _generate_nesting_png_direct(pieces, positions, fabric_width, bounds, utilization_rate)
-        if not nesting_png:
-            print("[PNG生成] Pillow渲染失败，改用SVG转换...")
-            nesting_png = _generate_nesting_png_base64(nesting_svg)
+        # 优先使用Pillow直接生成PNG（需要系统有CJK字体）
+        if _CJK_FONT_AVAILABLE:
+            nesting_png = _generate_nesting_png_direct(pieces, positions, fabric_width, bounds, utilization_rate)
+            if not nesting_png:
+                print("[PNG生成] Pillow渲染失败，改用SVG转换...")
+                nesting_png = _generate_nesting_png_base64(nesting_svg)
+        else:
+            print("[PNG生成] 未找到CJK字体，使用SVG data URI直出（浏览器渲染中文）")
+            nesting_png = _svg_to_data_uri(nesting_svg)
 
         return {
             "pieces": pieces,

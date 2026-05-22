@@ -247,7 +247,8 @@ if (input.mode === 'preview') {
         process.exit(0);
     }
 
-    const result = engine.optimize(20);
+    const result = engine.nest();
+    logger.info(`   📐 排料完成: 使用确定算法(大裁片优先), 不采用随机优化, 利用率${result.utilization?.toFixed(1)}%`);
     const placedPolygons = engine.getPlacedPolygons();
 
     // 🔧 【关键修复】构建完整的pathOps映射
