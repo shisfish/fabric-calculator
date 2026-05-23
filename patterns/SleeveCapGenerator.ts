@@ -69,7 +69,7 @@ export class SleeveCapGenerator {
       cuffWidth: number;
     },
     ease: number = 2,
-    armholeDepth?: number
+    _armholeDepth?: number
   ): SleeveCapResult {
 
     const frontSegments = this.extractArmholeSegments(frontArmholeOps);

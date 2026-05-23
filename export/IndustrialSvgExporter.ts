@@ -604,19 +604,6 @@ export class IndustrialSvgExporter {
     
     if (!bbox) return '';
     
-    const scale = this.options.scale;
-    const padding = this.options.padding * 2;
-    
-    const width = (bbox.bottomRight.x - bbox.topLeft.x) * scale + padding;
-    const height = (bbox.bottomRight.y - bbox.topLeft.y) * scale + padding;
-    
-    // 更新尺寸为单裁片模式
-    const singlePieceOptions = {
-      ...this.options,
-      width,
-      height
-    };
-    
     lines.push(this.generateSVGHeader());
     lines.push(this.generateDefs());
     lines.push(this.generateBackground());

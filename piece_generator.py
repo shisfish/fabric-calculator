@@ -896,6 +896,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         piece_seam_path_map[name] = p.get('seamAllowancePathOps', [])
         piece_seam_value_map[name] = p.get('seamAllowance', 0)
 
+    labeled_names = set()  # 追踪已显示标签的裁片名
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
         pos_x = pos.get('x', 0)
@@ -961,13 +962,15 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                         seam_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in seam_screen)
                         lines.append(f'<polygon points="{seam_str}" fill="none" stroke="{color}" stroke-width="1.5"/>')
 
-                # 标签：裁片名 + 缝份信息
-                scx = sum(p[0] for p in screen_pts) / len(screen_pts)
-                scy = sum(p[1] for p in screen_pts) / len(screen_pts)
-                label_text = name
-                if seam_value > 0:
-                    label_text += f" ({seam_value}缝)"
-                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}" {ff}>{label_text}</text>')
+                # 标签：仅首个实例显示名称，避免视觉混乱
+                if name not in labeled_names:
+                    labeled_names.add(name)
+                    scx = sum(p[0] for p in screen_pts) / len(screen_pts)
+                    scy = sum(p[1] for p in screen_pts) / len(screen_pts)
+                    label_text = name
+                    if seam_value > 0:
+                        label_text += f" ({seam_value}缝)"
+                    lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}" {ff}>{label_text}</text>')
             else:
                 # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
@@ -1292,6 +1295,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(dash_start, leg_y), (dash_end, leg_y)], fill='#666666', width=1)
     draw.text((leg_x + 110, leg_y - 4), '净样(缝合线)', fill='#666666', font=font_legend)
 
+    labeled_names = set()
     for i, pos in enumerate(positions):
         name = pos.get('name', '')
         pos_x = pos.get('x', 0)
@@ -1369,12 +1373,14 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
                     if seam_full_pts and len(seam_full_pts) >= 3:
                         seam_verts = _to_screen_pts(seam_full_pts)
                         draw.polygon(seam_verts, fill=None, outline=color, width=2)
-                scx = sum(v[0] for v in vertices) / len(vertices)
-                scy = sum(v[1] for v in vertices) / len(vertices)
-                label_text = name
-                if seam_value > 0:
-                    label_text += f" ({seam_value}缝)"
-                draw.text((scx, scy), label_text, fill=color, font=font_small, anchor='mm')
+                if name not in labeled_names:
+                    labeled_names.add(name)
+                    scx = sum(v[0] for v in vertices) / len(vertices)
+                    scy = sum(v[1] for v in vertices) / len(vertices)
+                    label_text = name
+                    if seam_value > 0:
+                        label_text += f" ({seam_value}缝)"
+                    draw.text((scx, scy), label_text, fill=color, font=font_small, anchor='mm')
         else:
             w = 50 * scale
             h = 80 * scale

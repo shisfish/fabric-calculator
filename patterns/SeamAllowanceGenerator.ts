@@ -456,8 +456,8 @@ export class SeamAllowanceGenerator {
   private static createAcuteAngleRoundJoin(
     current: OffsetSegment,
     next: OffsetSegment,
-    corner: Point,
-    orientation: number
+    _corner: Point,
+    _orientation: number
   ): CubicBezier[] {
     // 使用较小的固定半径，防止尖刺
     const minDist = Math.min(current.distance, next.distance);
@@ -497,13 +497,6 @@ export class SeamAllowanceGenerator {
     endTangent: Point
   ): CubicBezier[] {
     return [this.createBlendJoinCurve(start, startTangent, end, endTangent)];
-  }
-  
-  /**
-   * 角度转弧度
-   */
-  private static degToRad(degrees: number): number {
-    return degrees * Math.PI / 180;
   }
   
   /**
@@ -615,8 +608,8 @@ export class SeamAllowanceGenerator {
     start: Point,
     end: Point,
     corner: Point,
-    r1: number,
-    r2: number,
+    _r1: number,
+    _r2: number,
     orientation: number
   ): CubicBezier[] {
     const startTangent = this.getArcTangent(corner, start, orientation);
@@ -624,8 +617,7 @@ export class SeamAllowanceGenerator {
     
     // 计算中间过渡点（线性插值半径）
     const midPoint = Point.midpoint(start, end);
-    const midRadius = (r1 + r2) / 2;
-    
+
     // 第一段：start → midpoint（使用 r1）
     const curve1 = this.createBlendJoinCurve(
       start,

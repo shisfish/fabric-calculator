@@ -59,6 +59,7 @@ export class NestEngine {
     y: number;
     rotation: number;
   }> = [];
+  private polygonOffsets: Map<string, Point> = new Map();
 
   constructor(config: Partial<NestConfig> = {}) {
     this.config = { ...DEFAULT_NEST_CONFIG, ...config };
@@ -77,6 +78,15 @@ export class NestEngine {
         }
 
         const simplified = PolygonConverter.simplifyPolygon(polygon, 0.3);
+
+        // 归一化缝份多边形坐标：将minX/minY平移到0，消除缝份负坐标导致的空白偏移
+        const normBB = simplified.getBoundingBox();
+        const offsetX = Math.max(0, -normBB.minX);
+        const offsetY = Math.max(0, -normBB.minY);
+        const normalized = (offsetX > 0 || offsetY > 0)
+          ? simplified.translate(offsetX, offsetY)
+          : simplified;
+        this.polygonOffsets.set(piece.name, new Point(offsetX, offsetY));
 
         // 根据布纹线方向约束过滤允许的旋转角度
         // 优先级: fabricNap(顺毛) > piece.allowedRotations > config.rotations
@@ -102,11 +112,11 @@ export class NestEngine {
 
         logger.info(`   ✅ 裁片"${piece.name}" 允许旋转角度: [${effectiveRotations.join(', ')}]`);
 
-        const rotations = effectiveRotations.map(angle => simplified.rotate(angle));
+        const rotations = effectiveRotations.map(angle => normalized.rotate(angle));
 
         this.pieces.push({
           id: piece.name,
-          polygon: simplified,
+          polygon: normalized,
           quantity: piece.cutCount,
           rotations,
         });
@@ -288,23 +298,26 @@ export class NestEngine {
         continue;
       }
 
-      let collides = false;
+      let needsPush = false;
       let lowestBelow = Infinity;
 
       for (const placed of this.placedPieces) {
         if (placed.pieceId === pieceId) continue;
         const placedPoly = placed.polygon.translate(placed.x, placed.y);
         const result = SATCollision.testCollisionRobust(testPoly, placedPoly);
-        if (result.collides) {
-          collides = true;
-          // Jump below the placed piece + spacing gap, using bbox
-          const pb = placedPoly.getBoundingBox();
+
+        const pb = placedPoly.getBoundingBox();
+        const tb = testPoly.getBoundingBox();
+        // 即使SAT未检测到碰撞，也要检查间距是否 >= spacing
+        if (result.collides ||
+            (tb.minX < pb.maxX && tb.maxX > pb.minX && tb.minY - pb.maxY < spacing)) {
+          needsPush = true;
           const newY = pb.maxY + spacing - b.minY + 1.0;
           if (newY < lowestBelow) lowestBelow = newY;
         }
       }
 
-      if (!collides) return testY;
+      if (!needsPush) return testY;
       if (lowestBelow > testY + 0.01) {
         testY = Math.max(lowestBelow, 0);
       } else {
@@ -363,7 +376,11 @@ export class NestEngine {
             for (const o of this.placedPieces) {
               if (o === r) continue;
               const op = o.polygon.translate(o.x, o.y);
-              if (SATCollision.testCollisionRobust(tp, op).collides) {
+              const tb_ = tp.getBoundingBox();
+              const ob_ = op.getBoundingBox();
+              if (SATCollision.testCollisionRobust(tp, op).collides ||
+                  (tb_.minY < ob_.maxY && tb_.maxY > ob_.minY &&
+                   ob_.maxX < tb_.minX && tb_.minX - ob_.maxX < spacing)) {
                 ok = false; break;
               }
             }
@@ -385,7 +402,11 @@ export class NestEngine {
             for (const o of this.placedPieces) {
               if (o === r) continue;
               const op = o.polygon.translate(o.x, o.y);
-              if (SATCollision.testCollisionRobust(tp, op).collides) {
+              const tb_ = tp.getBoundingBox();
+              const ob_ = op.getBoundingBox();
+              if (SATCollision.testCollisionRobust(tp, op).collides ||
+                  (tb_.minX < ob_.maxX && tb_.maxX > ob_.minX &&
+                   ob_.maxY < tb_.minY && tb_.minY - ob_.maxY < spacing)) {
                 ok = false; break;
               }
             }
@@ -404,7 +425,9 @@ export class NestEngine {
         if (p === o) continue;
         const pp = p.polygon.translate(p.x, p.y);
         const op = o.polygon.translate(o.x, o.y);
-        if (SATCollision.testCollisionRobust(pp, op).collides) {
+        if (SATCollision.testCollisionRobust(pp, op).collides ||
+            SATCollision.getDistance(pp, op) < spacing) {
+            // Revert to pre-compaction position
           // Revert to pre-compaction position
           const orig = origPositions.get(p);
           if (orig) { p.x = orig.x; p.y = orig.y; }
@@ -433,10 +456,14 @@ export class NestEngine {
       maxX = Math.max(maxX, bb.maxX);
       maxY = Math.max(maxY, bb.maxY);
 
+
+      // 加上归一化偏移量，使输出位置对应原始缝份路径
+      const pn = placed.pieceId.replace(/_\d+$/, '');
+      const off = this.polygonOffsets.get(pn);
       positions.push({
         pieceId: placed.pieceId,
-        x: placed.x,
-        y: placed.y,
+        x: off ? placed.x + off.x : placed.x,
+        y: off ? placed.y + off.y : placed.y,
         rotation: placed.rotation,
       });
     }
@@ -455,13 +482,17 @@ export class NestEngine {
   }
 
   getPlacedPolygons(): Array<{ id: string; polygon: Polygon; x: number; y: number; rotation: number }> {
-    return this.placedPieces.map(p => ({
-      id: p.pieceId,
-      polygon: p.polygon,
-      x: p.x,
-      y: p.y,
-      rotation: p.rotation,
-    }));
+    return this.placedPieces.map(p => {
+      const pn = p.pieceId.replace(/_\d+$/, '');
+      const off = this.polygonOffsets.get(pn);
+      return {
+        id: p.pieceId,
+        polygon: off ? p.polygon.translate(-off.x, -off.y) : p.polygon,
+        x: off ? p.x + off.x : p.x,
+        y: off ? p.y + off.y : p.y,
+        rotation: p.rotation,
+      };
+    });
   }
 
   optimize(iterations: number = 10): NestResult {

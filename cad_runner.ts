@@ -236,7 +236,7 @@ if (input.mode === 'preview') {
     
     console.log(JSON.stringify(result)); // 唯一的stdout输出点 - API响应
 } else {
-    const engine = new NestEngine({ fabricWidth, spacing: 3, rotations: [0, 180], fabricNap, fabricHeight: 2000 });
+    const engine = new NestEngine({ fabricWidth, spacing: 1, rotations: [0, 180], fabricNap, fabricHeight: 1600 });
 
     try {
         for (const piece of pieces) {
@@ -302,10 +302,6 @@ if (input.mode === 'preview') {
             pp.id.startsWith(piece.name + '_')
         );
 
-        for (let di = 0; di < placedInstances.length; di++) {
-            const pp_ = placedInstances[di];
-        }
-        
         if (placedInstances.length > 0) {
             // ✅ 已成功排料：使用实际位置
             

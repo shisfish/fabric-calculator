@@ -183,7 +183,6 @@ export class TshirtPatternGenerator {
 
     const neckQuad = new QuadraticBezier(points.cbNeck, new Point(nW * 0.5, nD), points.hps);
     const neckLen = neckQuad.toCubic().getLength();
-    const shoulderLen = points.cbNeck.dist(points.shoulder); // 这里应该是hps到shoulder，让我重新计算
     const shoulderLenCorrect = points.hps.dist(points.shoulder);
     const armholeLineLen = points.shoulder.dist(points.backPitch);
     const armholeCurveLen = new CubicBezier(points.backPitch, points.bCp1, points.bCp2, points.armholeEnd).getLength();
