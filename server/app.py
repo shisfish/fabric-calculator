@@ -10,9 +10,14 @@ from curved_engine import CurvedPieceCalculator
 from db_manager import db_manager
 import json
 import os
+import sys
 from datetime import datetime
 
-app = Flask(__name__, template_folder='templates', static_folder='static')
+# 前端资源路径（相对于server/目录）
+_FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend')
+app = Flask(__name__,
+            template_folder=os.path.join(_FRONTEND_DIR, 'templates'),
+            static_folder=os.path.join(_FRONTEND_DIR, 'static'))
 app.config['JSON_AS_ASCII'] = False
 
 calculator = FabricCalculator()

@@ -9,8 +9,8 @@ set -e
 # 配置
 GIT_REMOTE="${GIT_REMOTE:-origin}"
 GIT_BRANCH="${1:-main}"
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
-COMPOSE_FILE="docker-compose.yml"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+COMPOSE_FILE="deploy/docker-compose.yml"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -60,26 +60,26 @@ git pull "$GIT_REMOTE" "$GIT_BRANCH"
 
 # 重新构建并启动
 log_info "重新构建 Docker 镜像..."
-docker compose build fabric-calculator
+docker compose -f deploy/docker-compose.yml build fabric-calculator
 
 log_info "重新启动服务..."
-docker compose up -d fabric-calculator
+docker compose -f deploy/docker-compose.yml up -d fabric-calculator
 
 # 等待服务启动
 log_info "等待服务启动..."
 sleep 5
 
 # 检查服务状态
-if docker compose ps fabric-calculator | grep -q "Up"; then
+if docker compose -f deploy/docker-compose.yml ps fabric-calculator | grep -q "Up"; then
     log_info "服务启动成功！"
 else
     log_error "服务启动失败，请检查日志:"
-    docker compose logs fabric-calculator
+    docker compose -f deploy/docker-compose.yml logs fabric-calculator
     exit 1
 fi
 
 # 显示日志
 log_info "最近日志:"
-docker compose logs --tail=20 fabric-calculator
+docker compose -f deploy/docker-compose.yml logs --tail=20 fabric-calculator
 
 log_info "部署完成！"

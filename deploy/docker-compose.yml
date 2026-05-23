@@ -36,7 +36,9 @@ services:
 
   # 面料计算器应用服务
   fabric-calculator:
-    build: .
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
     image: fabric-calculator:latest
     container_name: fabric-calculator
     restart: unless-stopped

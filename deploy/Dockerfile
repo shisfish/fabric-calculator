@@ -3,15 +3,14 @@
 # =========================================================
 FROM node:20-slim AS frontend-builder
 
-WORKDIR /frontend
+WORKDIR /build
 
 # 复制 package 文件（最大化利用缓存）
 COPY package.json package-lock.json ./
 RUN npm install
 
-# 复制前端源码
-COPY build-frontend.js ./
-COPY static/js/cad/ ./static/js/cad/
+# 复制前端源码和构建脚本
+COPY frontend/ ./frontend/
 
 # 构建前端
 RUN npm run build:frontend && \
@@ -74,13 +73,13 @@ RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.
 # =========================================================
 # 先复制 requirements（利用 Docker 缓存）
 # =========================================================
-COPY requirements.txt .
+COPY server/requirements.txt ./server/
 
 # =========================================================
 # 安装 Python 依赖
 # =========================================================
 RUN pip install \
-    -r requirements.txt \
+    -r server/requirements.txt \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --no-compile
 
@@ -92,17 +91,27 @@ RUN npm install -g tsx && \
     rm -rf /root/.npm
 
 # =========================================================
-# 复制项目文件
+# 复制后端代码
 # =========================================================
-COPY . .
-
-# 清理旧编译JS文件，确保 tsx 运行时代码解析到最新的 .ts 源码
-RUN rm -rf dist/
+COPY server/ ./server/
 
 # =========================================================
-# 从前端构建阶段复制静态资源
+# 复制 CAD 引擎代码
 # =========================================================
-COPY --from=frontend-builder /frontend/static/js/cad/bundle.js ./static/js/cad/bundle.js
+COPY cad-engine/ ./cad-engine/
+COPY package.json package-lock.json ./
+RUN npm install --production && npm cache clean --force && rm -rf /root/.npm
+
+# =========================================================
+# 复制前端静态资源（非编译的JS/CSS/图片/模板）
+# =========================================================
+COPY frontend/static/ ./frontend/static/
+COPY frontend/templates/ ./frontend/templates/
+
+# =========================================================
+# 从前端构建阶段复制编译后的 bundle
+# =========================================================
+COPY --from=frontend-builder /build/frontend/static/js/bundle.js ./frontend/static/js/bundle.js
 
 # =========================================================
 # 创建上传目录
@@ -148,4 +157,5 @@ CMD ["gunicorn", \
      "--max-requests-jitter", "100", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
+     "--chdir", "server", \
      "app:app"]

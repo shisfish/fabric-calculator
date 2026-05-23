@@ -24456,13 +24456,13 @@ var require_jsx_runtime = __commonJS({
   }
 });
 
-// static/js/cad/App.tsx
+// frontend/src/App.tsx
 var import_client = __toESM(require_client(), 1);
 
-// static/js/cad/PatternViewer.tsx
+// frontend/src/PatternViewer.tsx
 var import_react = __toESM(require_react(), 1);
 
-// static/js/cad/svgUtils.ts
+// frontend/src/svgUtils.ts
 function pathOpsToSVGPath(ops) {
   let d = "";
   for (const op of ops) {
@@ -24588,7 +24588,7 @@ function translatePathOps(ops, dx, dy) {
   });
 }
 
-// static/js/cad/PatternViewer.tsx
+// frontend/src/PatternViewer.tsx
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var PIECE_COLORS = {
   back: { fill: "rgba(200, 220, 255, 0.4)", stroke: "#3366cc" },
@@ -24854,7 +24854,7 @@ var PatternViewer = ({
   ] });
 };
 
-// static/js/cad/NestingViewer.tsx
+// frontend/src/NestingViewer.tsx
 var import_react2 = __toESM(require_react(), 1);
 var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
 var PIECE_COLORS2 = {
@@ -25203,7 +25203,7 @@ var NestingViewer = ({
   ] });
 };
 
-// static/js/cad/App.tsx
+// frontend/src/App.tsx
 var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
 var CADApp = ({ pieces, nestingResult, fabricWidth, mode }) => {
   if (mode === "preview" && pieces.length > 0) {

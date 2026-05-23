@@ -6,10 +6,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "build:frontend": "node build-frontend.js",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint 'geometry/**/*.ts'"
+    "build": "tsc -p cad-engine/tsconfig.json",
+    "build:frontend": "node frontend/build.js",
+    "typecheck": "tsc -p cad-engine/tsconfig.json --noEmit",
+    "lint": "eslint 'cad-engine/**/*.ts'"
   },
   "keywords": [
     "garment",

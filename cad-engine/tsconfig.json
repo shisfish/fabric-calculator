@@ -22,6 +22,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["geometry/**/*", "patterns/**/*", "export/**/*", "nesting/**/*", "utils/**/*", "cad_runner.ts"],
-  "exclude": ["node_modules", "dist", "reference"]
+  "include": ["./*.ts", "./**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

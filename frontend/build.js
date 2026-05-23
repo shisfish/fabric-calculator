@@ -7,9 +7,9 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const rootDir = join(__dirname);
-const entryPoint = join(rootDir, 'static/js/cad/index.ts');
-const outputFile = join(rootDir, 'static/js/cad/bundle.js');
+const frontendDir = __dirname;
+const entryPoint = join(frontendDir, 'src/index.ts');
+const outputFile = join(frontendDir, 'static/js/bundle.js');
 
 console.log(`Building ${entryPoint}...`);
 

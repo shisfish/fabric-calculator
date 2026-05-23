@@ -516,7 +516,7 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 for row in rows:
                     if row['image_path']:
-                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'static')
                         full_path = os.path.join(base_dir, row['image_path'])
                         if os.path.exists(full_path):
                             try:
@@ -541,7 +541,7 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 for row in rows:
                     if row['image_path']:
-                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'static')
                         full_path = os.path.join(base_dir, row['image_path'])
                         if os.path.exists(full_path):
                             try:

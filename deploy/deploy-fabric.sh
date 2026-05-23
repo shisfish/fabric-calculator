@@ -38,16 +38,16 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     cd "$REPO_DIR"
     
     log_info "首次构建并启动..."
-    docker compose build fabric-calculator
-    docker compose up -d fabric-calculator
+    docker compose -f deploy/docker-compose.yml build fabric-calculator
+    docker compose -f deploy/docker-compose.yml up -d fabric-calculator
     
     sleep 5
     
-    if docker compose ps fabric-calculator | grep -q "Up"; then
+    if docker compose -f deploy/docker-compose.yml ps fabric-calculator | grep -q "Up"; then
         log_info "服务启动成功！"
     else
         log_error "服务启动失败，请检查日志:"
-        docker compose logs fabric-calculator
+        docker compose -f deploy/docker-compose.yml logs fabric-calculator
         exit 1
     fi
     
@@ -77,25 +77,25 @@ git pull origin "$GIT_BRANCH"
 
 # 重新构建并启动
 log_info "重新构建 Docker 镜像..."
-docker compose build fabric-calculator
+docker compose -f deploy/docker-compose.yml build fabric-calculator
 
 log_info "重新启动服务..."
-docker compose up -d fabric-calculator
+docker compose -f deploy/docker-compose.yml up -d fabric-calculator
 
 # 等待服务启动
 log_info "等待服务启动..."
 sleep 5
 
 # 检查服务状态
-if docker compose ps fabric-calculator | grep -q "Up"; then
+if docker compose -f deploy/docker-compose.yml ps fabric-calculator | grep -q "Up"; then
     log_info "服务启动成功！"
 else
     log_error "服务启动失败，请检查日志:"
-    docker compose logs fabric-calculator
+    docker compose -f deploy/docker-compose.yml logs fabric-calculator
     exit 1
 fi
 
 log_info "最近日志:"
-docker compose logs --tail=20 fabric-calculator
+docker compose -f deploy/docker-compose.yml logs --tail=20 fabric-calculator
 
 log_info "部署完成！"

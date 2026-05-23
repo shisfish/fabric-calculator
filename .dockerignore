@@ -12,14 +12,10 @@ uploads
 .idea
 
 # 文档
-*.md
-DEPLOY.md
-README.md
+docs/
 
-# 部署脚本
-deploy-*.sh
-start.sh
-init.sql
+# 部署配置（Dockerfile 内单独 COPY）
+deploy/
 
 # 示例数据
 example/
@@ -32,8 +28,8 @@ reference/
 .verify/
 verify-*.ts
 
-# 旧 bundle.js (builder 会重新生成)
-static/js/cad/bundle.js
+# bundle.js (builder 会重新生成)
+frontend/static/js/bundle.js
 
 # Python 缓存
 *.pyo

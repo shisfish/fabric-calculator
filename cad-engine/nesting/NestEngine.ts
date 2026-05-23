@@ -60,6 +60,7 @@ export class NestEngine {
     rotation: number;
   }> = [];
   private polygonOffsets: Map<string, Point> = new Map();
+  private pieceOnFold = new Map<string, boolean>();
 
   constructor(config: Partial<NestConfig> = {}) {
     this.config = { ...DEFAULT_NEST_CONFIG, ...config };
@@ -120,6 +121,7 @@ export class NestEngine {
           quantity: piece.cutCount,
           rotations,
         });
+        this.pieceOnFold.set(piece.name, piece.onFold ?? false);
       } else {
         logger.error(`   ❌ piece "${piece.name}" 的path无效或不存在！`);
       }
@@ -376,11 +378,8 @@ export class NestEngine {
             for (const o of this.placedPieces) {
               if (o === r) continue;
               const op = o.polygon.translate(o.x, o.y);
-              const tb_ = tp.getBoundingBox();
-              const ob_ = op.getBoundingBox();
-              if (SATCollision.testCollisionRobust(tp, op).collides ||
-                  (tb_.minY < ob_.maxY && tb_.maxY > ob_.minY &&
-                   ob_.maxX < tb_.minX && tb_.minX - ob_.maxX < spacing)) {
+              const dist = SATCollision.getDistance(tp, op);
+              if (dist < spacing) {
                 ok = false; break;
               }
             }
@@ -402,11 +401,8 @@ export class NestEngine {
             for (const o of this.placedPieces) {
               if (o === r) continue;
               const op = o.polygon.translate(o.x, o.y);
-              const tb_ = tp.getBoundingBox();
-              const ob_ = op.getBoundingBox();
-              if (SATCollision.testCollisionRobust(tp, op).collides ||
-                  (tb_.minX < ob_.maxX && tb_.maxX > ob_.minX &&
-                   ob_.maxY < tb_.minY && tb_.minY - ob_.maxY < spacing)) {
+              const dist = SATCollision.getDistance(tp, op);
+              if (dist < spacing) {
                 ok = false; break;
               }
             }

@@ -251,7 +251,7 @@ def generate_piece_image(piece_config, save_to_file=False, output_dir=None):
     file_path = None
     if save_to_file:
         if output_dir is None:
-            output_dir = os.path.join(os.path.dirname(__file__), "static", "calc_images")
+            output_dir = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'static', 'calc_images')
         os.makedirs(output_dir, exist_ok=True)
         safe_name = "".join(c if c.isalnum() or c in "_-" else "_" for c in name)
         filename = f"{safe_name}_{'rot' if rotated else ''}_{width:.0f}x{height:.0f}.png"
@@ -342,7 +342,7 @@ def generate_cad_pieces_preview(measurements, options=None):
         "options": options
     })
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cad-engine')
 
     try:
         result = subprocess.run(
@@ -416,7 +416,7 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         ts_input["customPieces"] = custom_pieces
     input_data = json.dumps(ts_input)
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'cad-engine')
 
     try:
         result = subprocess.run(

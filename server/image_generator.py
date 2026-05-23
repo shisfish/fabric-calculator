@@ -92,7 +92,7 @@ DEFAULT_COLOR = ("#a0a0a0", "#808080")
 def _get_upload_dir():
     """获取图片上传目录的绝对路径"""
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    upload_dir = os.path.join(base_dir, "uploads", "calc_images")
+    upload_dir = os.path.join(base_dir, '..', 'frontend', 'static', 'calc_images')
     os.makedirs(upload_dir, exist_ok=True)
     return upload_dir
 
