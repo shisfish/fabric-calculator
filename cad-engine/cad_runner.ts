@@ -168,6 +168,18 @@ if (input.customPieces && Array.isArray(input.customPieces)) {
     logger.info(`   📊 合计裁片数: ${pieces.length}`);
 }
 
+// ===== 按订单数量排料：将cutCount乘以quantity =====
+const qtyNestMode = input.qtyNestMode === true || input.qtyNestMode === 'true';
+const nestQuantity = parseInt(input.quantity) || 1;
+if (qtyNestMode && nestQuantity > 1) {
+    logger.info(`\n📦 按订单数量排料模式: quantity=${nestQuantity}, 裁片数量将×${nestQuantity}`);
+    for (const piece of pieces) {
+        const original = piece.cutCount;
+        piece.cutCount = original * nestQuantity;
+        logger.info(`   🔄 ${piece.name}: ${original} → ${piece.cutCount} (×${nestQuantity})`);
+    }
+}
+
 // 🔍 【关键验证】检查TshirtPatternGenerator返回的原始pieces
 logger.debug('\n🔍 ===== TshirtPatternGenerator 原始输出验证 =====');
 logger.debug(`   原始pieces数量: ${pieces.length}`);

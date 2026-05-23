@@ -393,7 +393,7 @@ def generate_cad_pieces_preview(measurements, options=None):
 
 def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate,
                                  wastage_rate, fabric_weight_gsm, quantity, fabric_nap=False,
-                                 custom_pieces=None):
+                                 qty_nest_mode=False, custom_pieces=None):
     """
     CAD排料计算 - 基于实物测量数据生成裁片并排料
     """
@@ -411,6 +411,8 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         "options": options,
         "fabricWidth": fabric_width,
         "fabricNap": fabric_nap,
+        "qtyNestMode": qty_nest_mode,
+        "quantity": quantity if qty_nest_mode else 1,
     }
     if custom_pieces:
         ts_input["customPieces"] = custom_pieces
@@ -446,7 +448,8 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
         total_area_m2 = total_area_cm2 / 10000
         per_piece_length_m = data.get('bounds', {}).get('height', 0) / 100
-        total_length_m = per_piece_length_m * quantity
+        # qtyNestMode时，排料已包含全部数量裁片，不再乘以quantity
+        total_length_m = per_piece_length_m * (1 if qty_nest_mode else quantity)
 
         fabric_weight_kg = 0
         if fabric_weight_gsm > 0:
@@ -818,8 +821,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     if not positions:
         return ""
 
-    scale = 1.5
-    padding = 20
+    padding = 50
     label_height = 30
 
     if bounds:
@@ -829,6 +831,11 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
+    base_scale = 2.25
+    target_max_h_px = 780
+    max_scale_by_h = (target_max_h_px - padding * 2 - label_height) / max(fabric_width, 1)
+    scale = min(base_scale, max_scale_by_h)
+
     # 横向排列：排料长度→水平，门幅→垂直
     svg_w = int(nest_h * scale + padding * 2)
     svg_h = int(fabric_width * scale + padding * 2 + label_height)
@@ -836,7 +843,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     ff = _get_svg_font_family()
 
     lines = []
-    lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="100%" height="auto">')
+    lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}px" height="{svg_h}px" style="max-width:100%;height:auto;">')
 
     # 顶部标注
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
@@ -860,7 +867,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
     # 门幅标注（左侧竖向）
     mid_y = padding + label_height + fabric_width * scale / 2
-    lines.append(f'<text x="{padding - 5}" y="{mid_y}" '
+    lines.append(f'<text x="{padding - 6}" y="{mid_y}" '
                 f'text-anchor="end" font-size="10" fill="#999" '
                 f'{ff}>'
                 f'{fabric_width}cm'

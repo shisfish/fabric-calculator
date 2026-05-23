@@ -798,9 +798,10 @@ def cad_nesting():
         fabric_weight_gsm = float(fabric_params.get("weightGsm", 0))
         quantity = int(fabric_params.get("quantity", 1))
         fabric_nap = fabric_params.get("fabricNap", False)
+        qty_nest_mode = fabric_params.get("qtyNestMode", False)
         custom_pieces = data.get("customPieces", [])
 
-        print(f"[CAD] 收到排料请求: 品类={category}, 门幅={fabric_width}cm, 数量={quantity}, 自定义裁片={len(custom_pieces)}个")
+        print(f"[CAD] 收到排料请求: 品类={category}, 门幅={fabric_width}cm, 数量={quantity}, 按数量排料={qty_nest_mode}, 自定义裁片={len(custom_pieces)}个")
 
         from piece_generator import generate_cad_nesting_result
         result = generate_cad_nesting_result(
@@ -812,6 +813,7 @@ def cad_nesting():
             fabric_weight_gsm=fabric_weight_gsm,
             quantity=quantity,
             fabric_nap=fabric_nap,
+            qty_nest_mode=qty_nest_mode,
             custom_pieces=custom_pieces if custom_pieces else None,
         )
 

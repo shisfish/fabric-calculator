@@ -19,7 +19,39 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCategories();
     initCustomPieces();
     loadEditRecord();
+    initNapToggle();
+    initQtyNestToggle();
 });
+
+function initNapToggle() {
+    const checkbox = document.getElementById('fabric-nap');
+    const label = document.getElementById('nap-toggle-label');
+    if (!checkbox || !label) return;
+    const updateStyle = () => {
+        if (checkbox.checked) {
+            label.classList.add('switch-on');
+        } else {
+            label.classList.remove('switch-on');
+        }
+    };
+    checkbox.addEventListener('change', updateStyle);
+    updateStyle();
+}
+
+function initQtyNestToggle() {
+    const checkbox = document.getElementById('qty-nest-mode');
+    const label = document.getElementById('qty-nest-toggle-label');
+    if (!checkbox || !label) return;
+    const updateStyle = () => {
+        if (checkbox.checked) {
+            label.classList.add('switch-on');
+        } else {
+            label.classList.remove('switch-on');
+        }
+    };
+    checkbox.addEventListener('change', updateStyle);
+    updateStyle();
+}
 
 function renderCategories() {
     const grid = document.getElementById('category-grid');
@@ -95,8 +127,9 @@ function getFabricParams() {
         weightGsm: parseFloat(document.getElementById('fabric-weight').value) || 0,
         shrinkageRate: parseFloat(document.getElementById('shrinkage-rate').value) || 3,
         wastageRate: parseFloat(document.getElementById('wastage-rate').value) || 8,
-        quantity: parseInt(document.getElementById('quantity').value) || 100,
+        quantity: parseInt(document.getElementById('quantity').value) || 2,
         fabricNap: document.getElementById('fabric-nap')?.checked || false,
+        qtyNestMode: document.getElementById('qty-nest-mode')?.checked || false,
     };
 }
 
@@ -120,7 +153,7 @@ function renderCustomPieces() {
             <td><input type="number" value="${p.length}" class="input-inline" style="width:70px;" step="0.5" min="1" data-idx="${i}" data-field="length" onchange="updateCustomPiece(${i}, 'length', parseFloat(this.value) || 10)"></td>
             <td><input type="number" value="${p.width}" class="input-inline" style="width:70px;" step="0.5" min="1" data-idx="${i}" data-field="width" onchange="updateCustomPiece(${i}, 'width', parseFloat(this.value) || 10)"></td>
             <td><input type="number" value="${p.count}" class="input-inline" style="width:60px;" step="1" min="1" data-idx="${i}" data-field="count" onchange="updateCustomPiece(${i}, 'count', parseInt(this.value) || 1)"></td>
-            <td><button class="btn btn-sm btn-danger" onclick="removeCustomPiece(${i})" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;">删除</button></td>
+            <td><button class="btn btn-sm btn-danger" onclick="removeCustomPiece(${i})" style="background:#ef4444;color:white;border:none;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">删除</button></td>
         </tr>
     `).join('');
 }
@@ -132,7 +165,15 @@ function updateCustomPiece(idx, field, value) {
 }
 
 function addCustomPiece() {
-    customPieces.push({ name: '新配件', length: 10, width: 10, count: 1 });
+    customPieces.push({ name: '新配件', length: 10, width: 10, count: 1, shape: '矩形', material: '主面料', seam: 1.5 });
+    renderCustomPieces();
+}
+
+function resetCustomPieces() {
+    customPieces = [
+        { name: '口袋', length: 15, width: 15, count: 2, shape: '矩形', material: '主面料', seam: 1.5 },
+        { name: '其他配件', length: 10, width: 10, count: 2, shape: '矩形', material: '主面料', seam: 1.5 },
+    ];
     renderCustomPieces();
 }
 
@@ -147,6 +188,7 @@ function getCustomPiecesData() {
         width: p.length,
         height: p.width,
         count: p.count,
+        seam: p.seam || 1.5,
     }));
 }
 
