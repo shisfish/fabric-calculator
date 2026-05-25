@@ -756,8 +756,8 @@ def cad_preview():
         garment_input = data.get("garmentInput", {})
         measurements = data.get("measurements", {})
 
-        if category != "tshirt":
-            return jsonify({"success": False, "message": "当前仅支持T恤品类"}), 400
+        if category not in ["tshirt", "windbreaker"]:
+            return jsonify({"success": False, "message": "当前仅支持T恤和风衣品类"}), 400
 
         from piece_generator import generate_cad_pieces_preview
         result = generate_cad_pieces_preview(
@@ -789,8 +789,8 @@ def cad_nesting():
         measurements = data.get("measurements", {})
         fabric_params = data.get("fabricParams", {})
 
-        if category != "tshirt":
-            return jsonify({"success": False, "message": "当前仅支持T恤品类"}), 400
+        if category not in ["tshirt", "windbreaker"]:
+            return jsonify({"success": False, "message": "当前仅支持T恤和风衣品类"}), 400
 
         fabric_width = float(fabric_params.get("width", 145))
         shrinkage_rate = float(fabric_params.get("shrinkageRate", 3))

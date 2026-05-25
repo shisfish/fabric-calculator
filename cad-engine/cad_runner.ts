@@ -1,4 +1,4 @@
-import { TshirtPatternGenerator, GarmentMeasurementAdapter, FrontPatternGenerator, type GarmentParams, type FrontPatternParams } from './patterns/index.js';
+import { TshirtPatternGenerator, WindbreakerPatternGenerator, GarmentMeasurementAdapter, FrontPatternGenerator, type GarmentParams, type FrontPatternParams, type WindbreakerParams } from './patterns/index.js';
 import { NestEngine } from './nesting/index.js';
 import { logger } from './utils/CADLogger.js';
 import { Point, Path } from './geometry/index.js';
@@ -83,6 +83,60 @@ function expandOnFoldPiece(
   };
 }
 
+/**
+ * 将前端输入的风衣尺寸转换为WindbreakerParams
+ */
+function adaptWindbreakerParams(garmentInput: any, seamAllowance: number): WindbreakerParams {
+  const gi = garmentInput || {};
+  const back = gi.back || {};
+  const front = gi.front || {};
+  const sleeve = gi.sleeve || {};
+  const collar = gi.collar || {};
+
+  return {
+    category: 'windbreaker',
+    backPanel: {
+      width: back.chestWidth || 53,
+      length: back.bodyLength || 88,
+      neckWidth: back.neckWidth || 10,
+      neckDepth: back.neckDrop || 3,
+      shoulderWidth: back.shoulderWidth || 22,
+      shoulderSlope: 14,
+      armholeDepth: back.armholeDepth || 36,
+      yokeDepth: back.yokeDepth || 12,
+      ventLength: back.ventLength || 18,
+      hemExtension: 3,
+    },
+    frontPanel: {
+      width: front.chestWidth || 53,
+      length: front.bodyLength || 88,
+      neckWidth: front.neckWidth || 10,
+      neckDepth: front.neckDrop || 10,
+      shoulderWidth: front.shoulderWidth || 21,
+      shoulderSlope: 12,
+      armholeDepth: front.armholeDepth || 35,
+      yokeDepth: front.yokeDepth || 12,
+      placketWidth: front.placketWidth || 6,
+      hemExtension: 3,
+    },
+    sleeve: {
+      bicepsWidth: sleeve.bicepWidth || 44,
+      cuffWidth: sleeve.cuffWidth || 30,
+      sleeveLength: sleeve.sleeveLength || 64,
+      sleeveCapHeight: sleeve.sleeveCapHeight || 17,
+    },
+    collar: collar.collarWidth ? {
+      collarWidth: collar.collarWidth || 8,
+      standHeight: collar.standHeight || 4,
+      collarLength: collar.collarLength || 44,
+    } : undefined,
+    seamAllowance,
+    hasStormFlap: true,
+    hasBelt: true,
+    hasEpaulettes: true,
+  };
+}
+
 const input = JSON.parse(process.argv[2]);
 
 logger.debug('输入参数:', JSON.stringify(input).substring(0, 200));
@@ -127,7 +181,16 @@ if (input.frontOnly && input.frontParams) {
     seamAllowance: 0
   }];
 } else {
-  pieces = TshirtPatternGenerator.generatePattern(params);
+  const category = input.category || 'tshirt';
+  logger.info(`\n🏷️ 品类: ${category}`);
+
+  if (category === 'windbreaker') {
+    logger.info('   使用风衣版型生成器');
+    const wbParams = adaptWindbreakerParams(input.garmentInput || input.measurements, params.seamAllowance);
+    pieces = WindbreakerPatternGenerator.generatePattern(wbParams);
+  } else {
+    pieces = TshirtPatternGenerator.generatePattern(params);
+  }
 }
 
 // ===== 自定义裁片（口袋、配件等矩形裁片） =====

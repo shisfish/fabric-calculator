@@ -5,6 +5,7 @@
 
 const CAD_CATEGORIES = [
     { id: 'tshirt', name: 'T恤', icon: '👕', available: true, message: '' },
+    { id: 'windbreaker', name: '风衣', icon: '🧥', available: true, message: '' },
     { id: 'shirt', name: '衬衫', icon: '👔', available: false, message: '衬衫CAD模块正在开发中，敬请期待' },
     { id: 'coat', name: '大衣', icon: '🧥', available: false, message: '大衣CAD模块正在开发中，敬请期待' },
     { id: 'jacket', name: '夹克', icon: '🧥', available: false, message: '夹克CAD模块正在开发中，敬请期待' },
@@ -83,6 +84,11 @@ function selectCategory(catId) {
         card.classList.toggle('selected', card.dataset.id === catId);
     });
 
+    const wbParams = document.getElementById('windbreaker-params');
+    if (wbParams) {
+        wbParams.style.display = catId === 'windbreaker' ? 'block' : 'none';
+    }
+
     setTimeout(() => goStep(2), 300);
 }
 
@@ -95,7 +101,7 @@ function goStep(step) {
 }
 
 function getGarmentInput() {
-    return {
+    const base = {
         chestWidth: parseFloat(document.getElementById('g-chestWidth').value) || 58,
         shoulderWidth: parseFloat(document.getElementById('g-shoulderWidth').value) || 24,
         bodyLength: parseFloat(document.getElementById('g-bodyLength').value) || 72,
@@ -106,6 +112,42 @@ function getGarmentInput() {
         hemCurve: parseFloat(document.getElementById('g-hemCurve').value) || 0,
         shoulderSlope: parseFloat(document.getElementById('g-shoulderSlope').value) || 3,
     };
+
+    if (currentCategory === 'windbreaker') {
+        return {
+            ...base,
+            back: {
+                chestWidth: parseFloat(document.getElementById('wb-back-chestWidth')?.value) || base.chestWidth / 2,
+                bodyLength: base.bodyLength,
+                shoulderWidth: parseFloat(document.getElementById('wb-back-shoulderWidth')?.value) || 22,
+                armholeDepth: base.armholeDepth + 8,
+                yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
+                ventLength: parseFloat(document.getElementById('wb-ventLength')?.value) || 18,
+            },
+            front: {
+                chestWidth: parseFloat(document.getElementById('wb-front-chestWidth')?.value) || base.chestWidth / 2,
+                bodyLength: base.bodyLength,
+                shoulderWidth: parseFloat(document.getElementById('wb-front-shoulderWidth')?.value) || 21,
+                armholeDepth: base.armholeDepth + 7,
+                neckDrop: parseFloat(document.getElementById('wb-front-neckDepth')?.value) || 10,
+                placketWidth: parseFloat(document.getElementById('wb-placketWidth')?.value) || 6,
+                yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
+            },
+            sleeve: {
+                bicepWidth: parseFloat(document.getElementById('wb-bicepWidth')?.value) || 44,
+                cuffWidth: base.cuffWidth * 3,
+                sleeveLength: base.sleeveLength + 4,
+                sleeveCapHeight: parseFloat(document.getElementById('wb-sleeveCapHeight')?.value) || 17,
+            },
+            collar: {
+                collarWidth: parseFloat(document.getElementById('wb-collarWidth')?.value) || 8,
+                standHeight: parseFloat(document.getElementById('wb-standHeight')?.value) || 4,
+                collarLength: base.shoulderWidth * 2 + 10,
+            }
+        };
+    }
+
+    return base;
 }
 
 function getFrontPatternParams() {
@@ -1008,6 +1050,29 @@ async function loadEditRecord() {
                 document.getElementById('g-cuffWidth').value = (measurements.wrist * 1.1).toFixed(1);
             if (measurements.shoulderSlope && !garmentInput.shoulderSlope)
                 document.getElementById('g-shoulderSlope').value = measurements.shoulderSlope;
+
+            if (currentCategory === 'windbreaker' && garmentInput.back) {
+                if (garmentInput.back.chestWidth) document.getElementById('wb-back-chestWidth').value = garmentInput.back.chestWidth;
+                if (garmentInput.back.shoulderWidth) document.getElementById('wb-back-shoulderWidth').value = garmentInput.back.shoulderWidth;
+                if (garmentInput.back.yokeDepth) document.getElementById('wb-yokeDepth').value = garmentInput.back.yokeDepth;
+                if (garmentInput.back.ventLength) document.getElementById('wb-ventLength').value = garmentInput.back.ventLength;
+                if (garmentInput.front) {
+                    if (garmentInput.front.chestWidth) document.getElementById('wb-front-chestWidth').value = garmentInput.front.chestWidth;
+                    if (garmentInput.front.shoulderWidth) document.getElementById('wb-front-shoulderWidth').value = garmentInput.front.shoulderWidth;
+                    if (garmentInput.front.placketWidth) document.getElementById('wb-placketWidth').value = garmentInput.front.placketWidth;
+                    if (garmentInput.front.neckDrop) document.getElementById('wb-front-neckDepth').value = garmentInput.front.neckDrop;
+                }
+                if (garmentInput.sleeve) {
+                    if (garmentInput.sleeve.bicepWidth) document.getElementById('wb-bicepWidth').value = garmentInput.sleeve.bicepWidth;
+                    if (garmentInput.sleeve.sleeveCapHeight) document.getElementById('wb-sleeveCapHeight').value = garmentInput.sleeve.sleeveCapHeight;
+                }
+                if (garmentInput.collar) {
+                    if (garmentInput.collar.collarWidth) document.getElementById('wb-collarWidth').value = garmentInput.collar.collarWidth;
+                    if (garmentInput.collar.standHeight) document.getElementById('wb-standHeight').value = garmentInput.collar.standHeight;
+                }
+                const wbParams = document.getElementById('windbreaker-params');
+                if (wbParams) wbParams.style.display = 'block';
+            }
 
             if (fabricParams.width) document.getElementById('fabric-width').value = fabricParams.width;
             if (fabricParams.weightGsm) document.getElementById('fabric-weight').value = fabricParams.weightGsm;
