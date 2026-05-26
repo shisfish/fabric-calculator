@@ -65,7 +65,7 @@ function main() {
   }
 
   if (input.mode === 'seam' || input.mode === 'all') {
-    const seamDist = input.seamAllowance || 1.0;
+    const seamDist = input.seamAllowance || 1.5;  // 工业标准缝份1.5cm
     
     try {
       const seamResult = SeamAllowanceRenderer.render(pieces, seamDist, {
@@ -86,7 +86,8 @@ function main() {
           area: (p.originalSize.width * 2) * p.originalSize.height,
           originalSize: p.originalSize,
           seamSize: p.seamSize,
-          seamDistance: p.seamDistance
+          seamDistance: p.seamDistance,
+          seamAllowance: seamDist  // 添加缝份宽度字段
         })),
         seamDistance: seamDist,
         viewBox: seamResult.viewBox
@@ -99,16 +100,29 @@ function main() {
 
   if (input.mode === 'nesting' || input.mode === 'all') {
     const fabricWidth = input.fabricWidth || 145;
-    const seamDist = input.seamAllowance || 1.0;
+    const seamDist = input.seamAllowance || 1.5;  // 工业标准缝份1.5cm
 
     try {
-      // 收集裁片的pathOps数据（从pattern阶段获取）
+      // 收集裁片的pathOps数据和缝份数据（从pattern和seam阶段获取）
       const piecePathOps: Record<string, any[]> = {};
+      const pieceSeamPathOps: Record<string, any[]> = {};
+      
+      // 从pattern阶段获取pathOps
       if (result.pattern?.pieces) {
         for (const p of result.pattern.pieces) {
           if (p.pathOps && p.pathOps.length > 0) {
             piecePathOps[p.id] = p.pathOps;
             piecePathOps[p.name] = p.pathOps;
+          }
+        }
+      }
+      
+      // 从seam阶段获取seamAllowancePathOps
+      if (result.seam?.pieces) {
+        for (const p of result.seam.pieces) {
+          if (p.seamAllowancePathOps && p.seamAllowancePathOps.length > 0) {
+            pieceSeamPathOps[p.id] = p.seamAllowancePathOps;
+            pieceSeamPathOps[p.name] = p.seamAllowancePathOps;
           }
         }
       }
@@ -133,7 +147,9 @@ function main() {
           position: { x: p.x, y: p.y },
           dimensions: { width: p.width, height: p.height },
           onFold: p.onFold,
-          pathOps: p.pathOps || null
+          pathOps: p.pathOps || null,
+          seamAllowancePathOps: pieceSeamPathOps[p.name] || pieceSeamPathOps[p.id] || null,  // 添加缝份数据
+          seamAllowance: seamDist  // 添加缝份宽度
         })),
         fabricInfo: {
           width: nestingResult.fabricWidth,

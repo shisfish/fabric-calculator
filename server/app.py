@@ -49,6 +49,12 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/test-nesting')
+def test_nesting():
+    """排料图诊断测试页面"""
+    return render_template('test_nesting.html')
+
+
 @app.route('/curves')
 def curves():
     """曲线模型计算页面"""
