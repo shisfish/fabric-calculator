@@ -336,19 +336,36 @@ async function calculate() {
     showLoading(true);
     try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30秒超时
+        const timeout = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
-        const resp = await fetch('/api/calculate', {
+        // 统一使用精确排料引擎 (calc-engine)
+        const resp = await fetch('/api/calc/all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
+            body: JSON.stringify({
+                measurements: {
+                    category: data.category,
+                    fabricWidth: data.fabric_width,
+                    seamAllowance: 1.0,
+                    pieces: data.pieces.map(p => ({
+                        name: p.name,
+                        width: p.width,
+                        height: p.length,
+                        quantity: p.count,
+                        onFold: false
+                    }))
+                },
+                fabricWidth: data.fabric_width,
+                seamAllowance: 1.0
+            }),
             signal: controller.signal,
         });
         clearTimeout(timeout);
         const result = await resp.json();
+
         if (result.success) {
-            lastCalcResult = result.data;
-            renderResult(result.data);
+            lastCalcResult = result;
+            renderCalcEngineResult(result, data);
             goStep(4);
         } else {
             alert('计算失败: ' + result.message);
@@ -378,180 +395,150 @@ const CATEGORY_NAMES = {
     skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
 };
 
-// 渲染结果
-function renderResult(data) {
-    // 0. 渲染基本信息（紧凑布局）
+// 渲染精确排料引擎结果 (calc-engine)
+function renderCalcEngineResult(result, inputData) {
+    const pattern = result.pattern || {};
+    const seam = result.seam || {};
+    const nesting = result.nesting || {};
+    const stats = nesting.statistics || {};
+
+    // 计算利用率（如果没有提供）
+    const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
+
+    // 1. 渲染基本信息
     const infoGrid = document.getElementById('result-info-grid');
-    const params = data.params || {};
     infoGrid.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">服装品类</span>
-            <strong style="font-size:14px;">${CATEGORY_NAMES[params.category] || params.category || '-'}</strong>
+            <strong style="font-size:14px;">${CATEGORY_NAMES[inputData.category] || inputData.category}</strong>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">面料门幅</span>
-            <strong style="font-size:14px;">${params.fabric_width} cm</strong>
+            <strong style="font-size:14px;">${inputData.fabric_width} cm</strong>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">订单数量</span>
-            <strong style="font-size:14px;">${params.quantity} 件</strong>
+            <strong style="font-size:14px;">${inputData.quantity} 件</strong>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">缩水率</span>
-            <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
+            <span style="color:var(--text-secondary);font-size:13px;">利用率</span>
+            <strong style="font-size:14px;color:#1976d2;">${utilization.toFixed(1)}%</strong>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">损耗率</span>
-            <strong style="font-size:14px;">${params.wastage_rate}%</strong>
+            <span style="color:var(--text-secondary);font-size:13px;">用料长度</span>
+            <strong style="font-size:14px;">${(stats.fabricLength || 0).toFixed(2)} cm</strong>
         </div>
-        ${params.fabric_weight_gsm ? `
+        ${inputData.fabric_weight_gsm ? `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">面料克重</span>
-            <strong style="font-size:14px;">${params.fabric_weight_gsm} g/m²</strong>
+            <strong style="font-size:14px;">${inputData.fabric_weight_gsm} g/m²</strong>
         </div>
         ` : ''}
     `;
 
-    // 1. 材料分类汇总（卡片展示）
+    // 2. 材料分类汇总（基于 calc-engine 数据）
     const matCards = document.getElementById('result-material-cards');
-    const matBreakdown = data.material_breakdown || {};
-    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
-        <div class="card" style="border-left:4px solid #3b82f6;margin:0;">
-            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
-                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
-                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
-                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
-                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
+    if (pattern.pieces && pattern.pieces.length > 0) {
+        const totalArea = pattern.pieces.reduce((sum, p) => sum + (p.area * p.quantity), 0);
+        const totalLengthM = (stats.fabricLength || 0) / 100;
+        const weightKg = inputData.fabric_weight_gsm ? (totalArea / 10000 * inputData.fabric_weight_gsm / 1000) : 0;
+
+        matCards.style.display = 'block';
+        matCards.innerHTML = `
+            <div class="card" style="border-left:4px solid #3b82f6;margin:0;">
+                <div style="font-size:16px;font-weight:600;margin-bottom:10px;">主面料</div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                    <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                        <div style="font-size:12px;color:var(--text-secondary);">总面积</div>
+                        <div style="font-size:15px;font-weight:600;">${(totalArea / 10000).toFixed(4)} m²</div>
+                    </div>
+                    <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                        <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
+                        <div style="font-size:15px;font-weight:600;">${totalLengthM.toFixed(3)} m</div>
+                    </div>
+                    ${weightKg > 0 ? `
+                    <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                        <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                        <div style="font-size:15px;font-weight:600;">${weightKg.toFixed(3)} kg</div>
+                    </div>
+                    ` : ''}
+                    <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                        <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
+                        <div style="font-size:15px;font-weight:600;">${utilization.toFixed(1)}%</div>
+                    </div>
                 </div>
             </div>
-        </div>
-    `).join('');
-
-    // 2. 警告
-    const warningsEl = document.getElementById('result-warnings');
-    if (data.warnings && data.warnings.length > 0) {
-        warningsEl.style.display = 'block';
-        warningsEl.innerHTML = data.warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
+        `;
     } else {
-        warningsEl.style.display = 'none';
+        matCards.style.display = 'none';
     }
 
     // 3. 裁片明细
     const piecesTbody = document.getElementById('result-pieces-tbody');
-    piecesTbody.innerHTML = data.pieces_detail.map(p => `
-        <tr>
-            <td>${p.name}</td>
-            <td>${p.original_length} × ${p.original_width}</td>
-            <td>${p.effective_length} × ${p.effective_width}</td>
-            <td>${p.count}</td>
-            <td>${p.area_cm2}</td>
-            <td>${p.area_with_shrinkage_cm2}</td>
-            <td>${MATERIAL_NAMES[p.material] || p.material}</td>
-        </tr>
-    `).join('');
+    if (pattern.pieces && pattern.pieces.length > 0) {
+        piecesTbody.innerHTML = pattern.pieces.map(p => `
+            <tr>
+                <td>${p.name}</td>
+                <td>${p.width} × ${p.height}</td>
+                <td>${p.width + 2} × ${p.height + 2}</td>
+                <td>${p.quantity}</td>
+                <td>${p.area}</td>
+                <td>${p.area}</td>
+                <td>主面料</td>
+            </tr>
+        `).join('');
+    }
 
-    // 4. 精确计算模块（裁片/缝份/排料）
-    loadCalcModules(data.params);
-}
+    // 4. 裁片图
+    const patternCard = document.getElementById('calc-pattern-card');
+    const patternSvg = document.getElementById('calc-pattern-svg');
+    if (pattern.svg) {
+        patternSvg.innerHTML = pattern.svg;
+        patternCard.style.display = 'block';
+    } else {
+        patternCard.style.display = 'none';
+    }
 
-// 加载精确计算的三个模块
-async function loadCalcModules(params) {
-    try {
-        const resp = await fetch('/api/calc/all', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                measurements: {
-                    category: params.category,
-                    fabricWidth: params.fabric_width,
-                    seamAllowance: 1.0
-                },
-                fabricWidth: params.fabric_width,
-                seamAllowance: 1.0
-            })
-        });
+    // 5. 缝份图
+    const seamCard = document.getElementById('calc-seam-card');
+    const seamSvg = document.getElementById('calc-seam-svg');
+    if (seam.svg) {
+        seamSvg.innerHTML = seam.svg;
+        seamCard.style.display = 'block';
+    } else {
+        seamCard.style.display = 'none';
+    }
 
-        if (!resp.ok) return;
+    // 6. 排料图
+    const nestingCard = document.getElementById('calc-nesting-card');
+    const nestingSvg = document.getElementById('calc-nesting-svg');
+    const nestingStats = document.getElementById('calc-nesting-stats');
+    if (nesting.svg) {
+        nestingSvg.innerHTML = nesting.svg;
+        nestingCard.style.display = 'block';
 
-        const result = await resp.json();
-        if (result.success) {
-            renderCalcPattern(result.pattern);
-            renderCalcSeam(result.seam);
-            renderCalcNesting(result.nesting);
-        }
-    } catch (e) {
-        console.warn('精确计算模块加载失败:', e.message);
+        nestingStats.innerHTML = `
+            <div style="background:#e3f2fd;padding:8px;border-radius:6px;text-align:center;">
+                <div style="font-size:11px;color:#666;">利用率</div>
+                <div style="font-size:16px;font-weight:bold;color:#1976d2;">${utilization.toFixed(1)}%</div>
+            </div>
+            <div style="background:#f3e5f5;padding:8px;border-radius:6px;text-align:center;">
+                <div style="font-size:11px;color:#666;">裁片数量</div>
+                <div style="font-size:16px;font-weight:bold;color:#7b1fa2;">${stats.totalPieces || 0}</div>
+            </div>
+            <div style="background:#e8f5e9;padding:8px;border-radius:6px;text-align:center;">
+                <div style="font-size:11px;color:#666;">用料长度</div>
+                <div style="font-size:16px;font-weight:bold;color:#388e3c;">${(stats.fabricLength || 0).toFixed(1)} cm</div>
+            </div>
+            <div style="background:#fff3e0;padding:8px;border-radius:6px;text-align:center;">
+                <div style="font-size:11px;color:#666;">浪费面积</div>
+                <div style="font-size:16px;font-weight:bold;color:#f57c00;">${(stats.wasteArea || 0).toFixed(1)} cm²</div>
+            </div>
+        `;
+    } else {
+        nestingCard.style.display = 'none';
     }
 }
-
-// 渲染裁片图
-function renderCalcPattern(data) {
-    const container = document.getElementById('calc-pattern-card');
-    const svgDiv = document.getElementById('calc-pattern-svg');
-
-    if (data && data.svg) {
-        svgDiv.innerHTML = data.svg;
-        container.style.display = 'block';
-    }
-}
-
-// 渲染缝份图
-function renderCalcSeam(data) {
-    const container = document.getElementById('calc-seam-card');
-    const svgDiv = document.getElementById('calc-seam-svg');
-
-    if (data && data.svg) {
-        svgDiv.innerHTML = data.svg;
-        container.style.display = 'block';
-    }
-}
-
-// 渲染排料图
-function renderCalcNesting(data) {
-    const container = document.getElementById('calc-nesting-card');
-    const svgDiv = document.getElementById('calc-nesting-svg');
-    const statsDiv = document.getElementById('calc-nesting-stats');
-
-    if (data && data.svg) {
-        svgDiv.innerHTML = data.svg;
-        container.style.display = 'block';
-
-        if (data.statistics) {
-            statsDiv.innerHTML = `
-                <div style="background:#e3f2fd;padding:8px;border-radius:6px;text-align:center;">
-                    <div style="font-size:11px;color:#666;">利用率</div>
-                    <div style="font-size:16px;font-weight:bold;color:#1976d2;">${(data.statistics.utilization || 0).toFixed(1)}%</div>
-                </div>
-                <div style="background:#f3e5f5;padding:8px;border-radius:6px;text-align:center;">
-                    <div style="font-size:11px;color:#666;">裁片数量</div>
-                    <div style="font-size:16px;font-weight:bold;color:#7b1fa2;">${data.statistics.totalPieces || 0}</div>
-                </div>
-                <div style="background:#e8f5e9;padding:8px;border-radius:6px;text-align:center;">
-                    <div style="font-size:11px;color:#666;">用料长度</div>
-                    <div style="font-size:16px;font-weight:bold;color:#388e3c;">${(data.statistics.fabricLength || 0).toFixed(1)} cm</div>
-                </div>
-                <div style="#fff3e0;padding:8px;border-radius:6px;text-align:center;">
-                    <div style="font-size:11px;color:#666;">浪费面积</div>
-                    <div style="font-size:16px;font-weight:bold;color:#f57c00;">${(data.statistics.wasteArea || 0).toFixed(1)} cm²</div>
-                </div>
-            `;
-        }
-    }
-}
-
-
 
 // 导出结果
 function exportResult() {
@@ -561,35 +548,32 @@ function exportResult() {
 }
 
 function generateResultText(data) {
-    let text = '=== 面料用量计算结果 ===\n\n';
-    text += `品类: ${data.params.category}\n`;
-    text += `面料门幅: ${data.params.fabric_width}cm\n`;
-    text += `面料克重: ${data.params.fabric_weight_gsm} g/m²\n`;
-    text += `缩水率: ${data.params.shrinkage_rate}%\n`;
-    text += `损耗率: ${data.params.wastage_rate}%\n`;
-    text += `订单数量: ${data.params.quantity}件\n`;
-    text += `面料利用率: ${data.utilization_rate}%\n\n`;
-    text += '--- 计算结果 ---\n';
-    text += `单件用料长度: ${data.per_piece_length_m} 米\n`;
-    text += `总用料长度: ${data.total_length_m} 米\n`;
-    text += `总面积: ${data.total_area_m2} m²\n`;
-    if (data.fabric_weight_kg > 0) {
-        text += `面料总重: ${data.fabric_weight_kg} kg\n`;
+    const pattern = data.pattern || {};
+    const nesting = data.nesting || {};
+    const stats = nesting.statistics || {};
+
+    // 计算利用率
+    const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
+
+    let text = '=== 面料用量计算结果 (精确排料) ===\n\n';
+    text += `品类: ${data.metadata?.engine || 'calc-engine'}\n`;
+    text += `面料门幅: ${data.metadata?.fabricWidth || 'N/A'}cm\n`;
+    text += `缝份: ${data.metadata?.seamAllowance || 1.0}cm\n\n`;
+
+    text += '--- 排料统计 ---\n';
+    text += `利用率: ${utilization.toFixed(1)}%\n`;
+    text += `用料长度: ${(stats.fabricLength || 0).toFixed(2)} cm\n`;
+    text += `裁片数量: ${stats.totalPieces || 0}\n`;
+    text += `总面积: ${(stats.usedArea || 0).toFixed(1)} cm²\n`;
+    text += `浪费面积: ${(stats.wasteArea || 0).toFixed(1)} cm²\n\n`;
+
+    if (pattern.pieces && pattern.pieces.length > 0) {
+        text += '--- 裁片明细 ---\n';
+        pattern.pieces.forEach(p => {
+            text += `${p.name}: ${p.width}×${p.height}cm × ${p.quantity}${p.onFold ? ' (对折)' : ''} = ${p.area}cm²\n`;
+        });
     }
-    text += '\n--- 裁片明细 ---\n';
-    data.pieces_detail.forEach(p => {
-        text += `${p.name}: ${p.original_length}×${p.original_width}cm × ${p.count} = ${p.area_with_shrinkage_cm2}cm²\n`;
-    });
-    text += '\n--- 材料汇总 ---\n';
-    Object.entries(data.material_breakdown || {}).forEach(([key, val]) => {
-        text += `${val.name}: ${val.length_m}米`;
-        if (val.weight_kg > 0) text += ` / ${val.weight_kg}kg`;
-        text += '\n';
-    });
-    if (data.warnings && data.warnings.length > 0) {
-        text += '\n--- 注意事项 ---\n';
-        data.warnings.forEach(w => text += `⚠️ ${w}\n`);
-    }
+
     return text;
 }
 
