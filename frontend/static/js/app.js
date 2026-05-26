@@ -489,184 +489,71 @@ function renderCalcEngineResult(result, inputData) {
         `).join('');
     }
 
-    // 4. 🎨 裁片预览 (CAD风格 - Canvas卡片网格)
-    const piecePreviewsContainer = document.getElementById('piece-previews-container');
-    if (pattern.pieces && pattern.pieces.length > 0) {
-        const uniquePieces = [];
-        const seenNames = new Set();
-        for (const p of pattern.pieces) {
-            if (!seenNames.has(p.name)) {
-                seenNames.add(p.name);
-                uniquePieces.push(p);
-            }
-        }
+    // 4. 🎨 裁片预览 (完全复制cad.js的renderPiecePreviews)
+    const patternForCAD = {
+        pieces: (pattern.pieces || []).map(p => ({
+            name: p.name,
+            pathOps: p.pathOps || [],
+            cutCount: 1,
+            onFold: p.onFold || false,
+            area: p.area
+        }))
+    };
+    renderCalcPiecePreviews(patternForCAD);
 
-        piecePreviewsContainer.innerHTML = uniquePieces.map((piece, index) => {
-            const pathOps = piece.pathOps || [];
-            const canvasId = `calc-piece-canvas-${index}`;
+    // 5. 🧵 缝份预览 (完全复制cad.js的renderSeamAllowancePreviews)
+    const seamForCAD = {
+        pieces: (seam.pieces || []).map(p => ({
+            name: p.name,
+            pathOps: p.pathOps || [],
+            seamAllowancePathOps: p.seamAllowancePathOps || [],
+            cutCount: p.cutCount || 1,
+            onFold: p.onFold || false,
+            area: p.area
+        }))
+    };
+    renderCalcSeamAllowancePreviews(seamForCAD);
 
-            return `
-                <div class="piece-preview-card">
-                    <h4>${piece.name}${piece.onFold ? ' (对折)' : ''}${piece.quantity > 1 ? ' ×' + piece.quantity : ''}</h4>
-                    <div class="piece-svg">
-                        ${pathOps.length > 0
-                            ? `<canvas id="${canvasId}" width="280" height="360" style="max-width:100%;height:auto;"></canvas>`
-                            : '<div style="color:#999;padding:20px;">缺少路径数据</div>'
-                        }
-                    </div>
-                    <div class="piece-info">
-                        <div><strong>尺寸:</strong> ${piece.width} × ${piece.height} cm</div>
-                        <div><strong>数量:</strong> × ${piece.quantity}</div>
-                        <div><strong>面积:</strong> ${piece.area} cm²</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        setTimeout(() => {
-            uniquePieces.forEach((piece, index) => {
-                const pathOps = piece.pathOps || [];
-                if (pathOps.length === 0) return;
-
-                const canvas = document.getElementById(`calc-piece-canvas-${index}`);
-                if (!canvas) return;
-
-                convertPieceSVGToCanvas(canvas, pathOps, piece.name, piece);
-            });
-        }, 100);
-    } else {
-        piecePreviewsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无裁片数据</div>';
-    }
-
-    // 5. 🧵 缝份预览 (CAD风格 - 独立卡片网格，完全复用CAD逻辑)
-    const seamAllowanceContainer = document.getElementById('seam-allowance-container');
-    if (seam.pieces && seam.pieces.length > 0) {
-        let pieces = seam.pieces || [];
-
-        // 去重（和CAD一致）
-        const seenNames = new Set();
-        pieces = pieces.filter(piece => {
-            if (seenNames.has(piece.name)) {
-                return false;
-            }
-            seenNames.add(piece.name);
-            return true;
-        });
-
-        console.log(`[精确计算] 缝份预览: ${pieces.length}个裁片`, pieces.map(p => p.name));
-
-        if (pieces.length === 0) {
-            seamAllowanceContainer.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无缝份数据</p>';
-        } else {
-            seamAllowanceContainer.innerHTML = pieces.map((piece, index) => {
-                const pathOps = piece.pathOps || [];
-                const seamAllowanceOps = piece.seamAllowancePathOps || [];
-
-                if (pathOps.length === 0) {
-                    return `
-                        <div class="card" style="padding:16px;text-align:center;">
-                            <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">${piece.name}</div>
-                            <div style="color:var(--text-secondary);font-size:12px;">缺少路径数据</div>
-                        </div>
-                    `;
-                }
-
-                const canvasId = `calc-seam-canvas-${index}`;
-
-                return `
-                    <div class="seam-preview-card">
-                        <h4>${piece.name} - 缝份预览</h4>
-                        <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:8px;padding:10px;min-height:400px;display:flex;align-items:center;justify-content:center;">
-                            <canvas id="${canvasId}" width="340" height="440" style="max-width:100%;height:auto;"></canvas>
-                        </div>
-                        <div id="${canvasId}-info" class="seam-info"></div>
-                    </div>
-                `;
-            }).join('');
-
-            setTimeout(() => {
-                pieces.forEach((piece, index) => {
-                    const pathOps = piece.pathOps || [];
-                    const seamAllowanceOps = piece.seamAllowancePathOps || [];
-
-                    if (pathOps.length === 0) return;
-
-                    const canvas = document.getElementById(`calc-seam-canvas-${index}`);
-                    if (!canvas) return;
-
-                    renderCalcSeamAllowanceCanvas(canvas, pathOps, seamAllowanceOps, piece.name, piece);
-                });
-            }, 150);
-        }
-    } else {
-        seamAllowanceContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无缝份数据</div>';
-    }
-
-    // 6. 📐 排料图 (CAD风格 - 完整专业布局)
+    // 6. 📐 排料图 (完全复制cad.js的renderNestingWithReact)
     const nestingViewer = document.getElementById('calc-nesting-viewer');
     const nestingStatsDiv = document.getElementById('calc-nesting-stats');
 
-    if (nesting.svg && nesting.pieces && nesting.pieces.length > 0) {
+    if (nesting.svg && (nesting.pieces || nesting.nestPositions) && ((nesting.pieces || []).length > 0 || (nesting.nestPositions || []).length > 0)) {
         const fabricWidth = inputData.fabric_width || 145;
-        const fabricLength = stats.fabricLength || 135;
-        const usedWidth = fabricWidth;
 
-        nestingViewer.innerHTML = `
-            <div style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-                <!-- 顶部信息栏 -->
-                <div style="display:flex;justify-content:center;align-items:center;gap:16px;padding:12px 0;margin-bottom:16px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;">
-                    <span><strong>门幅:</strong> ${fabricWidth.toFixed(1)} cm</span>
-                    <span style="color:#9ca3af;">|</span>
-                    <span><strong>使用:</strong> ${usedWidth.toFixed(1)} cm</span>
-                    <span style="color:#9ca3af;">|</span>
-                    <span><strong>排料长度:</strong> ${fabricLength.toFixed(1)} cm</span>
-                    <span style="color:#9ca3af;">|</span>
-                    <span><strong>利用率:</strong> <span style="color:${utilization >= 75 ? '#059669' : utilization >= 60 ? '#d97706' : '#dc2626'};font-weight:600;">${utilization.toFixed(1)}%</span></span>
-                </div>
+        // 构建和CAD一样的数据结构
+        const resultForCAD = {
+            pieces: (nesting.pieces || []).map(p => ({
+                name: p.name,
+                pathOps: p.pathOps || [],
+                cutCount: p.cutCount || 1,
+                onFold: p.onFold || false,
+                area: p.area
+            })),
+            positions: (nesting.nestPositions || []).map(pos => ({
+                name: pos.pieceName,
+                x: pos.x,
+                y: pos.y,
+                rotation: pos.rotation || 0,
+                width: pos.width,
+                height: pos.height
+            })),
+            utilization_rate: nesting.fabricInfo?.utilization || 0,
+            bounds: {
+                width: fabricWidth,
+                height: stats.fabricLength || nesting.fabricInfo?.height || 135
+            },
+            totalArea: fabricWidth * (stats.fabricLength || nesting.fabricInfo?.height || 135),
+            usedArea: fabricWidth * (stats.fabricLength || nesting.fabricInfo?.height || 135) * (nesting.fabricInfo?.utilization || 0) / 100,
+            nesting_svg: nesting.svg
+        };
 
-                <!-- 图例 -->
-                <div style="display:flex;justify-content:center;align-items:center;gap:24px;padding:8px 0;margin-bottom:12px;font-size:11px;color:#6b7280;">
-                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-                        <span style="width:20px;height:1px;background:#999;border-style:dashed;"></span>
-                        净样(裁剪线)
-                    </label>
-                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-                        <span style="width:20px;height:1px;background:#3b82f6;"></span>
-                        净样(缝合线)
-                    </label>
-                </div>
-
-                <!-- 排料图容器 -->
-                <div style="border:2px dashed #9ca3af;border-radius:4px;padding:10px;background:#fafafa;overflow-x:auto;">
-                    <div style="min-width:${fabricWidth * 2.5}px;position:relative;">
-                        ${nesting.svg}
-                        
-                        <!-- 左侧尺寸标注 -->
-                        <div style="position:absolute;left:-50px;top:50%;transform:translateY(-50%);font-size:11px;color:#6b7280;writing-mode:vertical-rl;text-orientation:mixed;">
-                            ${fabricWidth.toFixed(1)}cm
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 底部尺寸标注 -->
-                <div style="text-align:center;margin-top:12px;font-size:11px;color:#6b7280;">
-                    ${fabricLength.toFixed(1)}cm
-                </div>
-
-                <!-- 下载链接 -->
-                <div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">
-                    <a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" 
-                       style="font-size:13px;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
-                        ⬇️ 下载排料结果
-                    </a>
-                </div>
-            </div>
-        `;
-
-        // 将SVG数据存储到全局变量供下载使用
-        window._calcNestingSVG = nesting.svg;
+        // 调用和cad.js完全一样的渲染函数
+        renderCalcNestingWithReact(resultForCAD, fabricWidth);
 
         // 渐变色统计卡片
+        const utilization = nesting.fabricInfo?.utilization || 0;
+        const fabricLength = stats.fabricLength || nesting.fabricInfo?.height || 135;
         nestingStatsDiv.innerHTML = `
             <div class="stat-card utilization">
                 <div class="stat-label">利用率</div>
@@ -674,7 +561,7 @@ function renderCalcEngineResult(result, inputData) {
             </div>
             <div class="stat-card pieces">
                 <div class="stat-label">裁片数量</div>
-                <div class="stat-value">${stats.totalPieces || 0}</div>
+                <div class="stat-value">${(nesting.nestPositions || []).length}</div>
             </div>
             <div class="stat-card length">
                 <div class="stat-label">用料长度</div>
@@ -682,7 +569,7 @@ function renderCalcEngineResult(result, inputData) {
             </div>
             <div class="stat-card waste">
                 <div class="stat-label">浪费面积</div>
-                <div class="stat-value">${(stats.wasteArea || 0).toFixed(0)}cm²</div>
+                <div class="stat-value">${((fabricWidth * fabricLength) * (1 - utilization/100)).toFixed(0)}cm²</div>
             </div>
         `;
         nestingStatsDiv.style.display = 'grid';
@@ -692,8 +579,72 @@ function renderCalcEngineResult(result, inputData) {
     }
 }
 
-// 将裁片路径操作渲染到Canvas（CAD风格）
-function convertPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
+// ============================================================
+// 以下函数完全复制自 cad.js（原模原样）
+// ============================================================
+
+// 裁片预览（完全复制cad.js的renderPiecePreviews）
+function renderCalcPiecePreviews(result) {
+    const container = document.getElementById('piece-previews-container');
+    if (!container) return;
+
+    let pieces = result.pieces || [];
+
+    const seenNames = new Set();
+    pieces = pieces.filter(piece => {
+        if (seenNames.has(piece.name)) {
+            return false;
+        }
+        seenNames.add(piece.name);
+        return true;
+    });
+
+    console.log(`[精确计算] 裁片预览: ${pieces.length}个裁片`, pieces.map(p => p.name));
+
+    if (pieces.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无裁片数据</p>';
+        return;
+    }
+
+    container.innerHTML = pieces.map((piece, index) => {
+        const pathOps = piece.pathOps || [];
+        if (pathOps.length === 0) {
+            return `
+                <div class="card" style="padding:12px;text-align:center;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${piece.name}</div>
+                    <div style="color:var(--text-secondary);font-size:12px;">缺少路径数据</div>
+                </div>
+            `;
+        }
+
+        const canvasId = `calc-piece-canvas-${index}`;
+
+        return `
+            <div class="card" style="padding:16px;text-align:center;">
+                <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">${piece.name}${piece.cutCount > 1 ? ' ×' + piece.cutCount : ''}</div>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:380px;display:flex;align-items:center;justify-content:center;">
+                    <canvas id="${canvasId}" width="320" height="400" style="max-width:100%;height:auto;"></canvas>
+                </div>
+                <div id="${canvasId}-info" style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.5;"></div>
+            </div>
+        `;
+    }).join('');
+
+    setTimeout(() => {
+        pieces.forEach((piece, index) => {
+            const pathOps = piece.pathOps || [];
+            if (pathOps.length === 0) return;
+
+            const canvas = document.getElementById(`calc-piece-canvas-${index}`);
+            if (!canvas) return;
+
+            convertCalcPieceSVGToCanvas(canvas, pathOps, piece.name, piece);
+        });
+    }, 100);
+}
+
+// Canvas渲染（完全复制cad.js的convertSVGToCanvas）
+function convertCalcPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -744,19 +695,25 @@ function convertPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
 
     ctx.beginPath();
 
+    const keyPoints = [];
+
     for (const op of pathOps) {
         switch (op.type) {
             case 'move':
                 ctx.moveTo(op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'start' });
                 break;
             case 'line':
                 ctx.lineTo(op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'vertex' });
                 break;
             case 'quad':
                 ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'curve-end' });
                 break;
             case 'curve':
                 ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                keyPoints.push({ x: op.to.x, y: op.to.y, type: 'curve-end' });
                 break;
             case 'close':
                 ctx.closePath();
@@ -767,23 +724,12 @@ function convertPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
-    ctx.scale(scale, scale);
-
-    if (pieceData && pieceData.onFold) {
-        const foldX = pieceData.width;
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 0.8 / scale;
-        ctx.setLineDash([4 / scale, 2 / scale]);
+    ctx.fillStyle = '#dc2626';
+    keyPoints.forEach((pt, i) => {
         ctx.beginPath();
-        ctx.moveTo(foldX, -5);
-        ctx.lineTo(foldX, srcHeight + 5);
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
+        ctx.arc(pt.x, pt.y, 1.5 / scale, 0, Math.PI * 2);
+        ctx.fill();
+    });
 
     ctx.restore();
 
@@ -804,9 +750,87 @@ function convertPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
 
     ctx.fillStyle = '#dc2626';
     ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
+
+    if (pieceData && pieceData.area !== undefined) {
+        const infoDiv = document.getElementById(`${canvas.id}-info`);
+        if (infoDiv) {
+            infoDiv.innerHTML = `
+                <div><strong>宽度:</strong> ${srcWidth.toFixed(1)} cm</div>
+                <div><strong>高度:</strong> ${srcHeight.toFixed(1)} cm</div>
+                <div><strong>面积:</strong> ${(pieceData.area || 0).toFixed(1)} cm²</div>
+                ${pieceData.onFold ? '<div style="color:#059669;">● 对折裁片</div>' : ''}
+            `;
+        }
+    }
 }
 
-// 渲染缝份预览到Canvas（CAD风格 - 完全复用CAD逻辑）
+// 缝份预览（完全复制cad.js的renderSeamAllowancePreviews）
+function renderCalcSeamAllowancePreviews(result) {
+    const container = document.getElementById('seam-allowance-container');
+    if (!container) return;
+
+    let pieces = result.pieces || [];
+
+    const seenNames = new Set();
+    pieces = pieces.filter(piece => {
+        if (seenNames.has(piece.name)) {
+            return false;
+        }
+        seenNames.add(piece.name);
+        return true;
+    });
+
+    console.log(`[精确计算] 缝份预览: ${pieces.length}个裁片`, pieces.map(p => p.name));
+
+    if (pieces.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-secondary);grid-column:1/-1;text-align:center;">暂无缝份数据</p>';
+        return;
+    }
+
+    container.innerHTML = pieces.map((piece, index) => {
+        const pathOps = piece.pathOps || [];
+        const seamAllowanceOps = piece.seamAllowancePathOps || [];
+
+        if (pathOps.length === 0) {
+            return `
+                <div class="card" style="padding:16px;text-align:center;">
+                    <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">${piece.name}</div>
+                    <div style="color:var(--text-secondary);font-size:12px;">缺少路径数据</div>
+                </div>
+            `;
+        }
+
+        const canvasId = `calc-seam-canvas-${index}`;
+
+        return `
+            <div class="card" style="padding:16px;text-align:center;">
+                <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">
+                    ${piece.name} - 缝份预览
+                </div>
+                <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:8px;padding:10px;min-height:400px;display:flex;align-items:center;justify-content:center;">
+                    <canvas id="${canvasId}" width="340" height="440" style="max-width:100%;height:auto;"></canvas>
+                </div>
+                <div id="${canvasId}-info" style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.6;"></div>
+            </div>
+        `;
+    }).join('');
+
+    setTimeout(() => {
+        pieces.forEach((piece, index) => {
+            const pathOps = piece.pathOps || [];
+            const seamAllowanceOps = piece.seamAllowancePathOps || [];
+
+            if (pathOps.length === 0) return;
+
+            const canvas = document.getElementById(`calc-seam-canvas-${index}`);
+            if (!canvas) return;
+
+            renderCalcSeamAllowanceCanvas(canvas, pathOps, seamAllowanceOps, piece.name, piece);
+        });
+    }, 150);
+}
+
+// 缝份Canvas渲染（完全复制cad.js的renderSeamAllowanceCanvas）
 function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, pieceData) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -852,7 +876,6 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    // 绘制缝份区域（黄色填充 + 虚线边框）
     if (seamOps.length > 0) {
         ctx.fillStyle = '#fef3c7';
         ctx.strokeStyle = '#f59e0b';
@@ -884,7 +907,6 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
         ctx.stroke();
     }
 
-    // 绘制原始轮廓（蓝色填充）- CAD使用#dbeafe和#2563eb
     ctx.fillStyle = '#dbeafe';
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 2.0 / scale;
@@ -912,7 +934,6 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
     ctx.fill();
     ctx.stroke();
 
-    // 绘制关键点
     ctx.fillStyle = '#dc2626';
     for (const op of outlineOps) {
         if (op.to) {
@@ -924,14 +945,12 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
 
     ctx.restore();
 
-    // 底部信息文字 - 更大更醒目（和CAD一致）
     ctx.fillStyle = '#dc2626';
     ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
 
     const infoText = `轮廓: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm | 缝份: ${pieceData?.seamDistance || pieceData?.seamAllowance || 0} cm`;
 
-    // 背景
     const infoMetrics = ctx.measureText(infoText);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.fillRect(
@@ -941,18 +960,15 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
         24
     );
 
-    // 红色文字
     ctx.fillStyle = '#dc2626';
     ctx.fillText(infoText, canvas.width / 2, canvas.height - 8);
 
-    // 图例 - 更大更清晰（和CAD一致）
     ctx.textAlign = 'left';
     ctx.font = 'bold 12px system-ui, -apple-system, sans-serif';
 
     let legendX = 10;
     const legendY = 18;
 
-    // 轮廓图例
     ctx.fillStyle = '#dbeafe';
     ctx.fillRect(legendX, legendY - 8, 12, 12);
     ctx.strokeStyle = '#2563eb';
@@ -961,7 +977,6 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
     ctx.fillStyle = '#374151';
     ctx.fillText('裁片轮廓', legendX + 16, legendY);
 
-    // 缝份图例
     legendX += 80;
     ctx.fillStyle = '#fef3c7';
     ctx.fillRect(legendX, legendY - 8, 12, 12);
@@ -970,7 +985,6 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
     ctx.fillStyle = '#374151';
     ctx.fillText('缝份区域', legendX + 16, legendY);
 
-    // 更新详细信息卡片（和CAD格式一致）
     if (pieceData) {
         const infoDiv = document.getElementById(`${canvas.id}-info`);
         if (infoDiv) {
@@ -991,14 +1005,90 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
     }
 }
 
-// 下载精确计算的排料图
+// 排料图渲染（完全复制cad.js的renderNestingWithReact）
+function renderCalcNestingWithReact(result, fabricWidth) {
+    if (typeof window.renderNestingResult !== 'function') {
+        console.warn('React组件未加载，使用SVG回退');
+        const container = document.getElementById('calc-nesting-viewer');
+
+        if (result.nesting_svg) {
+            container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
+                + `<div style="max-width:100%;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;padding:10px;background:#fafafa;">`
+                + result.nesting_svg
+                + `</div>`
+                + `<a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" `
+                + `style="font-size:13px;color:#3b82f6;text-decoration:none;">下载排料结果</a>`
+                + `</div>`;
+            window._calcNestingSVG = result.nesting_svg;
+        } else {
+            container.innerHTML = '<p style="color:#999;text-align:center;padding:40px;">暂无排料图</p>';
+        }
+        return;
+    }
+
+    const pieces = (result.pieces || []).map(p => {
+        const pathOps = (p.onFold && p.expandedPathOps) ? p.expandedPathOps : p.pathOps;
+        if (!pathOps || pathOps.length === 0) {
+            console.warn(`裁片 ${p.name} 缺少pathOps数据，将无法正确渲染`);
+        }
+        return {
+            name: p.name,
+            points: [],
+            pathOps: pathOps || [],
+            cutCount: p.cutCount || 1,
+            onFold: p.onFold || false,
+            area: p.area
+        };
+    });
+
+    const nestingResult = {
+        pieces: result.pieces || [],
+        positions: result.positions || [],
+        utilization: result.utilization_rate || result.utilization || 0,
+        bounds: {
+            width: fabricWidth,
+            height: result.bounds?.height || 135
+        },
+        totalArea: result.totalArea || 0,
+        usedArea: result.usedArea || 0
+    };
+
+    window.renderNestingResult(pieces, nestingResult, fabricWidth);
+
+    const svgContainer = document.getElementById('calc-nesting-viewer');
+    if (svgContainer && result.nesting_svg) {
+        const existingImg = svgContainer.querySelector('.nesting-download');
+        if (!existingImg) {
+            const downloadDiv = document.createElement('div');
+            downloadDiv.className = 'nesting-download';
+            downloadDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px;';
+            downloadDiv.innerHTML = `<a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" 
+                style="font-size:13px;color:#3b82f6;text-decoration:none;">下载排料结果</a>`;
+            svgContainer.appendChild(downloadDiv);
+        }
+        window._calcNestingSVG = result.nesting_svg;
+    }
+}
+
+// 下载排料图
 function downloadCalcNestingSVG() {
-    if (!window._calcNestingSVG) {
+    const container = document.getElementById('calc-nesting-container') || document.getElementById('calc-nesting-viewer');
+    if (!container) {
         alert('暂无排料图数据');
         return;
     }
 
-    const svgData = window._calcNestingSVG;
+    const svgElement = container.querySelector('svg');
+    if (!svgElement) {
+        alert('暂无排料图数据');
+        return;
+    }
+
+    const clonedSvg = svgElement.cloneNode(true);
+    clonedSvg.setAttribute('transform', '');
+    clonedSvg.style.transform = '';
+
+    const svgData = new XMLSerializer().serializeToString(clonedSvg);
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
@@ -1024,7 +1114,6 @@ function generateResultText(data) {
     const nesting = data.nesting || {};
     const stats = nesting.statistics || {};
 
-    // 计算利用率
     const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
 
     let text = '=== 面料用量计算结果 (精确排料) ===\n\n';
@@ -1059,7 +1148,6 @@ function downloadText(text, filename) {
     URL.revokeObjectURL(url);
 }
 
-// 跳转到报价
 function goToQuotation() {
     if (lastCalcResult) {
         sessionStorage.setItem('consumptionData', JSON.stringify(lastCalcResult));
@@ -1067,18 +1155,9 @@ function goToQuotation() {
     window.location.href = '/quotation';
 }
 
-// Loading
 function showLoading(show) {
     document.getElementById('loading').style.display = show ? 'flex' : 'none';
 }
-
-// ============================================================
-// 历史记录回显
-// ============================================================
-
-// ============================================================
-// 历史记录回显（通过 URL 参数 ?edit=ID）
-// ============================================================
 
 async function loadEditRecord(recordId) {
     try {
@@ -1101,12 +1180,10 @@ function fillEditData(data) {
     currentCategory = category;
     pieceTemplateLoaded = true;
 
-    // 1. 品类选中状态
     document.querySelectorAll('.category-card').forEach(card => {
         card.classList.toggle('selected', card.dataset.id === category);
     });
 
-    // 2. 填充 Step 2 面料参数
     if (data.fabric_width) document.getElementById('fabric-width').value = data.fabric_width;
     if (data.fabric_weight_gsm) document.getElementById('fabric-weight').value = data.fabric_weight_gsm;
     if (data.fabric_type) document.getElementById('fabric-type').value = data.fabric_type;
@@ -1114,7 +1191,6 @@ function fillEditData(data) {
     if (data.wastage_rate !== undefined) document.getElementById('wastage-rate').value = data.wastage_rate;
     if (data.quantity) document.getElementById('quantity').value = data.quantity;
 
-    // 3. 直接渲染 Step 3 裁片表格（用历史数据，不依赖品类模板）
     const tbody = document.getElementById('pieces-tbody');
     const pieces = data.pieces || [];
     tbody.innerHTML = pieces.map(piece => `
@@ -1140,7 +1216,6 @@ function fillEditData(data) {
         </tr>
     `).join('');
 
-    // 4. 直接切换到 Step 3 面板
     document.querySelectorAll('.step').forEach(s => {
         const sNum = parseInt(s.dataset.step);
         s.classList.remove('active', 'completed');
