@@ -461,6 +461,94 @@ function renderResult(data) {
             <td>${MATERIAL_NAMES[p.material] || p.material}</td>
         </tr>
     `).join('');
+
+    // 4. 精确计算模块（裁片/缝份/排料）
+    loadCalcModules(data.params);
+}
+
+// 加载精确计算的三个模块
+async function loadCalcModules(params) {
+    try {
+        const resp = await fetch('/api/calc/all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                measurements: {
+                    category: params.category,
+                    fabricWidth: params.fabric_width,
+                    seamAllowance: 1.0
+                },
+                fabricWidth: params.fabric_width,
+                seamAllowance: 1.0
+            })
+        });
+
+        if (!resp.ok) return;
+
+        const result = await resp.json();
+        if (result.success) {
+            renderCalcPattern(result.pattern);
+            renderCalcSeam(result.seam);
+            renderCalcNesting(result.nesting);
+        }
+    } catch (e) {
+        console.warn('精确计算模块加载失败:', e.message);
+    }
+}
+
+// 渲染裁片图
+function renderCalcPattern(data) {
+    const container = document.getElementById('calc-pattern-card');
+    const svgDiv = document.getElementById('calc-pattern-svg');
+
+    if (data && data.svg) {
+        svgDiv.innerHTML = data.svg;
+        container.style.display = 'block';
+    }
+}
+
+// 渲染缝份图
+function renderCalcSeam(data) {
+    const container = document.getElementById('calc-seam-card');
+    const svgDiv = document.getElementById('calc-seam-svg');
+
+    if (data && data.svg) {
+        svgDiv.innerHTML = data.svg;
+        container.style.display = 'block';
+    }
+}
+
+// 渲染排料图
+function renderCalcNesting(data) {
+    const container = document.getElementById('calc-nesting-card');
+    const svgDiv = document.getElementById('calc-nesting-svg');
+    const statsDiv = document.getElementById('calc-nesting-stats');
+
+    if (data && data.svg) {
+        svgDiv.innerHTML = data.svg;
+        container.style.display = 'block';
+
+        if (data.statistics) {
+            statsDiv.innerHTML = `
+                <div style="background:#e3f2fd;padding:8px;border-radius:6px;text-align:center;">
+                    <div style="font-size:11px;color:#666;">利用率</div>
+                    <div style="font-size:16px;font-weight:bold;color:#1976d2;">${(data.statistics.utilization || 0).toFixed(1)}%</div>
+                </div>
+                <div style="background:#f3e5f5;padding:8px;border-radius:6px;text-align:center;">
+                    <div style="font-size:11px;color:#666;">裁片数量</div>
+                    <div style="font-size:16px;font-weight:bold;color:#7b1fa2;">${data.statistics.totalPieces || 0}</div>
+                </div>
+                <div style="background:#e8f5e9;padding:8px;border-radius:6px;text-align:center;">
+                    <div style="font-size:11px;color:#666;">用料长度</div>
+                    <div style="font-size:16px;font-weight:bold;color:#388e3c;">${(data.statistics.fabricLength || 0).toFixed(1)} cm</div>
+                </div>
+                <div style="#fff3e0;padding:8px;border-radius:6px;text-align:center;">
+                    <div style="font-size:11px;color:#666;">浪费面积</div>
+                    <div style="font-size:16px;font-weight:bold;color:#f57c00;">${(data.statistics.wasteArea || 0).toFixed(1)} cm²</div>
+                </div>
+            `;
+        }
+    }
 }
 
 
