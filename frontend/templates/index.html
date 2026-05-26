@@ -248,6 +248,28 @@
                     </table>
                 </div>
             </div>
+
+            <!-- 精确计算三个模块 -->
+            <div id="calc-modules-container" style="display:flex;flex-direction:column;gap:20px;margin-top:20px;">
+                <!-- 裁片图 -->
+                <div class="card" id="calc-pattern-card" style="display:none;">
+                    <h3>🎯 裁片图</h3>
+                    <div id="calc-pattern-svg" style="text-align:center;padding:10px;background:#fafafa;border-radius:8px;overflow-x:auto;"></div>
+                </div>
+
+                <!-- 缝份图 -->
+                <div class="card" id="calc-seam-card" style="display:none;">
+                    <h3>🧵 缝份图</h3>
+                    <div id="calc-seam-svg" style="text-align:center;padding:10px;background:#fafafa;border-radius:8px;overflow-x:auto;"></div>
+                </div>
+
+                <!-- 排料图 -->
+                <div class="card" id="calc-nesting-card" style="display:none;">
+                    <h3>📐 排料图</h3>
+                    <div id="calc-nesting-svg" style="text-align:center;padding:10px;background:#fafafa;border-radius:8px;overflow-x:auto;"></div>
+                    <div id="calc-nesting-stats" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;"></div>
+                </div>
+            </div>
         </div>
     </main>
 
