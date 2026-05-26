@@ -22,33 +22,6 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# 清理可能存在的孤立容器（名称冲突处理）
-cleanup_orphan_containers() {
-    local compose_file="deploy/docker-compose.yml"
-    
-    # 检查 fabric-mysql 容器是否存在于 compose 项目之外
-    if docker ps -a --format '{{.Names}}' | grep -q '^fabric-mysql$'; then
-        # 检查是否属于当前 compose 项目
-        if ! docker inspect fabric-mysql --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null | grep -q 'fabric-calculator'; then
-            log_warn "检测到孤立的 fabric-mysql 容器（不属于当前 compose 项目）"
-            log_info "正在停止并移除孤立容器（数据卷 /opt/fabric-mysql-data 不受影响）..."
-            docker stop fabric-mysql 2>/dev/null || true
-            docker rm fabric-mysql 2>/dev/null || true
-            log_info "孤立容器已清理"
-        fi
-    fi
-    
-    # 检查 fabric-calculator 容器同理
-    if docker ps -a --format '{{.Names}}' | grep -q '^fabric-calculator$'; then
-        if ! docker inspect fabric-calculator --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null | grep -q 'fabric-calculator'; then
-            log_warn "检测到孤立的 fabric-calculator 容器"
-            docker stop fabric-calculator 2>/dev/null || true
-            docker rm fabric-calculator 2>/dev/null || true
-            log_info "孤立容器已清理"
-        fi
-    fi
-}
-
 # 首次部署：目录不存在或不是 git 仓库
 if [ ! -d "$REPO_DIR/.git" ]; then
     log_info "首次部署，正在克隆仓库..."
