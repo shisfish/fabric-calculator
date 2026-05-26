@@ -489,22 +489,51 @@ function renderCalcEngineResult(result, inputData) {
         `).join('');
     }
 
-    // 4. 🎨 裁片预览 (CAD风格 - 卡片网格)
+    // 4. 🎨 裁片预览 (CAD风格 - Canvas卡片网格)
     const piecePreviewsContainer = document.getElementById('piece-previews-container');
     if (pattern.pieces && pattern.pieces.length > 0) {
-        piecePreviewsContainer.innerHTML = pattern.pieces.map(p => `
-            <div class="piece-preview-card">
-                <h4>${p.name}${p.onFold ? ' (对折)' : ''}</h4>
-                <div class="piece-svg">
-                    ${pattern.svg ? generateSinglePieceSVG(p, pattern.svg) : ''}
+        const uniquePieces = [];
+        const seenNames = new Set();
+        for (const p of pattern.pieces) {
+            if (!seenNames.has(p.name)) {
+                seenNames.add(p.name);
+                uniquePieces.push(p);
+            }
+        }
+
+        piecePreviewsContainer.innerHTML = uniquePieces.map((piece, index) => {
+            const pathOps = piece.pathOps || [];
+            const canvasId = `calc-piece-canvas-${index}`;
+
+            return `
+                <div class="piece-preview-card">
+                    <h4>${piece.name}${piece.onFold ? ' (对折)' : ''}${piece.quantity > 1 ? ' ×' + piece.quantity : ''}</h4>
+                    <div class="piece-svg">
+                        ${pathOps.length > 0
+                            ? `<canvas id="${canvasId}" width="280" height="360" style="max-width:100%;height:auto;"></canvas>`
+                            : '<div style="color:#999;padding:20px;">缺少路径数据</div>'
+                        }
+                    </div>
+                    <div class="piece-info">
+                        <div><strong>尺寸:</strong> ${piece.width} × ${piece.height} cm</div>
+                        <div><strong>数量:</strong> × ${piece.quantity}</div>
+                        <div><strong>面积:</strong> ${piece.area} cm²</div>
+                    </div>
                 </div>
-                <div class="piece-info">
-                    <div><strong>尺寸:</strong> ${p.width} × ${p.height} cm</div>
-                    <div><strong>数量:</strong> × ${p.quantity}</div>
-                    <div><strong>面积:</strong> ${p.area} cm²</div>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
+
+        setTimeout(() => {
+            uniquePieces.forEach((piece, index) => {
+                const pathOps = piece.pathOps || [];
+                if (pathOps.length === 0) return;
+
+                const canvas = document.getElementById(`calc-piece-canvas-${index}`);
+                if (!canvas) return;
+
+                convertPieceSVGToCanvas(canvas, pathOps, piece.name, piece);
+            });
+        }, 100);
     } else {
         piecePreviewsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无裁片数据</div>';
     }
@@ -557,57 +586,118 @@ function renderCalcEngineResult(result, inputData) {
     }
 }
 
-// 从完整的SVG中提取单个裁片的SVG
-function generateSinglePieceSVG(piece, fullSvg) {
-    if (!fullSvg) return '';
+// 将裁片路径操作渲染到Canvas（CAD风格）
+function convertPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(fullSvg, "image/svg+xml");
-        const svgElement = xmlDoc.querySelector('svg');
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-        if (!svgElement) return '';
-
-        // 查找包含该裁片名称的元素
-        let pieceElement = null;
-        const allElements = svgElement.querySelectorAll('*');
-
-        for (const el of allElements) {
-            if (el.textContent && el.textContent.includes(piece.name)) {
-                pieceElement = el.closest('g') || el;
-                break;
-            }
+    for (const op of pathOps) {
+        if (op.to) {
+            minX = Math.min(minX, op.to.x);
+            minY = Math.min(minY, op.to.y);
+            maxX = Math.max(maxX, op.to.x);
+            maxY = Math.max(maxY, op.to.y);
         }
-
-        if (!pieceElement) {
-            // 如果找不到，创建简单的矩形表示
-            return `
-                <svg width="${Math.min(piece.width * 2, 160)}" height="${Math.min(piece.height * 2, 120)}" viewBox="0 0 ${piece.width * 2 + 20} ${piece.height * 2 + 20}">
-                    <rect x="10" y="10" width="${piece.width * 2}" height="${piece.height * 2}"
-                          fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="4"/>
-                    <text x="${piece.width * 2 + 10}" y="${piece.height * 2 + 5}"
-                          text-anchor="middle" font-size="14" fill="#92400e" font-weight="600">
-                        ${piece.name}
-                    </text>
-                </svg>
-            `;
+        if (op.cp1) {
+            minX = Math.min(minX, op.cp1.x);
+            minY = Math.min(minY, op.cp1.y);
+            maxX = Math.max(maxX, op.cp1.x);
+            maxY = Math.max(maxY, op.cp1.y);
         }
-
-        // 创建新的SVG只包含该裁片
-        const bbox = pieceElement.getBBox ? pieceElement.getBBox() : {x:0, y:0, width:100, height:100};
-        const padding = 10;
-
-        return `
-            <svg viewBox="${bbox.x - padding} ${bbox.y - padding} ${bbox.width + padding*2} ${bbox.height + padding*2}"
-                 width="${Math.min(bbox.width + padding*2, 180)}"
-                 height="${Math.min(bbox.height + padding*2, 140)}">
-                ${pieceElement.outerHTML}
-            </svg>
-        `;
-    } catch (e) {
-        console.warn('提取裁片SVG失败:', e);
-        return '';
+        if (op.cp2) {
+            minX = Math.min(minX, op.cp2.x);
+            minY = Math.min(minY, op.cp2.y);
+            maxX = Math.max(maxX, op.cp2.x);
+            maxY = Math.max(maxY, op.cp2.y);
+        }
     }
+
+    const padding = 40;
+    const srcWidth = maxX - minX || 100;
+    const srcHeight = maxY - minY || 100;
+    const scale = Math.min((canvas.width - padding * 2) / srcWidth, (canvas.height - padding * 2 - 60) / srcHeight);
+    const offsetX = (canvas.width - srcWidth * scale) / 2 - minX * scale;
+    const offsetY = (canvas.height - srcHeight * scale) / 2 - minY * scale + 20;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    ctx.fillStyle = '#e3f2fd';
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 1.5 / scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+
+    for (const op of pathOps) {
+        switch (op.type) {
+            case 'move':
+                ctx.moveTo(op.to.x, op.to.y);
+                break;
+            case 'line':
+                ctx.lineTo(op.to.x, op.to.y);
+                break;
+            case 'quad':
+                ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                break;
+            case 'curve':
+                ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                break;
+            case 'close':
+                ctx.closePath();
+                break;
+        }
+    }
+
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    if (pieceData && pieceData.onFold) {
+        const foldX = pieceData.width;
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 0.8 / scale;
+        ctx.setLineDash([4 / scale, 2 / scale]);
+        ctx.beginPath();
+        ctx.moveTo(foldX, -5);
+        ctx.lineTo(foldX, srcHeight + 5);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+
+    const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
+
+    const textMetrics = ctx.measureText(infoText);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(
+        canvas.width / 2 - textMetrics.width / 2 - 6,
+        canvas.height - 18,
+        textMetrics.width + 12,
+        16
+    );
+
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
 }
 
 // 导出结果

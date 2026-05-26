@@ -52,7 +52,8 @@ function main() {
           height: p.height,
           quantity: p.quantity,
           onFold: p.onFold,
-          area: p.area
+          area: p.area,
+          pathOps: p.pathOps
         })),
         totalPieces: patternResult.pieces.reduce((sum, p) => sum + p.quantity, 0),
         viewBox: patternResult.viewBox
