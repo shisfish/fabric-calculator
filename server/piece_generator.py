@@ -324,7 +324,7 @@ if __name__ == "__main__":
         print(f"  文件: {r.get('file_path', 'N/A')}")
 
 
-def generate_cad_pieces_preview(measurements, options=None):
+def generate_cad_pieces_preview(measurements, options=None, category="tshirt"):
     """
     CAD裁片预览 - 基于实物测量数据生成裁片预览
     """
@@ -338,6 +338,7 @@ def generate_cad_pieces_preview(measurements, options=None):
 
     input_data = json.dumps({
         "mode": "preview",
+        "category": category,
         "garmentInput": garment_input,
         "options": options
     })
@@ -393,7 +394,7 @@ def generate_cad_pieces_preview(measurements, options=None):
 
 def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate,
                                  wastage_rate, fabric_weight_gsm, quantity, fabric_nap=False,
-                                 qty_nest_mode=False, custom_pieces=None):
+                                 qty_nest_mode=False, custom_pieces=None, category="tshirt"):
     """
     CAD排料计算 - 基于实物测量数据生成裁片并排料
     """
@@ -407,6 +408,7 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
 
     ts_input = {
         "mode": "nesting",
+        "category": category,
         "garmentInput": garment_input,
         "options": options,
         "fabricWidth": fabric_width,
@@ -604,6 +606,15 @@ def _normalize_garment_input(measurements):
     """
     if not measurements:
         return {}
+
+    if isinstance(measurements, dict):
+        has_nested = (
+            'front' in measurements and isinstance(measurements.get('front'), dict) and
+            'back' in measurements and isinstance(measurements.get('back'), dict)
+        )
+        if has_nested:
+            print(f"[参数规范化] 检测到嵌套结构，直接透风衣/T恤完整参数")
+            return measurements
 
     # 提取扁平化字段
     garment_fields = {

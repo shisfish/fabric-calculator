@@ -1,4 +1,4 @@
-import { Point, Path } from '../geometry/index.js';
+import { Point, Path } from '../../geometry/index.js';
 
 export interface FrontPatternParams {
   chestWidth: number;

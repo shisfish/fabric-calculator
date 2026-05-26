@@ -314,7 +314,7 @@
             <h2>输入成衣裁片尺寸</h2>
             <p class="panel-desc">请输入成衣实物测量数据（非人体尺寸），系统将基于这些尺寸生成工业裁片。</p>
 
-            <div class="measurements-grid">
+            <div class="measurements-grid" id="tshirt-params">
                 <div class="measurements-group">
                     <h4>衣身</h4>
                     <div class="form-group">
@@ -379,19 +379,24 @@
 
             <!-- 风衣专属参数（仅风衣品类显示） -->
             <div id="windbreaker-params" class="windbreaker-params" style="display:none;">
-                <h3 style="margin:20px 0 15px;color:var(--primary);">🧥 风衣专属参数</h3>
+                <h3 style="margin:20px 0 15px;color:var(--primary);">🧥 风衣专属参数 <small style="font-weight:normal;color:#888;">(M码 / MARCELO TRENCH)</small></h3>
                 <div class="measurements-grid">
                     <div class="measurements-group">
                         <h4>后片</h4>
                         <div class="form-group">
-                            <label>后片胸宽 (cm)</label>
-                            <input type="number" id="wb-back-chestWidth" value="53" step="0.5" min="30" max="200">
-                            <span class="form-hint">后片半胸宽（单侧）</span>
+                            <label>后片胸宽/½胸围 (cm)</label>
+                            <input type="number" id="wb-back-chestWidth" value="49.5" step="0.5" min="30" max="200">
+                            <span class="form-hint">1/2 CH: 后片半胸宽</span>
                         </div>
                         <div class="form-group">
                             <label>后肩长 (cm)</label>
-                            <input type="number" id="wb-back-shoulderWidth" value="22" step="0.5" min="10" max="35">
-                            <span class="form-hint">后颈侧点到肩点（单侧）</span>
+                            <input type="number" id="wb-back-shoulderWidth" value="26.75" step="0.5" min="10" max="35">
+                            <span class="form-hint">颈侧点到肩点（单侧）</span>
+                        </div>
+                        <div class="form-group">
+                            <label>后中长 (cm)</label>
+                            <input type="number" id="wb-back-bodyLength" value="60" step="0.5" min="40" max="100">
+                            <span class="form-hint">CBL: 后领中到下摆</span>
                         </div>
                         <div class="form-group">
                             <label>过肩深度 (cm)</label>
@@ -401,56 +406,89 @@
                         <div class="form-group">
                             <label>开衩长度 (cm)</label>
                             <input type="number" id="wb-ventLength" value="18" step="0.5" min="0" max="40">
-                            <span class="form-hint">后中开衩长度（0=无开衩）</span>
+                            <span class="form-hint">后中开衩（0=无）</span>
                         </div>
                     </div>
                     <div class="measurements-group">
                         <h4>前片</h4>
                         <div class="form-group">
-                            <label>前片胸宽 (cm)</label>
-                            <input type="number" id="wb-front-chestWidth" value="53" step="0.5" min="30" max="200">
-                            <span class="form-hint">前片半胸宽（单侧）</span>
+                            <label>前片胸宽/½胸围 (cm)</label>
+                            <input type="number" id="wb-front-chestWidth" value="49.5" step="0.5" min="30" max="200">
+                            <span class="form-hint">1/2 CH: 前片半胸宽</span>
                         </div>
                         <div class="form-group">
                             <label>前肩长 (cm)</label>
-                            <input type="number" id="wb-front-shoulderWidth" value="21" step="0.5" min="10" max="35">
+                            <input type="number" id="wb-front-shoulderWidth" value="26" step="0.5" min="10" max="35">
                             <span class="form-hint">前颈侧点到肩点（单侧）</span>
+                        </div>
+                        <div class="form-group">
+                            <label>前衣长 (cm)</label>
+                            <input type="number" id="wb-front-bodyLength" value="61" step="0.5" min="40" max="100">
+                            <span class="form-hint">TTL: 前肩颈点至下摆</span>
+                        </div>
+                        <div class="form-group">
+                            <label>前领深/FD (cm)</label>
+                            <input type="number" id="wb-front-neckDepth" value="19" step="0.5" min="5" max="25">
+                            <span class="form-hint">FD: 前领口深度（翻领位）</span>
                         </div>
                         <div class="form-group">
                             <label>门襟宽度 (cm)</label>
                             <input type="number" id="wb-placketWidth" value="6" step="0.5" min="3" max="15">
                             <span class="form-hint">双排扣门襟搭门宽度</span>
                         </div>
-                        <div class="form-group">
-                            <label>前领深 (cm)</label>
-                            <input type="number" id="wb-front-neckDepth" value="10" step="0.5" min="5" max="20">
-                            <span class="form-hint">前领口深度（翻领位置）</span>
-                        </div>
                     </div>
                     <div class="measurements-group">
-                        <h4>袖子</h4>
+                        <h4>袖子（两片式）</h4>
                         <div class="form-group">
-                            <label>袖肥 (cm)</label>
-                            <input type="number" id="wb-bicepWidth" value="44" step="0.5" min="20" max="70">
-                            <span class="form-hint">袖窿处袖子最大宽度</span>
+                            <label>袖肥/½BICEPS (cm)</label>
+                            <input type="number" id="wb-bicepWidth" value="25" step="0.5" min="15" max="40">
+                            <span class="form-hint">BI: 袖窿处袖肥半围</span>
+                        </div>
+                        <div class="form-group">
+                            <label>袖肘宽/½ELBOW (cm)</label>
+                            <input type="number" id="wb-elbowWidth" value="23" step="0.5" min="12" max="35">
+                            <span class="form-hint">EW: 袖肘处半围</span>
+                        </div>
+                        <div class="form-group">
+                            <label>袖口/½开口 (cm)</label>
+                            <input type="number" id="wb-cuffWidth" value="16.5" step="0.5" min="8" max="28">
+                            <span class="form-hint">SO: 袖口半围</span>
+                        </div>
+                        <div class="form-group">
+                            <label>袖长 (cm)</label>
+                            <input type="number" id="wb-sleeveLength" value="55.5" step="0.5" min="25" max="70">
+                            <span class="form-hint">SL: 肩点到袖口</span>
                         </div>
                         <div class="form-group">
                             <label>袖山高 (cm)</label>
-                            <input type="number" id="wb-sleeveCapHeight" value="17" step="0.5" min="8" max="30">
-                            <span class="form-hint">袖山顶到袖肥线的距离</span>
+                            <input type="number" id="wb-sleeveCapHeight" value="17" step="0.5" min="10" max="28">
+                            <span class="form-hint">袖山顶到袖肥线距离</span>
                         </div>
                     </div>
                     <div class="measurements-group">
                         <h4>领子</h4>
                         <div class="form-group">
-                            <label>领宽 (cm)</label>
+                            <label>领宽/NW (cm)</label>
+                            <input type="number" id="wb-neckWidth" value="18.5" step="0.5" min="12" max="26">
+                            <span class="form-hint">NW: 后领宽</span>
+                        </div>
+                        <div class="form-group">
+                            <label>翻领宽 (cm)</label>
                             <input type="number" id="wb-collarWidth" value="8" step="0.5" min="4" max="15">
                             <span class="form-hint">翻领宽度</span>
                         </div>
                         <div class="form-group">
-                            <label>领座高 (cm)</label>
-                            <input type="number" id="wb-standHeight" value="4" step="0.5" min="2" max="8">
-                            <span class="form-hint">领座/立领高度</span>
+                            <label>领座高/CO (cm)</label>
+                            <input type="number" id="wb-standHeight" value="8.2" step="0.5" min="3" max="12">
+                            <span class="form-hint">CO: 后中领座高度</span>
+                        </div>
+                    </div>
+                    <div class="measurements-group">
+                        <h4>袖窿</h4>
+                        <div class="form-group">
+                            <label>袖窿深/AD (cm)</label>
+                            <input type="number" id="wb-armholeDepth" value="62.5" step="0.5" min="20" max="45">
+                            <span class="form-hint">AD: 肩点到腋下深度</span>
                         </div>
                     </div>
                 </div>

@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 # Industrial Garment CAD Reverse Engineering System
 
 这是：

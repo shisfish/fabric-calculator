@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 当前系统需要实现：
 
 工业级缝份系统（Seam Allowance System）。

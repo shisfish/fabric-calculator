@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 当前项目：
 
 工业服装CAD系统（T恤前片/后片/袖子）。

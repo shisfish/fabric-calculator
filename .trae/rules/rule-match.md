@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 你现在不是“自由绘制 SVG”。
 
 你是在实现：

@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 这是工业服装CAD系统。
 
 当前任务：

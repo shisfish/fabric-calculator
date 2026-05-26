@@ -1,5 +1,5 @@
-import { Point, Path, CubicBezier } from '../geometry/index.js';
-import { createLogger } from '../utils/CADLogger.js';
+import { Point, Path, CubicBezier } from '../../geometry/index.js';
+import { createLogger } from '../../utils/CADLogger.js';
 
 const logger = createLogger('SLEEVE-CAP');
 

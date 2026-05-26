@@ -26,6 +26,11 @@ curved_calculator = CurvedPieceCalculator()
 
 # 数据存储目录（使用项目外部路径，避免部署时被覆盖）
 DATA_DIR = os.environ.get('FABRIC_DATA_DIR', '/opt/fabric-data')
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+except PermissionError:
+    DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    print(f"[Warning] 无法创建 {DATA_DIR}，改用本地目录: {DATA_DIR}")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(os.path.join(DATA_DIR, 'uploads'), exist_ok=True)
 
@@ -762,7 +767,8 @@ def cad_preview():
         from piece_generator import generate_cad_pieces_preview
         result = generate_cad_pieces_preview(
             garment_input if garment_input else measurements,
-            {}
+            {},
+            category=category
         )
 
         return jsonify({"success": True, "data": result})
@@ -815,6 +821,7 @@ def cad_nesting():
             fabric_nap=fabric_nap,
             qty_nest_mode=qty_nest_mode,
             custom_pieces=custom_pieces if custom_pieces else None,
+            category=category,
         )
 
         record_id = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -872,6 +879,134 @@ def serve_upload(filename):
     if '..' in filename or filename.startswith('/'):
         abort(404)
     return send_from_directory(UPLOAD_DIR, filename)
+
+
+# ============================================================
+# 独立精确计算模块 API（calc-engine）
+# ============================================================
+
+@app.route('/api/calc/pattern', methods=['POST'])
+def calc_pattern():
+    """独立计算模块 - 裁片图API"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+
+        measurements = data.get("measurements", {})
+        options = data.get("options", {})
+
+        from calc_engine import generate_pattern_pieces
+        result = generate_pattern_pieces(measurements, options)
+
+        if result["success"]:
+            return jsonify({"success": True, "data": result["data"]})
+        else:
+            return jsonify({"success": False, "message": result.get("error", "生成失败")}), 500
+
+    except Exception as e:
+        import traceback
+        print(f"[Calc-Engine] 裁片图错误: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"裁片图错误: {str(e)}"}), 500
+
+
+@app.route('/api/calc/seam', methods=['POST'])
+def calc_seam():
+    """独立计算模块 - 裁片+缝份图API"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+
+        measurements = data.get("measurements", {})
+        seam_allowance = float(data.get("seamAllowance", 1.0))
+        options = data.get("options", {})
+
+        from calc_engine import generate_seam_allowance_pieces
+        result = generate_seam_allowance_pieces(measurements, seam_allowance, options)
+
+        if result["success"]:
+            return jsonify({"success": True, "data": result["data"], "seamAllowance": seam_allowance})
+        else:
+            return jsonify({"success": False, "message": result.get("error", "生成失败")}), 500
+
+    except Exception as e:
+        import traceback
+        print(f"[Calc-Engine] 缝份图错误: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"缝份图错误: {str(e)}"}), 500
+
+
+@app.route('/api/calc/nesting', methods=['POST'])
+def calc_nesting():
+    """独立计算模块 - 排料图API"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+
+        measurements = data.get("measurements", {})
+        fabric_width = float(data.get("fabricWidth", 145))
+        seam_allowance = float(data.get("seamAllowance", 1.0))
+        options = data.get("options", {})
+
+        from calc_engine import generate_nesting_layout
+        result = generate_nesting_layout(measurements, fabric_width, seam_allowance, options)
+
+        if result["success"]:
+            return jsonify({
+                "success": True,
+                "data": result["data"],
+                "fabricWidth": fabric_width,
+                "seamAllowance": seam_allowance
+            })
+        else:
+            return jsonify({"success": False, "message": result.get("error", "生成失败")}), 500
+
+    except Exception as e:
+        import traceback
+        print(f"[Calc-Engine] 排料图错误: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"排料图错误: {str(e)}"}), 500
+
+
+@app.route('/api/calc/all', methods=['POST'])
+def calc_all():
+    """独立计算模块 - 一次性生成所有三个模块API"""
+    import time
+    start_time = time.time()
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "message": "请求数据为空"}), 400
+
+        measurements = data.get("measurements", {})
+        fabric_width = float(data.get("fabricWidth", 145))
+        seam_allowance = float(data.get("seamAllowance", 1.0))
+        options = data.get("options", {})
+
+        from calc_engine import generate_all_modules
+        result = generate_all_modules(measurements, fabric_width, seam_allowance, options)
+
+        elapsed = time.time() - start_time
+        
+        if result["success"]:
+            return jsonify({
+                "success": True,
+                **result,
+                "elapsedTime": round(elapsed * 1000)
+            })
+        else:
+            return jsonify({"success": False, "message": result.get("error", "生成失败"), "elapsedTime": round(elapsed * 1000)}), 500
+
+    except Exception as e:
+        import traceback
+        elapsed = time.time() - start_time
+        print(f"[Calc-Engine] 全模块错误: {str(e)}, 耗时{elapsed:.3f}秒")
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"全模块错误: {str(e)}", "elapsedTime": round(elapsed * 1000)}), 500
 
 
 # ============================================================

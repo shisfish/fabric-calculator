@@ -127,10 +127,11 @@ class DatabaseManager:
 
     def save_record(self, record):
         """保存单条记录（主表 + 裁片 + 快速估算参数 + 材料汇总 + 图片路径）"""
-        with self._get_connection() as conn:
-            with conn.cursor() as cursor:
-                # 1. 写主表
-                cursor.execute("""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cursor:
+                    # 1. 写主表
+                    cursor.execute("""
                     INSERT INTO calculation_history
                     (id, timestamp, type, category, category_name,
                      fabric_width, fabric_type, fabric_weight_gsm,
@@ -261,6 +262,9 @@ class DatabaseManager:
                         ))
 
             conn.commit()
+        except Exception as e:
+            print(f"[DB] 保存记录失败（数据库不可用，已跳过）: {str(e)}")
+            pass
 
     def _extract_main_fields(self, record):
         """从 record 字典提取主表字段"""

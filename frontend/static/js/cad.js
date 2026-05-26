@@ -84,9 +84,17 @@ function selectCategory(catId) {
         card.classList.toggle('selected', card.dataset.id === catId);
     });
 
+    const tshirtParams = document.getElementById('tshirt-params');
     const wbParams = document.getElementById('windbreaker-params');
-    if (wbParams) {
-        wbParams.style.display = catId === 'windbreaker' ? 'block' : 'none';
+
+    if (tshirtParams && wbParams) {
+        if (catId === 'windbreaker') {
+            tshirtParams.style.display = 'none';
+            wbParams.style.display = 'block';
+        } else {
+            tshirtParams.style.display = '';
+            wbParams.style.display = 'none';
+        }
     }
 
     setTimeout(() => goStep(2), 300);
@@ -116,33 +124,36 @@ function getGarmentInput() {
     if (currentCategory === 'windbreaker') {
         return {
             ...base,
+            neckWidth: parseFloat(document.getElementById('wb-neckWidth')?.value) || 18.5,
+            armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 62.5,
             back: {
-                chestWidth: parseFloat(document.getElementById('wb-back-chestWidth')?.value) || base.chestWidth / 2,
-                bodyLength: base.bodyLength,
-                shoulderWidth: parseFloat(document.getElementById('wb-back-shoulderWidth')?.value) || 22,
-                armholeDepth: base.armholeDepth + 8,
+                chestWidth: parseFloat(document.getElementById('wb-back-chestWidth')?.value) || 49.5,
+                bodyLength: parseFloat(document.getElementById('wb-back-bodyLength')?.value) || 60,
+                shoulderWidth: parseFloat(document.getElementById('wb-back-shoulderWidth')?.value) || 26.75,
+                armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 62.5,
                 yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
                 ventLength: parseFloat(document.getElementById('wb-ventLength')?.value) || 18,
             },
             front: {
-                chestWidth: parseFloat(document.getElementById('wb-front-chestWidth')?.value) || base.chestWidth / 2,
-                bodyLength: base.bodyLength,
-                shoulderWidth: parseFloat(document.getElementById('wb-front-shoulderWidth')?.value) || 21,
-                armholeDepth: base.armholeDepth + 7,
-                neckDrop: parseFloat(document.getElementById('wb-front-neckDepth')?.value) || 10,
+                chestWidth: parseFloat(document.getElementById('wb-front-chestWidth')?.value) || 49.5,
+                bodyLength: parseFloat(document.getElementById('wb-front-bodyLength')?.value) || 61,
+                shoulderWidth: parseFloat(document.getElementById('wb-front-shoulderWidth')?.value) || 26,
+                armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 62.5,
+                neckDrop: parseFloat(document.getElementById('wb-front-neckDepth')?.value) || 19,
                 placketWidth: parseFloat(document.getElementById('wb-placketWidth')?.value) || 6,
                 yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
             },
             sleeve: {
-                bicepWidth: parseFloat(document.getElementById('wb-bicepWidth')?.value) || 44,
-                cuffWidth: base.cuffWidth * 3,
-                sleeveLength: base.sleeveLength + 4,
+                bicepsWidth: parseFloat(document.getElementById('wb-bicepWidth')?.value) || 25,
+                elbowWidth: parseFloat(document.getElementById('wb-elbowWidth')?.value) || 23,
+                cuffWidth: parseFloat(document.getElementById('wb-cuffWidth')?.value) || 16.5,
+                sleeveLength: parseFloat(document.getElementById('wb-sleeveLength')?.value) || 55.5,
                 sleeveCapHeight: parseFloat(document.getElementById('wb-sleeveCapHeight')?.value) || 17,
             },
             collar: {
                 collarWidth: parseFloat(document.getElementById('wb-collarWidth')?.value) || 8,
-                standHeight: parseFloat(document.getElementById('wb-standHeight')?.value) || 4,
-                collarLength: base.shoulderWidth * 2 + 10,
+                standHeight: parseFloat(document.getElementById('wb-standHeight')?.value) || 8.2,
+                collarLength: (parseFloat(document.getElementById('wb-neckWidth')?.value) || 18.5) * 2 + 4,
             }
         };
     }

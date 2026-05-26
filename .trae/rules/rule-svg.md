@@ -1,3 +1,6 @@
+---
+alwaysApply: false
+---
 实现：
 
 工业服装CAD可视化系统。

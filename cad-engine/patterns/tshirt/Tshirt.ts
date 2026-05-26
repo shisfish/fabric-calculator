@@ -1,8 +1,8 @@
-import { Point, Path, QuadraticBezier, CubicBezier } from '../geometry/index.js';
-import { SeamAllowanceGenerator } from './SeamAllowanceGenerator.js';
-import { GarmentParams, BackPanelParams, FrontPanelParams, SleeveParams } from './GarmentMeasurementAdapter.js';
+import { Point, Path, QuadraticBezier, CubicBezier } from '../../geometry/index.js';
+import { SeamAllowanceGenerator } from '../SeamAllowanceGenerator.js';
+import { GarmentParams, BackPanelParams, FrontPanelParams, SleeveParams } from '../GarmentMeasurementAdapter.js';
 import { SleeveCapGenerator } from './SleeveCapGenerator.js';
-import { createLogger } from '../utils/CADLogger.js';
+import { createLogger } from '../../utils/CADLogger.js';
 
 const logger = createLogger('TSHIRT-PATTERN');
 
@@ -28,6 +28,9 @@ export interface PatternPiece {
   // 布纹线方向约束（工业排料）
   allowedRotations?: number[];  // 允许的旋转角度，如 [0, 180]
   isMirrorable?: boolean;       // 对称裁片标记
+
+  // 内部标记（用于自定义裁片识别）
+  _custom?: boolean;
 }
 
 export class TshirtPatternGenerator {
