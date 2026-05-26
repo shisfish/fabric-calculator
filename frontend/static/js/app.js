@@ -538,27 +538,122 @@ function renderCalcEngineResult(result, inputData) {
         piecePreviewsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无裁片数据</div>';
     }
 
-    // 5. 🧵 缝份预览 (CAD风格 - 卡片网格)
+    // 5. 🧵 缝份预览 (CAD风格 - 独立卡片网格)
     const seamAllowanceContainer = document.getElementById('seam-allowance-container');
-    if (seam.svg) {
-        seamAllowanceContainer.innerHTML = `
-            <div class="seam-preview-card" style="grid-column:1/-1;">
-                <h4>完整缝份图</h4>
-                <div class="seam-svg-container">
-                    ${seam.svg}
+    if (seam.pieces && seam.pieces.length > 0) {
+        const uniqueSeamPieces = [];
+        const seenNames = new Set();
+        for (const p of seam.pieces) {
+            if (!seenNames.has(p.name)) {
+                seenNames.add(p.name);
+                uniqueSeamPieces.push(p);
+            }
+        }
+
+        seamAllowanceContainer.innerHTML = uniqueSeamPieces.map((piece, index) => {
+            const stitchLineOps = piece.stitchLineOps || [];
+            const cuttingLineOps = piece.cuttingLineOps || [];
+            const canvasId = `calc-seam-canvas-${index}`;
+
+            return `
+                <div class="seam-preview-card">
+                    <h4>${piece.name} - 缝份预览</h4>
+                    <div style="background:#fefce8;border:2px solid #fbbf24;border-radius:8px;padding:10px;min-height:400px;display:flex;align-items:center;justify-content:center;">
+                        ${stitchLineOps.length > 0 && cuttingLineOps.length > 0
+                            ? `<canvas id="${canvasId}" width="340" height="440" style="max-width:100%;height:auto;"></canvas>`
+                            : '<div style="color:#999;padding:20px;">缺少路径数据</div>'
+                        }
+                    </div>
+                    <div id="${canvasId}-info" class="seam-info"></div>
                 </div>
-            </div>
-        `;
+            `;
+        }).join('');
+
+        setTimeout(() => {
+            uniqueSeamPieces.forEach((piece, index) => {
+                const stitchLineOps = piece.stitchLineOps || [];
+                const cuttingLineOps = piece.cuttingLineOps || [];
+                if (stitchLineOps.length === 0 || cuttingLineOps.length === 0) return;
+
+                const canvas = document.getElementById(`calc-seam-canvas-${index}`);
+                if (!canvas) return;
+
+                renderCalcSeamAllowanceCanvas(
+                    canvas,
+                    stitchLineOps,
+                    cuttingLineOps,
+                    piece.name,
+                    piece
+                );
+            });
+        }, 150);
     } else {
         seamAllowanceContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无缝份数据</div>';
     }
 
-    // 6. 📐 排料图 (CAD风格 - 专业容器)
+    // 6. 📐 排料图 (CAD风格 - 完整专业布局)
     const nestingViewer = document.getElementById('calc-nesting-viewer');
     const nestingStatsDiv = document.getElementById('calc-nesting-stats');
 
-    if (nesting.svg) {
-        nestingViewer.innerHTML = nesting.svg;
+    if (nesting.svg && nesting.pieces && nesting.pieces.length > 0) {
+        const fabricWidth = inputData.fabric_width || 145;
+        const fabricLength = stats.fabricLength || 135;
+        const usedWidth = fabricWidth;
+
+        nestingViewer.innerHTML = `
+            <div style="background:white;border:1px solid #e2e8f0;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <!-- 顶部信息栏 -->
+                <div style="display:flex;justify-content:center;align-items:center;gap:16px;padding:12px 0;margin-bottom:16px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;">
+                    <span><strong>门幅:</strong> ${fabricWidth.toFixed(1)} cm</span>
+                    <span style="color:#9ca3af;">|</span>
+                    <span><strong>使用:</strong> ${usedWidth.toFixed(1)} cm</span>
+                    <span style="color:#9ca3af;">|</span>
+                    <span><strong>排料长度:</strong> ${fabricLength.toFixed(1)} cm</span>
+                    <span style="color:#9ca3af;">|</span>
+                    <span><strong>利用率:</strong> <span style="color:${utilization >= 75 ? '#059669' : utilization >= 60 ? '#d97706' : '#dc2626'};font-weight:600;">${utilization.toFixed(1)}%</span></span>
+                </div>
+
+                <!-- 图例 -->
+                <div style="display:flex;justify-content:center;align-items:center;gap:24px;padding:8px 0;margin-bottom:12px;font-size:11px;color:#6b7280;">
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <span style="width:20px;height:1px;background:#999;border-style:dashed;"></span>
+                        净样(裁剪线)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <span style="width:20px;height:1px;background:#3b82f6;"></span>
+                        净样(缝合线)
+                    </label>
+                </div>
+
+                <!-- 排料图容器 -->
+                <div style="border:2px dashed #9ca3af;border-radius:4px;padding:10px;background:#fafafa;overflow-x:auto;">
+                    <div style="min-width:${fabricWidth * 2.5}px;position:relative;">
+                        ${nesting.svg}
+                        
+                        <!-- 左侧尺寸标注 -->
+                        <div style="position:absolute;left:-50px;top:50%;transform:translateY(-50%);font-size:11px;color:#6b7280;writing-mode:vertical-rl;text-orientation:mixed;">
+                            ${fabricWidth.toFixed(1)}cm
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部尺寸标注 -->
+                <div style="text-align:center;margin-top:12px;font-size:11px;color:#6b7280;">
+                    ${fabricLength.toFixed(1)}cm
+                </div>
+
+                <!-- 下载链接 -->
+                <div style="text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;">
+                    <a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" 
+                       style="font-size:13px;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                        ⬇️ 下载排料结果
+                    </a>
+                </div>
+            </div>
+        `;
+
+        // 将SVG数据存储到全局变量供下载使用
+        window._calcNestingSVG = nesting.svg;
 
         // 渐变色统计卡片
         nestingStatsDiv.innerHTML = `
@@ -572,7 +667,7 @@ function renderCalcEngineResult(result, inputData) {
             </div>
             <div class="stat-card length">
                 <div class="stat-label">用料长度</div>
-                <div class="stat-value">${(stats.fabricLength || 0).toFixed(0)}cm</div>
+                <div class="stat-value">${fabricLength.toFixed(0)}cm</div>
             </div>
             <div class="stat-card waste">
                 <div class="stat-label">浪费面积</div>
@@ -698,6 +793,207 @@ function convertPieceSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
 
     ctx.fillStyle = '#dc2626';
     ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
+}
+
+// 渲染缝份预览到Canvas（CAD风格）
+function renderCalcSeamAllowanceCanvas(canvas, stitchLineOps, cuttingLineOps, pieceName, pieceData) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    const allOps = [...stitchLineOps, ...cuttingLineOps];
+
+    for (const op of allOps) {
+        if (op.to) {
+            minX = Math.min(minX, op.to.x);
+            minY = Math.min(minY, op.to.y);
+            maxX = Math.max(maxX, op.to.x);
+            maxY = Math.max(maxY, op.to.y);
+        }
+        if (op.cp1) {
+            minX = Math.min(minX, op.cp1.x);
+            minY = Math.min(minY, op.cp1.y);
+            maxX = Math.max(maxX, op.cp1.x);
+            maxY = Math.max(maxY, op.cp1.y);
+        }
+        if (op.cp2) {
+            minX = Math.min(minX, op.cp2.x);
+            minY = Math.min(minY, op.cp2.y);
+            maxX = Math.max(maxX, op.cp2.x);
+            maxY = Math.max(maxY, op.cp2.y);
+        }
+    }
+
+    const padding = 50;
+    const srcWidth = maxX - minX || 100;
+    const srcHeight = maxY - minY || 100;
+    const scale = Math.min((canvas.width - padding * 2) / srcWidth, (canvas.height - padding * 2 - 80) / srcHeight);
+    const offsetX = (canvas.width - srcWidth * scale) / 2 - minX * scale;
+    const offsetY = (canvas.height - srcHeight * scale) / 2 - minY * scale + 30;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    // 绘制缝份区域（黄色填充 + 虚线边框）
+    if (cuttingLineOps.length > 0) {
+        ctx.fillStyle = '#fef3c7';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5 / scale;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        for (const op of cuttingLineOps) {
+            switch (op.type) {
+                case 'move':
+                    ctx.moveTo(op.to.x, op.to.y);
+                    break;
+                case 'line':
+                    ctx.lineTo(op.to.x, op.to.y);
+                    break;
+                case 'quad':
+                    ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                    break;
+                case 'curve':
+                    ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                    break;
+                case 'close':
+                    ctx.closePath();
+                    break;
+            }
+        }
+
+        ctx.fill();
+        ctx.setLineDash([3 / scale, 2 / scale]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // 绘制裁片轮廓（蓝色填充 + 实线边框）
+    if (stitchLineOps.length > 0) {
+        ctx.fillStyle = '#e3f2fd';
+        ctx.strokeStyle = '#1976d2';
+        ctx.lineWidth = 1.5 / scale;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        ctx.beginPath();
+        for (const op of stitchLineOps) {
+            switch (op.type) {
+                case 'move':
+                    ctx.moveTo(op.to.x, op.to.y);
+                    break;
+                case 'line':
+                    ctx.lineTo(op.to.x, op.to.y);
+                    break;
+                case 'quad':
+                    ctx.quadraticCurveTo(op.cp1.x, op.cp1.y, op.to.x, op.to.y);
+                    break;
+                case 'curve':
+                    ctx.bezierCurveTo(op.cp1.x, op.cp1.y, op.cp2.x, op.cp2.y, op.to.x, op.to.y);
+                    break;
+                case 'close':
+                    ctx.closePath();
+                    break;
+            }
+        }
+
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    ctx.restore();
+
+    // 绘制图例
+    const legendY = 20;
+    ctx.font = '10px system-ui, -apple-system, sans-serif';
+
+    // 裁片轮廓图例
+    ctx.fillStyle = '#e3f2fd';
+    ctx.fillRect(20, legendY, 12, 12);
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, legendY, 12, 12);
+    ctx.fillStyle = '#475569';
+    ctx.textAlign = 'left';
+    ctx.fillText('裁片轮廓', 36, legendY + 10);
+
+    // 缝份区域图例
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(100, legendY, 12, 12);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.strokeRect(100, legendY, 12, 12);
+    ctx.fillStyle = '#475569';
+    ctx.fillText('缝份区域', 116, legendY + 10);
+
+    // 底部信息
+    const seamDist = pieceData.seamDistance || 1.0;
+    const origW = pieceData.originalSize?.width || srcWidth;
+    const origH = pieceData.originalSize?.height || srcHeight;
+    const seamW = pieceData.seamSize?.width || srcWidth;
+    const seamH = pieceData.seamSize?.height || srcHeight;
+
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+
+    const infoText = `轮廓: ${origW.toFixed(1)} × ${origH.toFixed(1)} cm | 缝份: ${seamDist.toFixed(1)} cm`;
+
+    const textMetrics = ctx.measureText(infoText);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(
+        canvas.width / 2 - textMetrics.width / 2 - 8,
+        canvas.height - 28,
+        textMetrics.width + 16,
+        22
+    );
+
+    ctx.fillStyle = '#dc2626';
+    ctx.fillText(infoText, canvas.width / 2, canvas.height - 12);
+
+    // 更新详细信息DOM
+    const infoDiv = document.getElementById(`${canvas.id}-info`);
+    if (infoDiv) {
+        infoDiv.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-size:11px;color:#64748b;">
+                <div><strong>轮廓尺寸:</strong> ${origW.toFixed(1)} × ${origH.toFixed(1)} cm</div>
+                <div><strong>缝份宽度:</strong> ${seamDist.toFixed(1)} cm</div>
+                <div><strong>含缝份总尺寸:</strong> ${seamW.toFixed(1)} × ${seamH.toFixed(1)} cm</div>
+                <div style="grid-column:span 2;">
+                    <label style="margin-right:15px;cursor:pointer;"><input type="checkbox" checked disabled style="margin-right:4px;">净样（缝合线）</label>
+                    <label style="cursor:pointer;"><input type="checkbox" checked disabled style="margin-right:4px;">毛样（裁剪线）</label>
+                </div>
+            </div>
+        `;
+    }
+}
+
+// 下载精确计算的排料图
+function downloadCalcNestingSVG() {
+    if (!window._calcNestingSVG) {
+        alert('暂无排料图数据');
+        return;
+    }
+
+    const svgData = window._calcNestingSVG;
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `精确排料结果_${new Date().toISOString().slice(0,10)}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
 }
 
 // 导出结果

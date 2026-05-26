@@ -81,7 +81,9 @@ function main() {
           name: p.name,
           originalSize: p.originalSize,
           seamSize: p.seamSize,
-          seamDistance: p.seamDistance
+          seamDistance: p.seamDistance,
+          stitchLineOps: p.stitchLineOps,
+          cuttingLineOps: p.cuttingLineOps
         })),
         seamDistance: seamDist,
         viewBox: seamResult.viewBox
