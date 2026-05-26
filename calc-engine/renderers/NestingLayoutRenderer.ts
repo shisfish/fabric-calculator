@@ -14,6 +14,7 @@ export interface NestingLayoutRenderResult {
     width: number;
     height: number;
     onFold: boolean;
+    pathOps?: PathOperation[];
   }>;
   fabricWidth: number;
   fabricHeight: number;
@@ -38,6 +39,7 @@ export class NestingLayoutRenderer {
       showPieceLabels?: boolean;
       spacing?: number;
       padding?: number;
+      piecePathOps?: Record<string, PathOperation[]>;
     }
   ): NestingLayoutRenderResult {
     const padding = options?.padding || 10;
@@ -62,7 +64,8 @@ export class NestingLayoutRenderer {
       rotation: pos.rotation,
       width: pos.width + seamDistance * 2,
       height: pos.height + seamDistance * 2,
-      onFold: pieces.find(p => p.id === pos.pieceId)?.onFold ?? false
+      onFold: pieces.find(p => p.id === pos.pieceId)?.onFold ?? false,
+      pathOps: options?.piecePathOps?.[pos.pieceId] || options?.piecePathOps?.[pos.pieceName]
     }));
 
     const svg = this.generateSVG(
@@ -121,22 +124,26 @@ export class NestingLayoutRenderer {
       const color = colors[piece.name] || colors.default;
 
       svgContent += `  <g transform="translate(${piece.x}, ${piece.y})">\n`;
-      
+
       if (piece.onFold) {
         const foldX = piece.width / 2;
         svgContent += `    <line x1="${foldX}" y1="-3" x2="${foldX}" y2="${piece.height + 3}" stroke="#ff0000" stroke-width="0.6" stroke-dasharray="3,2" />\n`;
       }
-      
-      svgContent += `    <rect x="0" y="0" width="${piece.width}" height="${piece.height}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="0.8" />\n`;
+
+      if (piece.pathOps && piece.pathOps.length > 0) {
+        svgContent += this.pathOpsToSVGPath(piece.pathOps, color);
+      } else {
+        svgContent += `    <rect x="0" y="0" width="${piece.width}" height="${piece.height}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="0.8" />\n`;
+      }
 
       if (options?.showPieceLabels) {
         const centerX = piece.width / 2;
         const centerY = piece.height / 2;
-        
+
         svgContent += `    <text x="${centerX}" y="${centerY - 4}" text-anchor="middle" font-size="7" font-weight="bold" fill="#333">${piece.name}</text>\n`;
         svgContent += `    <text x="${centerX}" y="${centerY + 7}" text-anchor="middle" font-size="6" fill="#666">${piece.width.toFixed(1)}×${piece.height.toFixed(1)}</text>\n`;
       }
-      
+
       svgContent += `  </g>\n`;
     }
 
@@ -164,6 +171,39 @@ ${svgContent}</svg>`;
     }
 
     return gridLines;
+  }
+
+  private static pathOpsToSVGPath(
+    pathOps: PathOperation[],
+    color: { fill: string; stroke: string }
+  ): string {
+    let d = '';
+
+    for (const op of pathOps) {
+      switch (op.type) {
+        case 'move':
+          if (op.to) d += `M ${op.to.x} ${op.to.y} `;
+          break;
+        case 'line':
+          if (op.to) d += `L ${op.to.x} ${op.to.y} `;
+          break;
+        case 'quad':
+          if (op.cp1 && op.to) d += `Q ${op.cp1.x} ${op.cp1.y} ${op.to.x} ${op.to.y} `;
+          break;
+        case 'curve':
+          if (op.cp1 && op.cp2 && op.to) d += `C ${op.cp1.x} ${op.cp1.y} ${op.cp2.x} ${op.cp2.y} ${op.to.x} ${op.to.y} `;
+          break;
+        case 'close':
+          d += 'Z ';
+          break;
+      }
+    }
+
+    if (d.length === 0) {
+      return '';
+    }
+
+    return `    <path d="${d.trim()}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="0.8" stroke-linejoin="round" />\n`;
   }
 
   private static generateUtilizationInfo(

@@ -521,15 +521,20 @@ function renderCalcEngineResult(result, inputData) {
     if (nesting.svg && (nesting.pieces || nesting.nestPositions) && ((nesting.pieces || []).length > 0 || (nesting.nestPositions || []).length > 0)) {
         const fabricWidth = inputData.fabric_width || 145;
 
-        // 构建和CAD一样的数据结构
+        // 构建和CAD一样的数据结构（关键：从pattern合并pathOps到nesting pieces）
+        const patternPieces = (pattern.pieces || []);
         const resultForCAD = {
-            pieces: (nesting.pieces || []).map(p => ({
-                name: p.name,
-                pathOps: p.pathOps || [],
-                cutCount: p.cutCount || 1,
-                onFold: p.onFold || false,
-                area: p.area
-            })),
+            pieces: (nesting.pieces || []).map(p => {
+                // 从pattern.pieces查找对应的pathOps
+                const patternPiece = patternPieces.find(pp => pp.name === p.name);
+                return {
+                    name: p.name,
+                    pathOps: patternPiece?.pathOps || [],
+                    cutCount: 1,
+                    onFold: p.onFold || false,
+                    area: p.dimensions?.width * p.dimensions?.height || 0
+                };
+            }),
             positions: (nesting.nestPositions || []).map(pos => ({
                 name: pos.pieceName,
                 x: pos.x,
@@ -1007,25 +1012,42 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
 
 // 排料图渲染（完全复制cad.js的renderNestingWithReact）
 function renderCalcNestingWithReact(result, fabricWidth) {
-    if (typeof window.renderNestingResult !== 'function') {
-        console.warn('React组件未加载，使用SVG回退');
-        const container = document.getElementById('calc-nesting-viewer');
+    console.log('[精确计算] renderCalcNestingWithReact 调用');
+    console.log('[精确计算] window.renderNestingResult 存在:', typeof window.renderNestingResult === 'function');
+    console.log('[精确计算] pieces数量:', (result.pieces || []).length);
+    console.log('[精确计算] positions数量:', (result.positions || []).length);
+    console.log('[精确计算] nesting_svg存在:', !!result.nesting_svg);
 
-        if (result.nesting_svg) {
-            container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
-                + `<div style="max-width:100%;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;padding:10px;background:#fafafa;">`
-                + result.nesting_svg
-                + `</div>`
-                + `<a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" `
-                + `style="font-size:13px;color:#3b82f6;text-decoration:none;">下载排料结果</a>`
-                + `</div>`;
-            window._calcNestingSVG = result.nesting_svg;
-        } else {
-            container.innerHTML = '<p style="color:#999;text-align:center;padding:40px;">暂无排料图</p>';
-        }
+    // 等待React组件加载（最多等待3秒）
+    if (typeof window.renderNestingResult !== 'function') {
+        console.log('⏳ 等待React组件加载...');
+
+        let waitCount = 0;
+        const maxWait = 30; // 3秒（每100ms检查一次）
+        const checkInterval = setInterval(() => {
+            waitCount++;
+            console.log(`[精确计算] 等待中... (${waitCount}/${maxWait})`);
+
+            if (typeof window.renderNestingResult === 'function') {
+                clearInterval(checkInterval);
+                console.log('✅ React组件已加载，开始渲染');
+                executeNestingRender(result, fabricWidth);
+            } else if (waitCount >= maxWait) {
+                clearInterval(checkInterval);
+                console.warn('⚠️ React组件加载超时，使用SVG回退模式');
+                fallbackToSVG(result);
+            }
+        }, 100);
+
         return;
     }
 
+    // React组件已就绪，直接执行
+    executeNestingRender(result, fabricWidth);
+}
+
+// 执行React渲染
+function executeNestingRender(result, fabricWidth) {
     const pieces = (result.pieces || []).map(p => {
         const pathOps = (p.onFold && p.expandedPathOps) ? p.expandedPathOps : p.pathOps;
         if (!pathOps || pathOps.length === 0) {
@@ -1055,6 +1077,7 @@ function renderCalcNestingWithReact(result, fabricWidth) {
 
     window.renderNestingResult(pieces, nestingResult, fabricWidth);
 
+    // 添加下载按钮
     const svgContainer = document.getElementById('calc-nesting-viewer');
     if (svgContainer && result.nesting_svg) {
         const existingImg = svgContainer.querySelector('.nesting-download');
@@ -1070,23 +1093,78 @@ function renderCalcNestingWithReact(result, fabricWidth) {
     }
 }
 
-// 下载排料图
+// SVG回退模式
+function fallbackToSVG(result) {
+    const container = document.getElementById('calc-nesting-viewer');
+
+    if (result.nesting_svg) {
+        container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
+            + `<div style="max-width:100%;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;padding:10px;background:#fafafa;">`
+            + result.nesting_svg
+            + `</div>`
+            + `<div style="margin-top:8px;padding:8px;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;font-size:12px;color:#92400e;">`
+            + `⚠️ 当前为简化预览模式（React组件未加载），建议刷新页面以获得完整功能`
+            + `</div>`
+            + `<a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" `
+            + `style="font-size:13px;color:#3b82f6;text-decoration:none;">下载排料结果</a>`
+            + `</div>`;
+        window._calcNestingSVG = result.nesting_svg;
+    } else {
+        container.innerHTML = '<p style="color:#999;text-align:center;padding:40px;">暂无排料图</p>';
+    }
+}
+
+// 下载排料图（从React组件渲染的DOM中提取）
 function downloadCalcNestingSVG() {
-    const container = document.getElementById('calc-nesting-container') || document.getElementById('calc-nesting-viewer');
+    const container = document.getElementById('calc-nesting-viewer');
     if (!container) {
         alert('暂无排料图数据');
         return;
     }
 
-    const svgElement = container.querySelector('svg');
+    // 优先查找React组件渲染的主SVG（包含完整的裁片路径）
+    let svgElement = container.querySelector('.nesting-canvas svg')
+                   || container.querySelector('svg[data-type="nesting"]')
+                   || container.querySelector('.react-nesting-svg');
+
+    // 如果没找到，尝试查找任何非空白的SVG
+    if (!svgElement) {
+        const allSvgs = container.querySelectorAll('svg');
+        for (const svg of allSvgs) {
+            const rect = svg.getBoundingClientRect();
+            if (rect.width > 100 && rect.height > 100) {
+                svgElement = svg;
+                break;
+            }
+        }
+    }
+
+    // 最后回退到第一个svg
+    if (!svgElement) {
+        svgElement = container.querySelector('svg');
+    }
+
     if (!svgElement) {
         alert('暂无排料图数据');
         return;
     }
 
+    // 克隆并清理SVG
     const clonedSvg = svgElement.cloneNode(true);
+
+    // 移除交互元素（缩放控件、工具栏等）
+    clonedSvg.querySelectorAll('.zoom-controls, .toolbar, .tooltip, [class*="control"]').forEach(el => el.remove());
+
+    // 重置变换
     clonedSvg.setAttribute('transform', '');
     clonedSvg.style.transform = '';
+    clonedSvg.setAttribute('width', clonedSvg.getAttribute('viewBox')?.split(' ')[2] || '1450');
+    clonedSvg.setAttribute('height', clonedSvg.getAttribute('viewBox')?.split(' ')[3] || '1350');
+
+    // 确保有正确的命名空间
+    if (!clonedSvg.getAttribute('xmlns')) {
+        clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    }
 
     const svgData = new XMLSerializer().serializeToString(clonedSvg);
     const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });

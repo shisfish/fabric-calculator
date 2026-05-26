@@ -100,8 +100,19 @@ function main() {
   if (input.mode === 'nesting' || input.mode === 'all') {
     const fabricWidth = input.fabricWidth || 145;
     const seamDist = input.seamAllowance || 1.0;
-    
+
     try {
+      // 收集裁片的pathOps数据（从pattern阶段获取）
+      const piecePathOps: Record<string, any[]> = {};
+      if (result.pattern?.pieces) {
+        for (const p of result.pattern.pieces) {
+          if (p.pathOps && p.pathOps.length > 0) {
+            piecePathOps[p.id] = p.pathOps;
+            piecePathOps[p.name] = p.pathOps;
+          }
+        }
+      }
+
       const nestingResult = NestingLayoutRenderer.render(
         pieces,
         fabricWidth,
@@ -109,10 +120,11 @@ function main() {
         {
           showGrid: true,
           showUtilization: true,
-          showPieceLabels: true
+          showPieceLabels: true,
+          piecePathOps
         }
       );
-      
+
       result.nesting = {
         svg: nestingResult.svg,
         pieces: nestingResult.pieces.map(p => ({
@@ -120,7 +132,8 @@ function main() {
           name: p.name,
           position: { x: p.x, y: p.y },
           dimensions: { width: p.width, height: p.height },
-          onFold: p.onFold
+          onFold: p.onFold,
+          pathOps: p.pathOps || null
         })),
         fabricInfo: {
           width: nestingResult.fabricWidth,
