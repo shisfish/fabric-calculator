@@ -99,6 +99,7 @@ COPY server/ ./server/
 # 复制 CAD 引擎代码
 # =========================================================
 COPY cad-engine/ ./cad-engine/
+COPY calc-engine/ ./calc-engine/
 COPY package.json package-lock.json ./
 RUN npm install --production && npm cache clean --force && rm -rf /root/.npm
 
