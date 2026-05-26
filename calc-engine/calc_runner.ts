@@ -79,11 +79,14 @@ function main() {
         pieces: seamResult.pieces.map(p => ({
           id: p.id,
           name: p.name,
+          pathOps: p.stitchLineOps,
+          seamAllowancePathOps: p.cuttingLineOps,
+          cutCount: 1,
+          onFold: pieces.find(piece => piece.id === p.id)?.onFold ?? false,
+          area: (p.originalSize.width * 2) * p.originalSize.height,
           originalSize: p.originalSize,
           seamSize: p.seamSize,
-          seamDistance: p.seamDistance,
-          stitchLineOps: p.stitchLineOps,
-          cuttingLineOps: p.cuttingLineOps
+          seamDistance: p.seamDistance
         })),
         seamDistance: seamDist,
         viewBox: seamResult.viewBox
