@@ -55,12 +55,6 @@ def curves():
     return render_template('curves.html')
 
 
-@app.route('/quick')
-def quick_estimate():
-    """快速估算页面"""
-    return render_template('quick.html')
-
-
 @app.route('/quotation')
 def quotation():
     """报价单页面"""
@@ -954,7 +948,6 @@ if __name__ == '__main__':
     print("  Fabric Consumption Quick Calculator")
     print("=" * 60)
     print(f"  访问地址: http://localhost:5000")
-    print(f"  快速估算: http://localhost:5000/quick")
     print(f"  报价管理: http://localhost:5000/quotation")
     print(f"  历史记录: http://localhost:5000/history")
     print("=" * 60)
