@@ -395,17 +395,17 @@ const CATEGORY_NAMES = {
     skirt: '裙子', shirt: '衬衫', tshirt: 'T恤', custom: '自定义',
 };
 
-// 渲染精确排料引擎结果 (calc-engine)
+// 渲染精确排料引擎结果 (CAD风格)
 function renderCalcEngineResult(result, inputData) {
     const pattern = result.pattern || {};
     const seam = result.seam || {};
     const nesting = result.nesting || {};
     const stats = nesting.statistics || {};
 
-    // 计算利用率（如果没有提供）
+    // 计算利用率
     const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
 
-    // 1. 渲染基本信息
+    // 1. 基本信息（保持不变）
     const infoGrid = document.getElementById('result-info-grid');
     infoGrid.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
@@ -436,7 +436,7 @@ function renderCalcEngineResult(result, inputData) {
         ` : ''}
     `;
 
-    // 2. 材料分类汇总（基于 calc-engine 数据）
+    // 2. 材料分类汇总
     const matCards = document.getElementById('result-material-cards');
     if (pattern.pieces && pattern.pieces.length > 0) {
         const totalArea = pattern.pieces.reduce((sum, p) => sum + (p.area * p.quantity), 0);
@@ -473,7 +473,7 @@ function renderCalcEngineResult(result, inputData) {
         matCards.style.display = 'none';
     }
 
-    // 3. 裁片明细
+    // 3. 裁片明细表格
     const piecesTbody = document.getElementById('result-pieces-tbody');
     if (pattern.pieces && pattern.pieces.length > 0) {
         piecesTbody.innerHTML = pattern.pieces.map(p => `
@@ -489,54 +489,124 @@ function renderCalcEngineResult(result, inputData) {
         `).join('');
     }
 
-    // 4. 裁片图
-    const patternCard = document.getElementById('calc-pattern-card');
-    const patternSvg = document.getElementById('calc-pattern-svg');
-    if (pattern.svg) {
-        patternSvg.innerHTML = pattern.svg;
-        patternCard.style.display = 'block';
+    // 4. 🎨 裁片预览 (CAD风格 - 卡片网格)
+    const piecePreviewsContainer = document.getElementById('piece-previews-container');
+    if (pattern.pieces && pattern.pieces.length > 0) {
+        piecePreviewsContainer.innerHTML = pattern.pieces.map(p => `
+            <div class="piece-preview-card">
+                <h4>${p.name}${p.onFold ? ' (对折)' : ''}</h4>
+                <div class="piece-svg">
+                    ${pattern.svg ? generateSinglePieceSVG(p, pattern.svg) : ''}
+                </div>
+                <div class="piece-info">
+                    <div><strong>尺寸:</strong> ${p.width} × ${p.height} cm</div>
+                    <div><strong>数量:</strong> × ${p.quantity}</div>
+                    <div><strong>面积:</strong> ${p.area} cm²</div>
+                </div>
+            </div>
+        `).join('');
     } else {
-        patternCard.style.display = 'none';
+        piecePreviewsContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无裁片数据</div>';
     }
 
-    // 5. 缝份图
-    const seamCard = document.getElementById('calc-seam-card');
-    const seamSvg = document.getElementById('calc-seam-svg');
+    // 5. 🧵 缝份预览 (CAD风格 - 卡片网格)
+    const seamAllowanceContainer = document.getElementById('seam-allowance-container');
     if (seam.svg) {
-        seamSvg.innerHTML = seam.svg;
-        seamCard.style.display = 'block';
-    } else {
-        seamCard.style.display = 'none';
-    }
-
-    // 6. 排料图
-    const nestingCard = document.getElementById('calc-nesting-card');
-    const nestingSvg = document.getElementById('calc-nesting-svg');
-    const nestingStats = document.getElementById('calc-nesting-stats');
-    if (nesting.svg) {
-        nestingSvg.innerHTML = nesting.svg;
-        nestingCard.style.display = 'block';
-
-        nestingStats.innerHTML = `
-            <div style="background:#e3f2fd;padding:8px;border-radius:6px;text-align:center;">
-                <div style="font-size:11px;color:#666;">利用率</div>
-                <div style="font-size:16px;font-weight:bold;color:#1976d2;">${utilization.toFixed(1)}%</div>
-            </div>
-            <div style="background:#f3e5f5;padding:8px;border-radius:6px;text-align:center;">
-                <div style="font-size:11px;color:#666;">裁片数量</div>
-                <div style="font-size:16px;font-weight:bold;color:#7b1fa2;">${stats.totalPieces || 0}</div>
-            </div>
-            <div style="background:#e8f5e9;padding:8px;border-radius:6px;text-align:center;">
-                <div style="font-size:11px;color:#666;">用料长度</div>
-                <div style="font-size:16px;font-weight:bold;color:#388e3c;">${(stats.fabricLength || 0).toFixed(1)} cm</div>
-            </div>
-            <div style="background:#fff3e0;padding:8px;border-radius:6px;text-align:center;">
-                <div style="font-size:11px;color:#666;">浪费面积</div>
-                <div style="font-size:16px;font-weight:bold;color:#f57c00;">${(stats.wasteArea || 0).toFixed(1)} cm²</div>
+        seamAllowanceContainer.innerHTML = `
+            <div class="seam-preview-card" style="grid-column:1/-1;">
+                <h4>完整缝份图</h4>
+                <div class="seam-svg-container">
+                    ${seam.svg}
+                </div>
             </div>
         `;
     } else {
-        nestingCard.style.display = 'none';
+        seamAllowanceContainer.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#999;">暂无缝份数据</div>';
+    }
+
+    // 6. 📐 排料图 (CAD风格 - 专业容器)
+    const nestingViewer = document.getElementById('calc-nesting-viewer');
+    const nestingStatsDiv = document.getElementById('calc-nesting-stats');
+
+    if (nesting.svg) {
+        nestingViewer.innerHTML = nesting.svg;
+
+        // 渐变色统计卡片
+        nestingStatsDiv.innerHTML = `
+            <div class="stat-card utilization">
+                <div class="stat-label">利用率</div>
+                <div class="stat-value">${utilization.toFixed(1)}%</div>
+            </div>
+            <div class="stat-card pieces">
+                <div class="stat-label">裁片数量</div>
+                <div class="stat-value">${stats.totalPieces || 0}</div>
+            </div>
+            <div class="stat-card length">
+                <div class="stat-label">用料长度</div>
+                <div class="stat-value">${(stats.fabricLength || 0).toFixed(0)}cm</div>
+            </div>
+            <div class="stat-card waste">
+                <div class="stat-label">浪费面积</div>
+                <div class="stat-value">${(stats.wasteArea || 0).toFixed(0)}cm²</div>
+            </div>
+        `;
+        nestingStatsDiv.style.display = 'grid';
+    } else {
+        nestingViewer.innerHTML = '<div style="text-align:center;padding:80px;color:#999;">暂无排料数据</div>';
+        nestingStatsDiv.style.display = 'none';
+    }
+}
+
+// 从完整的SVG中提取单个裁片的SVG
+function generateSinglePieceSVG(piece, fullSvg) {
+    if (!fullSvg) return '';
+
+    try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(fullSvg, "image/svg+xml");
+        const svgElement = xmlDoc.querySelector('svg');
+
+        if (!svgElement) return '';
+
+        // 查找包含该裁片名称的元素
+        let pieceElement = null;
+        const allElements = svgElement.querySelectorAll('*');
+
+        for (const el of allElements) {
+            if (el.textContent && el.textContent.includes(piece.name)) {
+                pieceElement = el.closest('g') || el;
+                break;
+            }
+        }
+
+        if (!pieceElement) {
+            // 如果找不到，创建简单的矩形表示
+            return `
+                <svg width="${Math.min(piece.width * 2, 160)}" height="${Math.min(piece.height * 2, 120)}" viewBox="0 0 ${piece.width * 2 + 20} ${piece.height * 2 + 20}">
+                    <rect x="10" y="10" width="${piece.width * 2}" height="${piece.height * 2}"
+                          fill="#fef3c7" stroke="#f59e0b" stroke-width="2" rx="4"/>
+                    <text x="${piece.width * 2 + 10}" y="${piece.height * 2 + 5}"
+                          text-anchor="middle" font-size="14" fill="#92400e" font-weight="600">
+                        ${piece.name}
+                    </text>
+                </svg>
+            `;
+        }
+
+        // 创建新的SVG只包含该裁片
+        const bbox = pieceElement.getBBox ? pieceElement.getBBox() : {x:0, y:0, width:100, height:100};
+        const padding = 10;
+
+        return `
+            <svg viewBox="${bbox.x - padding} ${bbox.y - padding} ${bbox.width + padding*2} ${bbox.height + padding*2}"
+                 width="${Math.min(bbox.width + padding*2, 180)}"
+                 height="${Math.min(bbox.height + padding*2, 140)}">
+                ${pieceElement.outerHTML}
+            </svg>
+        `;
+    } catch (e) {
+        console.warn('提取裁片SVG失败:', e);
+        return '';
     }
 }
 
