@@ -569,7 +569,9 @@ function renderCalcEngineResult(result, inputData) {
             },
             totalArea: fabricWidth * (stats.fabricLength || nesting.fabricInfo?.height || 135),
             usedArea: fabricWidth * (stats.fabricLength || nesting.fabricInfo?.height || 135) * (nesting.fabricInfo?.utilization || 0) / 100,
-            nesting_svg: nesting.svg
+            // 与CAD数据结构完全一致
+            nesting_svg: result.nesting_svg || nesting.svg,  // 优先使用顶层的nesting_svg
+            nesting_png_base64: result.nesting_png_base64 || null  // 添加base64字段
         };
 
         // 调用和cad.js完全一样的渲染函数
@@ -1030,7 +1032,7 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
     }
 }
 
-// 排料图渲染（完全复制cad.js的renderNestingWithReact - 100%相同代码）
+// 排料图渲染（完全复制cad.js的renderNestingWithReact）
 function renderCalcNestingWithReact(result, fabricWidth) {
     if (typeof window.renderNestingResult !== 'function') {
         console.warn('React组件未加载，使用PNG/SVG回退');
@@ -1047,14 +1049,7 @@ function renderCalcNestingWithReact(result, fabricWidth) {
                 + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料图</a>`
                 + `</div>`;
         } else if (result.nesting_svg) {
-            container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
-                + `<div style="max-width:100%;overflow:auto;border:1px solid #e0e0e0;border-radius:4px;padding:10px;background:#fafafa;">`
-                + result.nesting_svg
-                + `</div>`
-                + `<a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" `
-                + `style="font-size:13px;color:#3b82f6;text-decoration:none;">下载排料结果</a>`
-                + `</div>`;
-            window._calcNestingSVG = result.nesting_svg;
+            container.innerHTML = result.nesting_svg;
         } else {
             container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
         }
@@ -1090,8 +1085,7 @@ function renderCalcNestingWithReact(result, fabricWidth) {
         usedArea: result.total_area_m2 ? (result.total_area_m2 * 10000 * (result.utilization_rate || 0) / 100) : (result.usedArea || 0)
     };
 
-    // 🔧 【关键修复】React组件硬编码使用 cad-nesting-viewer
-    // 临时将 calc-nesting-viewer 改名为 cad-nesting-viewer
+    // 🔧 React组件硬编码使用 cad-nesting-viewer，临时替换
     const calcContainer = document.getElementById('calc-nesting-viewer');
     if (calcContainer) {
         calcContainer.setAttribute('data-original-id', 'calc-nesting-viewer');
@@ -1107,41 +1101,19 @@ function renderCalcNestingWithReact(result, fabricWidth) {
         restoredContainer.removeAttribute('data-original-id');
     }
 
-    // 同时在容器中显示可下载的 SVG
+    // 同时在 SVG 容器中显示可下载的 PNG
     const svgContainer = document.getElementById('calc-nesting-viewer');
-    if (svgContainer && result.nesting_svg) {
-        const existingDownload = svgContainer.querySelector('.nesting-download');
-        if (!existingDownload) {
-            const downloadDiv = document.createElement('div');
-            downloadDiv.className = 'nesting-download';
-            downloadDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px;';
-            downloadDiv.innerHTML = `<a href="javascript:void(0)" onclick="downloadCalcNestingSVG()" 
-                style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果</a>`;
-            svgContainer.appendChild(downloadDiv);
-        }
-        window._calcNestingSVG = result.nesting_svg;
+    if (svgContainer && result.nesting_png_base64) {
+        svgContainer.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:12px;">`
+            + `<img src="${result.nesting_png_base64}" alt="排料图" `
+            + `style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>`
+            + (result.nesting_png_base64.startsWith('data:image/svg')
+                ? `<a href="${result.nesting_png_base64}" download="nesting_result.svg" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果</a>`
+                : `<a href="${result.nesting_png_base64}" download="nesting_result.png" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;">下载排料结果</a>`)
+            + `</div>`;
     }
-}
-
-// 下载排料图（复制CAD逻辑）
-function downloadCalcNestingSVG() {
-    const svgData = window._calcNestingSVG;
-    if (!svgData) {
-        alert('暂无排料图数据');
-        return;
-    }
-
-    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `精确排料结果_${new Date().toISOString().slice(0,10)}.svg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
 }
 
 // 导出结果
