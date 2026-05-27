@@ -27,7 +27,7 @@ export interface NestResult {
 export const DEFAULT_NEST_CONFIG: NestConfig = {
   fabricWidth: 150,
   fabricHeight: 300,
-  spacing: 0.5,
+  spacing: 3.5,  // 0.5cm基础间距 + 1.5cm*2缝份延伸 = 3.5cm，确保毛样不重叠
   rotations: [0, 90, 180, 270]
 };
 

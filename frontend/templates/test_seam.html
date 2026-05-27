@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>缝份预览调试</title>
+</head>
+<body>
+    <h1>🧵 缝份预览调试</h1>
+
+    <div id="calc-seam-allowance-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;margin:20px;"></div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // 模拟API返回数据
+        const mockData = {
+            pieces: [{
+                name: "前片",
+                pathOps: [
+                    {type: 'move', to: {x: 0, y: 0}},
+                    {type: 'line', to: {x: 50, y: 0}},
+                    {type: 'line', to: {x: 50, y: 70}},
+                    {type: 'line', to: {x: 0, y: 70}},
+                    {type: 'close'}
+                ],
+                seamAllowancePathOps: [
+                    {type: 'move', to: {x: -1.5, y: -1.5}},
+                    {type: 'line', to: {x: 51.5, y: -1.5}},
+                    {type: 'line', to: {x: 51.5, y: 71.5}},
+                    {type: 'line', to: {x: -1.5, y: 71.5}},
+                    {type: 'close'}
+                ],
+                seamAllowance: 1.5,
+                cutCount: 1,
+                onFold: false
+            }]
+        };
+
+        console.log('🧪 测试：调用 renderCalcSeamAllowancePreviews');
+        console.log('输入数据:', mockData);
+
+        try {
+            if (typeof renderCalcSeamAllowancePreviews === 'function') {
+                console.log('✅ 函数存在，开始渲染...');
+                renderCalcSeamAllowancePreviews(mockData);
+                console.log('✅ 渲染完成！');
+            } else {
+                console.error('❌ 函数不存在！renderCalcSeamAllowancePreviews 未定义');
+            }
+        } catch (e) {
+            console.error('❌ 渲染失败:', e);
+        }
+    </script>
+</body>
+</html>

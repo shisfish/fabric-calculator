@@ -48,13 +48,10 @@ export function getPiecesFromGarment(
   category: string,
   customPieces?: Array<{ name: string; width: number; height: number; quantity?: number; onFold?: boolean }>
 ): RectPiece[] {
-  
-  const template = GARMENT_TEMPLATES[category] || GARMENT_TEMPLATES.tshirt;
-  let pieces: RectPiece[] = template.defaultPieces.map((p, index) => ({
-    ...p,
-    id: `${category}_${p.name}_${index}`
-  }));
 
+  const template = GARMENT_TEMPLATES[category] || GARMENT_TEMPLATES.tshirt;
+
+  // ✅ 【关键修复】如果用户输入了自定义裁片，只使用用户输入，不追加默认裁片
   if (customPieces && customPieces.length > 0) {
     const customRects: RectPiece[] = customPieces.map((cp, index) => ({
       id: `custom_${cp.name || '配件'}_${index}`,
@@ -64,9 +61,15 @@ export function getPiecesFromGarment(
       quantity: cp.quantity || 1,
       onFold: cp.onFold ?? false
     }));
-    
-    pieces = [...pieces, ...customRects];
+
+    return customRects;
   }
+
+  // 只有当用户没有输入任何裁片时，才使用默认模板
+  const pieces: RectPiece[] = template.defaultPieces.map((p, index) => ({
+    ...p,
+    id: `${category}_${p.name}_${index}`
+  }));
 
   return pieces;
 }
