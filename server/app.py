@@ -1029,41 +1029,55 @@ def calc_all():
             }
             
             try:
-                # 保存base64图片到文件系统
                 import base64
                 import os
-                
+                import traceback
+
                 upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
                 os.makedirs(upload_dir, exist_ok=True)
-                
-                # 保存裁片图
+
+                print(f"\n[Calc-Engine] 📦 准备保存计算结果到数据库...")
+                print(f"  Record ID: {record_id}")
+                print(f"  Category: {record.get('category')}")
+                print(f"  Fabric Width: {record['params'].get('fabric_width')}")
+                print(f"  Fabric Type: {record['params'].get('fabric_type')}")
+                print(f"  Quantity: {record['params'].get('quantity')}")
+                print(f"  Per Piece Length: {record['result'].get('per_piece_length_m')} m")
+                print(f"  Material Breakdown: {list(record['full_result'].get('material_breakdown', {}).keys())}")
+
                 if pattern_data.get("pattern_png_base64"):
                     pattern_b64 = pattern_data["pattern_png_base64"]
                     if pattern_b64.startswith('data:'):
                         pattern_b64 = pattern_b64.split(',')[1]
                     with open(f"{upload_dir}/calc_{record_id}_pattern.png", 'wb') as f:
                         f.write(base64.b64decode(pattern_b64))
-                
-                # 保存缝份图
+                    print(f"  ✅ 裁片图已保存")
+
                 if seam_data.get("seam_png_base64"):
                     seam_b64 = seam_data["seam_png_base64"]
                     if seam_b64.startswith('data:'):
                         seam_b64 = seam_b64.split(',')[1]
                     with open(f"{upload_dir}/calc_{record_id}_seam.png", 'wb') as f:
                         f.write(base64.b64decode(seam_b64))
-                
-                # 保存排料图
+                    print(f"  ✅ 缝份图已保存")
+
                 if nesting_data.get("nesting_png_base64"):
                     nest_b64 = nesting_data["nesting_png_base64"]
                     if nest_b64.startswith('data:'):
                         nest_b64 = nest_b64.split(',')[1]
                     with open(f"{upload_dir}/calc_{record_id}_nesting.png", 'wb') as f:
                         f.write(base64.b64decode(nest_b64))
-                
+                    print(f"  ✅ 排料图已保存")
+
+                print(f"  📝 正在调用 db_manager.save_record()...")
                 db_manager.save_record(record)
-                print(f"[Calc-Engine] ✅ 已保存到数据库: {record_id}")
+                print(f"[Calc-Engine] ✅ 已成功保存到数据库: {record_id}")
+
             except Exception as e:
-                print(f"[Calc-Engine] ⚠️ 保存历史记录失败（不影响返回结果）: {e}")
+                print(f"[Calc-Engine] ❌ 保存历史记录失败!")
+                print(f"  错误类型: {type(e).__name__}")
+                print(f"  错误信息: {str(e)}")
+                print(f"  详细堆栈:\n{traceback.format_exc()}")
 
             return jsonify({
                 "success": True,
