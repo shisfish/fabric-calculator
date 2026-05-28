@@ -161,9 +161,25 @@ def calculate_quotation():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """获取历史记录"""
-    history = db_manager.load_history(limit=100)
-    return jsonify({"success": True, "data": history})
+    """获取历史记录（支持分页和类型筛选）"""
+    # 获取查询参数
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('pageSize', 20))
+    record_type = request.args.get('type')  # 可选: quick/precise/curved/polygon/cad
+
+    # 参数校验
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 20
+
+    result = db_manager.load_history(page=page, page_size=page_size, record_type=record_type)
+    
+    return jsonify({
+        "success": True,
+        "data": result['records'],
+        "pagination": result['pagination']
+    })
 
 
 @app.route('/api/history/<record_id>', methods=['GET'])

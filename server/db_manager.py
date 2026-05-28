@@ -46,20 +46,64 @@ class DatabaseManager:
     # 历史记录列表（主表）
     # ============================================================
 
-    def load_history(self, limit=100):
-        """加载历史记录列表"""
+    def load_history(self, page=1, page_size=20, record_type=None):
+        """
+        加载历史记录列表（支持分页和类型筛选）
+
+        Args:
+            page: 页码（从1开始）
+            page_size: 每页数量
+            record_type: 筛选类型 (quick/precise/curved/polygon/cad)，None表示全部
+
+        Returns:
+            dict: {
+                records: [...],
+                pagination: {
+                    total: 总数,
+                    page: 当前页,
+                    pageSize: 每页数量,
+                    totalPages: 总页数
+                }
+            }
+        """
         with self._get_connection() as conn:
+            # 1. 统计总数
+            count_sql = "SELECT COUNT(*) as total FROM calculation_history WHERE 1=1"
+            count_params = []
+            
+            if record_type:
+                count_sql += " AND type = %s"
+                count_params.append(record_type)
+
+            with conn.cursor() as count_cursor:
+                count_cursor.execute(count_sql, count_params)
+                total = count_cursor.fetchone()['total']
+
+            # 2. 计算分页参数
+            offset = (page - 1) * page_size
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+            # 3. 查询当前页数据
+            query_sql = """
+                SELECT id, timestamp, type, category, category_name,
+                       fabric_width, fabric_type, fabric_weight_gsm,
+                       shrinkage_rate, wastage_rate, quantity,
+                       per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg,
+                       main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count
+                FROM calculation_history
+                WHERE 1=1
+            """
+            query_params = []
+
+            if record_type:
+                query_sql += " AND type = %s"
+                query_params.append(record_type)
+
+            query_sql += " ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            query_params.extend([page_size, offset])
+
             with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT id, timestamp, type, category, category_name,
-                           fabric_width, fabric_type, fabric_weight_gsm,
-                           shrinkage_rate, wastage_rate, quantity,
-                           per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg,
-                           main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count
-                    FROM calculation_history
-                    ORDER BY timestamp DESC
-                    LIMIT %s
-                """, (limit,))
+                cursor.execute(query_sql, query_params)
                 rows = cursor.fetchall()
 
                 history = []
@@ -85,7 +129,16 @@ class DatabaseManager:
                         "result": result,
                     }
                     history.append(record)
-                return history
+
+                return {
+                    "records": history,
+                    "pagination": {
+                        "total": total,
+                        "page": page,
+                        "pageSize": page_size,
+                        "totalPages": total_pages
+                    }
+                }
 
     def get_record(self, record_id):
         """获取单条记录详情"""

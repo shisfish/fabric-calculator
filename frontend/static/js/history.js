@@ -1,6 +1,13 @@
 /**
- * 面料用量快速计算系统 - 历史记录页面
+ * 面料用量快速计算系统 - 历史记录页面（支持分页和类型筛选）
  */
+
+// 全局分页状态
+let currentPage = 1;
+let pageSize = 20;
+let currentType = ''; // 当前筛选类型
+let totalPages = 1;
+let totalRecords = 0;
 
 // 确认对话框
 function showConfirm(options) {
@@ -50,14 +57,125 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadHistory() {
     try {
-        const resp = await fetch('/api/history');
+        // 构建查询参数
+        const params = new URLSearchParams({
+            page: currentPage,
+            pageSize: pageSize,
+        });
+
+        if (currentType) {
+            params.append('type', currentType);
+        }
+
+        const resp = await fetch(`/api/history?${params.toString()}`);
         const data = await resp.json();
+
         if (data.success) {
+            // 更新分页状态
+            if (data.pagination) {
+                totalRecords = data.pagination.total;
+                totalPages = data.pagination.totalPages;
+                currentPage = data.pagination.page;
+                pageSize = data.pagination.pageSize;
+            }
+
             renderHistory(data.data);
+            updatePaginationUI();
+            updateRecordCount();
         }
     } catch (e) {
         console.error('加载历史记录失败:', e);
     }
+}
+
+function updateRecordCount() {
+    const countEl = document.getElementById('record-count');
+    if (countEl) {
+        countEl.textContent = `共 ${totalRecords} 条记录`;
+    }
+}
+
+function updatePaginationUI() {
+    // 更新页码信息
+    const pageInfo = document.getElementById('page-info');
+    if (pageInfo) {
+        pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+    }
+
+    // 更新上一页按钮
+    const prevBtn = document.getElementById('btn-prev-page');
+    if (prevBtn) {
+        prevBtn.disabled = currentPage <= 1;
+    }
+
+    // 更新下一页按钮
+    const nextBtn = document.getElementById('btn-next-page');
+    if (nextBtn) {
+        nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    // 更新跳转输入框最大值
+    const jumpInput = document.getElementById('page-jump-input');
+    if (jumpInput) {
+        jumpInput.max = totalPages;
+        jumpInput.value = currentPage;
+    }
+
+    // 更新每页数量选择器
+    const pageSizeSelect = document.getElementById('page-size-select');
+    if (pageSizeSelect) {
+        pageSizeSelect.value = pageSize;
+    }
+}
+
+function goToPrevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        loadHistory();
+    }
+}
+
+function goToNextPage() {
+    if (currentPage < totalPages) {
+        currentPage++;
+        loadHistory();
+    }
+}
+
+function jumpToPage() {
+    const input = document.getElementById('page-jump-input');
+    const page = parseInt(input?.value);
+
+    if (page && page >= 1 && page <= totalPages) {
+        currentPage = page;
+        loadHistory();
+    } else {
+        alert(`请输入有效的页码 (1-${totalPages})`);
+        if (input) input.value = currentPage;
+    }
+}
+
+function onPageSizeChange() {
+    const select = document.getElementById('page-size-select');
+    if (select) {
+        pageSize = parseInt(select.value);
+        currentPage = 1; // 重置到第一页
+        loadHistory();
+    }
+}
+
+function onTypeFilterChange() {
+    const select = document.getElementById('type-filter');
+    if (select) {
+        currentType = select.value;
+        currentPage = 1; // 重置到第一页
+        loadHistory();
+    }
+}
+
+function refreshHistory() {
+    currentPage = 1;
+    loadHistory();
 }
 
 function renderHistory(records) {
