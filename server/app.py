@@ -910,8 +910,9 @@ def calc_nesting():
 def calc_all():
     """独立计算模块 - 一次性生成所有三个模块API"""
     import time
+    from datetime import datetime
     start_time = time.time()
-    
+
     try:
         data = request.get_json()
         if not data:
@@ -926,8 +927,98 @@ def calc_all():
         result = generate_all_modules(measurements, fabric_width, seam_allowance, options)
 
         elapsed = time.time() - start_time
-        
+
         if result["success"]:
+            # ✅ 【新增】保存精确计算结果到数据库
+            record_id = datetime.now().strftime("%Y%m%d%H%M%S")
+            
+            # 构建图片数据（用于保存到数据库）
+            pattern_data = result.get("pattern", {})
+            seam_data = result.get("seam", {})
+            nesting_data = result.get("nesting", {})
+            
+            piece_images = []
+            if pattern_data.get("pattern_png_base64"):
+                piece_images.append({
+                    "name": "裁片图",
+                    "file_path": f"/static/uploads/calc_{record_id}_pattern.png"
+                })
+            
+            seam_images = []
+            if seam_data.get("seam_png_base64"):
+                seam_images.append({
+                    "name": "缝份图",
+                    "file_path": f"/static/uploads/calc_{record_id}_seam.png"
+                })
+            
+            nesting_images = []
+            if nesting_data.get("nesting_png_base64"):
+                nesting_images.append({
+                    "material_name": "主面料",
+                    "file_path": f"/static/uploads/calc_{record_id}_nesting.png"
+                })
+
+            record = {
+                "id": record_id,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "type": "precise",
+                "category": measurements.get("category", "tshirt"),
+                "params": {
+                    "fabric_width": fabric_width,
+                    "seam_allowance": seam_allowance,
+                    **measurements
+                },
+                "result": {
+                    "per_piece_length_m": nesting_data.get("per_piece_length_m", 0),
+                    "total_area_m2": nesting_data.get("total_area_m2", 0),
+                    "utilization_rate": nesting_data.get("utilization_rate", 0),
+                },
+                "input_data": data,
+                "full_result": {
+                    **result,
+                    "piece_images": piece_images,
+                    "seam_images": seam_images,
+                    "nesting_images": nesting_images,
+                },
+            }
+            
+            try:
+                # 保存base64图片到文件系统
+                import base64
+                import os
+                
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+                os.makedirs(upload_dir, exist_ok=True)
+                
+                # 保存裁片图
+                if pattern_data.get("pattern_png_base64"):
+                    pattern_b64 = pattern_data["pattern_png_base64"]
+                    if pattern_b64.startswith('data:'):
+                        pattern_b64 = pattern_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_pattern.png", 'wb') as f:
+                        f.write(base64.b64decode(pattern_b64))
+                
+                # 保存缝份图
+                if seam_data.get("seam_png_base64"):
+                    seam_b64 = seam_data["seam_png_base64"]
+                    if seam_b64.startswith('data:'):
+                        seam_b64 = seam_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_seam.png", 'wb') as f:
+                        f.write(base64.b64decode(seam_b64))
+                
+                # 保存排料图
+                if nesting_data.get("nesting_png_base64"):
+                    nest_b64 = nesting_data["nesting_png_base64"]
+                    if nest_b64.startswith('data:'):
+                        nest_b64 = nest_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_nesting.png", 'wb') as f:
+                        f.write(base64.b64decode(nest_b64))
+                
+                db_manager.save_record(record)
+                print(f"[Calc-Engine] ✅ 已保存到数据库: {record_id}")
+            except Exception as e:
+                print(f"[Calc-Engine] ⚠️ 保存历史记录失败（不影响返回结果）: {e}")
+
             return jsonify({
                 "success": True,
                 **result,

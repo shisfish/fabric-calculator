@@ -303,7 +303,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             [_find_npx(), 'tsx', '--no-cache', 'calc_runner.ts', input_data],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
             cwd=base_dir
         )
 
@@ -352,7 +352,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             total_area_cm2 = sum(p.get('area', 0) for p in pieces) if pieces else 0
             per_piece_length_m = bounds.get('height', 0) / 100 if bounds.get('height', 0) > 0 else 0
             
-            # 构建nesting对象（与CAD数据结构完全一致）
+            # 构建nesting对象（与CAD数据结构完全一致，包含statistics）
             nesting_result = {
                 "pieces": pieces,
                 "positions": positions,
@@ -362,7 +362,16 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "per_piece_length_m": round(per_piece_length_m, 3),
                 "total_area_m2": round(total_area_cm2 / 10000, 4),
                 "utilization_rate": round(utilization, 1),
-                "fabricInfo": fabric_info
+                "fabricInfo": fabric_info,
+                # ✅ 【关键】保留完整的statistics字段供前端使用
+                "statistics": nesting_data.get("statistics", {
+                    "totalPieces": len(pieces),
+                    "totalArea": total_area_cm2,
+                    "usedArea": total_area_cm2 * (utilization / 100) if utilization > 0 else total_area_cm2,
+                    "wasteArea": 0,
+                    "fabricLength": bounds.get('height', 0),
+                    "utilization": utilization
+                })
             }
         else:
             nesting_result = None

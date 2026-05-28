@@ -305,6 +305,85 @@ function renderPreciseResult(record) {
             <td style="${hasCuff ? '' : 'display:none'}">${p.cuff_width || '-'}</td>
         </tr>`;
     }).join('');
+
+    // ✅ 【新增】渲染精确计算的图片（裁片图、缝份图、排料图）
+    renderCalcImages(record);
+}
+
+function renderCalcImages(record) {
+    const imagesSection = document.getElementById('calc-images-section');
+    const pieceImagesEl = document.getElementById('calc-piece-images');
+    const seamImagesEl = document.getElementById('calc-seam-images');
+    const nestingImagesEl = document.getElementById('calc-nesting-images');
+
+    // 获取图片数据（优先从record获取，如果没有则尝试full_result）
+    const piece_images = record.piece_images || [];
+    const seam_images = record.seam_images || [];
+    const nesting_images = record.nesting_images || [];
+
+    // 检查是否有任何图片
+    const hasImages = piece_images.length > 0 || seam_images.length > 0 || nesting_images.length > 0;
+
+    if (!hasImages) {
+        imagesSection.style.display = 'none';
+        return;
+    }
+
+    imagesSection.style.display = 'block';
+
+    // 渲染裁片图
+    if (piece_images.length > 0) {
+        pieceImagesEl.style.display = 'flex';
+        pieceImagesEl.innerHTML = `
+            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#1976d2;">✂️ 裁片图</h4>
+            ${piece_images.map(img => `
+                <div class="card" style="padding:16px;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.name || '裁片图'}</div>
+                    <img src="${img.file_path}" alt="${img.name || '裁片图'}" 
+                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
+                         onclick="window.open('${img.file_path}', '_blank')">
+                </div>
+            `).join('')}
+        `;
+    } else {
+        pieceImagesEl.style.display = 'none';
+    }
+
+    // 渲染缝份图
+    if (seam_images.length > 0) {
+        seamImagesEl.style.display = 'flex';
+        seamImagesEl.innerHTML = `
+            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#388e3c;">🧵 缝份图</h4>
+            ${seam_images.map(img => `
+                <div class="card" style="padding:16px;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.name || '缝份图'}</div>
+                    <img src="${img.file_path}" alt="${img.name || '缝份图'}" 
+                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
+                         onclick="window.open('${img.file_path}', '_blank')">
+                </div>
+            `).join('')}
+        `;
+    } else {
+        seamImagesEl.style.display = 'none';
+    }
+
+    // 渲染排料图
+    if (nesting_images.length > 0) {
+        nestingImagesEl.style.display = 'flex';
+        nestingImagesEl.innerHTML = `
+            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#d32f2f;">📐 排料图</h4>
+            ${nesting_images.map(img => `
+                <div class="card" style="padding:16px;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.material_name || '排料图'}</div>
+                    <img src="${img.file_path}" alt="${img.material_name || '排料图'}" 
+                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
+                         onclick="window.open('${img.file_path}', '_blank')">
+                </div>
+            `).join('')}
+        `;
+    } else {
+        nestingImagesEl.style.display = 'none';
+    }
 }
 
 function renderQuickResult(record) {

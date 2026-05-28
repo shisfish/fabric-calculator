@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS history_materials (
 CREATE TABLE IF NOT EXISTS history_images (
     id INT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
     history_id VARCHAR(20) NOT NULL COMMENT '关联 calculation_history.id',
-    image_type VARCHAR(20) NOT NULL COMMENT '图片类型: piece(裁片图)/nesting(排料图)',
+    image_type VARCHAR(20) NOT NULL COMMENT '图片类型: piece(裁片图)/seam(缝份图)/nesting(排料图)',
     image_name VARCHAR(100) NOT NULL COMMENT '图片名称（裁片名称或材料名称）',
     image_path VARCHAR(255) NOT NULL COMMENT '图片相对路径',
     image_order INT DEFAULT 0 COMMENT '排序序号',

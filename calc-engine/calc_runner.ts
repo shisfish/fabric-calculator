@@ -329,7 +329,7 @@ function main() {
               y: inst.y,
               width: bbox.width,
               height: bbox.height,
-              area: 0,  // Polygon没有getArea方法，使用0占位
+              area: inst.polygon.getArea(),
               cutCount: 1,
               onFold: piece.onFold || false,
               rotation: inst.rotation || 0,
@@ -371,7 +371,8 @@ function main() {
           totalArea: nestResult.totalArea || 0,
           usedArea: nestResult.usedArea || 0,
           wasteArea: (nestResult.totalArea || 0) - (nestResult.usedArea || 0),
-          fabricLength: bounds.height
+          fabricLength: bounds.height,
+          utilization: nestResult.utilization || 0
         }
       };
 

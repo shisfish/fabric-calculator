@@ -103,7 +103,7 @@ class DatabaseManager:
         result = self._build_result(row)
         pieces = self._get_pieces(conn, row['id'])
         quick_params = self._get_quick_params(conn, row['id']) if row['type'] == 'quick' else None
-        piece_images, nesting_images = self._get_images(conn, row['id'])
+        piece_images, nesting_images, seam_images = self._get_images(conn, row['id'])
         # 从平铺表重新组装 input_data（用于重新计算）
         input_data = self._build_input_data(conn, row, pieces, quick_params)
 
@@ -119,6 +119,7 @@ class DatabaseManager:
             "input_data": input_data,
             "piece_images": piece_images,
             "nesting_images": nesting_images,
+            "seam_images": seam_images,
         }
 
     # ============================================================
@@ -257,6 +258,23 @@ class DatabaseManager:
                             record['id'],
                             'nesting',
                             img_info.get('material_name', ''),
+                            file_path,
+                            idx,
+                        ))
+
+                # 保存缝份图（精确计算模块）
+                seam_images = full_result.get('seam_images', [])
+                for idx, img_info in enumerate(seam_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'seam',
+                            img_info.get('name', '缝份图'),
                             file_path,
                             idx,
                         ))
@@ -432,7 +450,7 @@ class DatabaseManager:
             }
 
     def _get_images(self, conn, history_id):
-        """获取图片路径"""
+        """获取图片路径（支持piece/seam/nesting三种类型）"""
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT image_type, image_name, image_path, image_order
@@ -444,6 +462,7 @@ class DatabaseManager:
 
         piece_images = []
         nesting_images = []
+        seam_images = []
         for r in rows:
             img_info = {
                 "name": r['image_name'],
@@ -451,13 +470,15 @@ class DatabaseManager:
             }
             if r['image_type'] == 'piece':
                 piece_images.append(img_info)
+            elif r['image_type'] == 'seam':
+                seam_images.append(img_info)
             elif r['image_type'] == 'nesting':
                 nesting_images.append({
                     "material": r['image_name'],
                     "material_name": r['image_name'],
                     "file_path": r['image_path'],
                 })
-        return piece_images, nesting_images
+        return piece_images, nesting_images, seam_images
 
     # ============================================================
     # 辅助方法
