@@ -2,6 +2,7 @@ import { TshirtPatternGenerator, FrontPatternGenerator, type PatternPiece, type 
 import { WindbreakerPatternGenerator, adaptWindbreakerInput } from './patterns/windbreaker/index.js';
 import { GarmentMeasurementAdapter, type GarmentParams } from './patterns/GarmentMeasurementAdapter.js';
 import { NestEngine } from './nesting/index.js';
+import { ShrinkageCompensator, type PieceShrinkageMetadata, type ShrinkageConfig } from './shrinkage/index.js';
 import { logger } from './utils/CADLogger.js';
 import { Point, Path } from './geometry/index.js';
 
@@ -209,10 +210,22 @@ if (qtyNestMode && nestQuantity > 1) {
 
 const fabricWidth = input.fabricWidth || 145;
 const fabricNap = input.fabricNap === true || input.fabricNap === 'true';
+const shrinkageInput: ShrinkageConfig | undefined = input.shrinkage || input.fabricShrinkage;
+const shrinkageResult = ShrinkageCompensator.apply(pieces, shrinkageInput);
+pieces = shrinkageResult.pieces;
+const shrinkageMetadataByPiece = new Map<string, PieceShrinkageMetadata>(
+  shrinkageResult.pieceMetadata.map(meta => [meta.pieceName, meta])
+);
+
+if (shrinkageResult.config.enabled) {
+  logger.info(`\n   Shrinkage preprocessing: warp=${shrinkageResult.config.warpPercent}% weft=${shrinkageResult.config.weftPercent}%`);
+  logger.info(`   Applied before nesting to outlines, seam allowance paths, notches, grainlines, and construction points.`);
+}
 
 if (input.mode === 'preview') {
   const result = pieces.map((piece: any) => ({
     name: piece.name,
+    dimensions: shrinkageMetadataByPiece.get(piece.name),
     points: Object.entries(piece.points || {}).map(([key, p]: [string, any]) => ({
       key,
       x: p.x,
@@ -319,6 +332,7 @@ if (input.mode === 'preview') {
           width: piece.onFold ? (expandOnFoldPiece(finalPathOps, [], 'y').width) : bbox.width,
           height: bbox.height,
           area: pp.polygon.getArea(),
+          dimensions: shrinkageMetadataByPiece.get(piece.name),
           cutCount: 1,
           onFold: piece.onFold,
           rotation: pp.rotation,
@@ -370,6 +384,7 @@ if (input.mode === 'preview') {
           width: estimatedWidth,
           height: estimatedHeight,
           area: estimatedWidth * estimatedHeight,
+          dimensions: shrinkageMetadataByPiece.get(piece.name),
           cutCount: 1,
           onFold: originalPiece?.onFold,
           rotation: 0,
@@ -396,8 +411,13 @@ if (input.mode === 'preview') {
     pieces: piecesData,
     positions: normalizedPositions,
     utilization: result.utilization,
+    actualNestingUtilization: result.utilization,
     totalArea: result.totalArea,
     usedArea: result.usedArea,
     bounds: result.bounds,
+    shrinkage: {
+      config: shrinkageResult.config,
+      pieces: shrinkageResult.pieceMetadata,
+    },
   }));
 }
