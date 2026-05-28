@@ -1014,7 +1014,9 @@ def calc_all():
                 "input_data": data,
                 "full_result": {
                     **result,
-                    "material_breakdown": {
+                    # ✅ 优先使用calc_engine返回的material_breakdown（含多种材料：主面料、罗纹、里布等）
+                    # 如果result中没有，则回退到默认的main_fabric
+                    "material_breakdown": result.get("material_breakdown") or {
                         "main_fabric": {
                             "name": "主面料",
                             "length_m": nesting_data.get("per_piece_length_m", 0),
