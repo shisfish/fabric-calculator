@@ -314,6 +314,20 @@ class DatabaseManager:
                     full_result = record.get('full_result', {})
                     material_breakdown = full_result.get('material_breakdown', {})
                     for mat_key, mat_val in material_breakdown.items():
+                        # 安全处理 width_utilization：限制在 0-999.9 范围内
+                        raw_utilization = mat_val.get('width_utilization')
+                        if raw_utilization is None:
+                            safe_utilization = 0
+                        else:
+                            try:
+                                safe_utilization = float(raw_utilization)
+                                # 截断到合理范围（匹配 DECIMAL(5,1)）
+                                safe_utilization = max(0, min(safe_utilization, 999.9))
+                                # 四舍五入到1位小数
+                                safe_utilization = round(safe_utilization, 1)
+                            except (ValueError, TypeError):
+                                safe_utilization = 0
+
                         cursor4.execute("""
                             INSERT INTO history_materials
                             (history_id, material, material_name, length_m, area_m2, weight_kg, width_utilization)
@@ -325,7 +339,7 @@ class DatabaseManager:
                             mat_val.get('length_m'),
                             mat_val.get('area_m2'),
                             mat_val.get('weight_kg'),
-                            mat_val.get('width_utilization'),
+                            safe_utilization,
                         ))
                     cursor4.close()
 
