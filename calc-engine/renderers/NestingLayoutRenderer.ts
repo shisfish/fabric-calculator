@@ -51,22 +51,41 @@ export class NestingLayoutRenderer {
       rotations: [0]
     };
 
+    console.error('🔍 [NestingLayoutRenderer] 开始渲染');
+    console.error(`🔍 [NestingLayoutRenderer] 输入pieces:`, JSON.stringify(pieces.map(p => ({
+      name: p.name,
+      id: p.id,
+      width: p.width,
+      height: p.height,
+      quantity: p.quantity
+    })), null, 2));
+    console.error(`🔍 [NestingLayoutRenderer] 排料配置:`, JSON.stringify(nestConfig, null, 2));
+    console.error(`🔍 [NestingLayoutRenderer] seamDistance=${seamDistance}`);
+
     const engine = new CalcNestEngine(nestConfig);
     engine.addPieces(pieces);
     
     const nestResult = engine.nest();
 
-    const renderedPieces = nestResult.positions.map(pos => ({
-      id: pos.pieceId,
-      name: pos.pieceName,
-      x: pos.x,
-      y: pos.y,
-      rotation: pos.rotation,
-      width: pos.width + seamDistance * 2,
-      height: pos.height + seamDistance * 2,
-      onFold: pieces.find(p => p.id === pos.pieceId)?.onFold ?? false,
-      pathOps: options?.piecePathOps?.[pos.pieceId] || options?.piecePathOps?.[pos.pieceName]
-    }));
+    console.error('🔍 [NestingLayoutRenderer] 引擎返回的positions:', JSON.stringify(nestResult.positions, null, 2));
+
+    const renderedPieces = nestResult.positions.map(pos => {
+      const rendered = {
+        id: pos.pieceId,
+        name: pos.pieceName,
+        x: pos.x,
+        y: pos.y,
+        rotation: pos.rotation,
+        width: pos.width,    // ✅ 直接使用引擎返回值（已含缝份）
+        height: pos.height,   // ✅ 不再手动+seamDistance*2
+        onFold: pieces.find(p => p.id === pos.pieceId)?.onFold ?? false,
+        pathOps: options?.piecePathOps?.[pos.pieceId] || options?.piecePathOps?.[pos.pieceName]
+      };
+      console.error(`🔍 [NestingLayoutRenderer] 渲染裁片 "${rendered.name}": x=${rendered.x}, y=${rendered.y}, width=${rendered.width}, height=${rendered.height}`);
+      return rendered;
+    });
+
+    console.error('🔍 [NestingLayoutRenderer] 最终renderedPieces数量:', renderedPieces.length);
 
     const svg = this.generateSVG(
       renderedPieces,

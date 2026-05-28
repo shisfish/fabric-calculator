@@ -56,6 +56,10 @@ export class CalcNestEngine {
     let currentY = this.config.spacing;
     let rowHeight = 0;
 
+    console.error('🔍 [CalcNestEngine] 开始排料');
+    console.error(`🔍 [CalcNestEngine] 配置: fabricWidth=${this.config.fabricWidth}, spacing=${this.config.spacing}`);
+    console.error(`🔍 [CalcNestEngine] 裁片数量: ${this.pieces.length}`);
+
     for (const rectPiece of this.pieces) {
       for (let i = 0; i < rectPiece.quantity; i++) {
         let width = rectPiece.width;
@@ -67,7 +71,11 @@ export class CalcNestEngine {
 
         const rotation = 0;
 
+        console.error(`🔍 [CalcNestEngine] 处理裁片 "${rectPiece.name}": width=${width}, height=${height}, currentX=${currentX.toFixed(2)}, currentY=${currentY.toFixed(2)}`);
+        console.error(`🔍 [CalcNestEngine] 检查换行: currentX(${currentX.toFixed(2)}) + width(${width}) + spacing(${this.config.spacing}) > fabricWidth(${this.config.fabricWidth})? ${currentX + width + this.config.spacing > this.config.fabricWidth}`);
+
         if (currentX + width + this.config.spacing > this.config.fabricWidth) {
+          console.error(`🔍 [CalcNestEngine] ⚠️ 换行! currentX重置为${this.config.spacing}, currentY增加至${(currentY + rowHeight + this.config.spacing).toFixed(2)}`);
           currentX = this.config.spacing;
           currentY += rowHeight + this.config.spacing;
           rowHeight = 0;
@@ -83,10 +91,15 @@ export class CalcNestEngine {
           height
         });
 
+        console.error(`🔍 [CalcNestEngine] ✅ 放置 "${rectPiece.name}" 在 (${currentX.toFixed(2)}, ${currentY.toFixed(2)}) 尺寸(${width}×${height})`);
+
         currentX += width + this.config.spacing;
         rowHeight = Math.max(rowHeight, height);
       }
     }
+
+    console.error(`🔍 [CalcNestEngine] 排料完成, 共放置${placedPieces.length}个裁片`);
+    console.error(`🔍 [CalcNestEngine] 最终bounds: width=${this.config.fabricWidth}, height=${(currentY + rowHeight).toFixed(2)}`);
 
     const totalArea = this.config.fabricWidth * (currentY + rowHeight);
     const usedArea = placedPieces.reduce((sum, p) => sum + p.width * p.height, 0);

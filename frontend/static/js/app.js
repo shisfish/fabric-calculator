@@ -524,6 +524,24 @@ function renderCalcEngineResult(result, inputData) {
 
     // ✅ 调用CAD渲染逻辑展示缝份效果
     renderCalcSeamAllowancePreviews(seamForCAD);
+
+    // 📐 排料图渲染（与CAD完全一致）
+    if (nesting.pieces && nesting.positions) {
+        console.log('[精确计算] 准备排料图数据...');
+        console.log('[精确计算] result.nesting:', {
+            hasPieces: !!nesting.pieces,
+            piecesCount: (nesting.pieces || []).length,
+            hasPositions: !!nesting.positions,
+            positionsCount: (nesting.positions || []).length,
+            hasNestingSvg: !!nesting.nesting_svg,
+            hasNestingPng: !!nesting.nesting_png_base64
+        });
+
+        // ✅ 调用CAD渲染逻辑展示排料图效果
+        renderCalcNestingWithReact(nesting, inputData.fabric_width);
+    } else {
+        console.log('[精确计算] ⚠️ 无排料数据，跳过排料图渲染');
+    }
 }
 
 // ============================================================
@@ -930,5 +948,156 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
             `;
         }
     }
+}
+
+// ============================================================
+// 📐 CAD排料图渲染函数（完全复制自cad.js，用于精确计算）
+// ============================================================
+
+function renderCalcNestingWithReact(result, fabricWidth) {
+    console.log('[精确计算] 📐 开始渲染排料图...');
+    console.log('[精确计算] 输入数据:', {
+        hasPieces: !!result.pieces,
+        piecesCount: (result.pieces || []).length,
+        hasPositions: !!result.positions,
+        positionsCount: (result.positions || []).length,
+        hasNestingSvg: !!result.nesting_svg,
+        nestingSvgLength: (result.nesting_svg || '').length,
+        hasNestingPng: !!result.nesting_png_base64,
+        nestingPngLength: (result.nesting_png_base64 || '').length,
+        fabricWidth: fabricWidth
+    });
+
+    const container = document.getElementById('calc-nesting-container');
+    if (!container) {
+        console.error('[精确计算] ❌ 找不到容器: calc-nesting-container');
+        return;
+    }
+
+    console.log('[精确计算] ✅ 容器找到');
+
+    if (typeof window.renderNestingResult !== 'function') {
+        console.warn('[精确计算] React组件未加载，使用SVG/PNG回退模式');
+
+        // ✅ 【修复】直接显示排料图（保持专业效果）
+        if (result.nesting_png_base64) {
+            const isSvgData = result.nesting_png_base64.startsWith('data:image/svg');
+            const ext = isSvgData ? 'svg' : 'png';
+            container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
+                + `<img src="${result.nesting_png_base64}" alt="排料图" `
+                + `style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>`
+                + `<a href="${result.nesting_png_base64}" download="calc_nesting_result.${ext}" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;padding:8px 16px;border:1px solid var(--primary,#3b82f6);border-radius:4px;display:inline-block;">`
+                + `📥 下载排料结果`
+                + `</a>`
+                + `</div>`;
+        } else if (result.nesting_svg && result.nesting_svg.trim()) {
+            let html = `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;overflow:visible;">`;
+            
+            // 移除SVG的内联max-width限制，确保完整显示
+            let svg_content = result.nesting_svg;
+            svg_content = svg_content.replace(
+                /style="[^"]*max-width:100%[^"]*"/g,
+                'style="width:auto;height:auto;display:block;"'
+            );
+
+            html += svg_content;
+
+            // 添加下载按钮
+            html += `<div style="margin-top:8px;">`
+                + `<a href="data:text/plain;charset=utf-8," + encodeURIComponent(svg_content) download="calc_nesting_result.svg" `
+                + `style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;padding:8px 16px;border:1px solid var(--primary,#3b82f6);border-radius:4px;display:inline-block;">`
+                + `📥 下载SVG源码`
+                + `</a>`
+                + `</div>`;
+
+            html += `</div>`;
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无排料数据</p>';
+        }
+        return;
+    }
+
+    // ✅ 使用React组件渲染（与CAD完全一致）
+    console.log('[精确计算] 📊 原始pieces数据:', JSON.stringify(result.pieces || [], null, 2));
+    console.log('[精确计算] 📊 原始positions数据:', JSON.stringify(result.positions || [], null, 2));
+
+    const pieces = (result.pieces || []).map(p => {
+        // 🔧 【工业标准】排料图使用展开后的完整形状（expandedPathOps）
+        const pathOps = (p.onFold && p.expandedPathOps) ? p.expandedPathOps : p.pathOps;
+        if (!pathOps || pathOps.length === 0) {
+            console.warn(`[精确计算] ⚠️ 裁片 ${p.name} 缺少pathOps数据:`, p);
+        } else {
+            console.log(`[精确计算] ✅ 裁片 ${p.name} 有${pathOps.length}条路径指令`);
+        }
+        return {
+            name: p.name,
+            points: [],
+            pathOps: pathOps || [],
+            cutCount: p.cutCount || 1,
+            onFold: p.onFold || false,
+            area: p.area
+        };
+    });
+
+    const nestingResult = {
+        pieces: result.pieces || [],
+        positions: result.positions || [],
+        utilization: result.utilization_rate || result.utilization || 0,
+        bounds: {
+            width: fabricWidth,
+            height: (result.bounds?.height || 135)
+        },
+        totalArea: result.total_area_m2 ? result.total_area_m2 * 10000 : (result.totalArea || 0),
+        usedArea: result.total_area_m2 ? (result.total_area_m2 * 10000 * (result.utilization_rate || 0) / 100) : (result.usedArea || 0)
+    };
+
+    console.log('[精确计算] 📊 转换后的pieces:', JSON.stringify(pieces.map(p => ({
+        name: p.name,
+        hasPathOps: p.pathOps.length > 0,
+        pathOpsCount: p.pathOps.length
+    })), null, 2));
+    console.log('[精确计算] 📊 nestingResult:', JSON.stringify({
+        positionsCount: nestingResult.positions.length,
+        utilization: nestingResult.utilization,
+        bounds: nestingResult.bounds
+    }, null, 2));
+
+    console.log('[精确计算] 调用 window.renderNestingResult...');
+    
+    try {
+        const reactResult = window.renderNestingResult(pieces, nestingResult, fabricWidth);
+        console.log('[精确计算] ✅ renderNestingResult返回值:', reactResult);
+        console.log('[精确计算] ✅ 容器innerHTML长度:', container.innerHTML.length);
+        console.log('[精确计算] ✅ 容器子元素数量:', container.children.length);
+        
+        if (container.innerHTML.trim() === '' || container.children.length === 0) {
+            console.error('[精确计算] ❌ React组件未渲染任何内容！使用回退模式');
+            // 回退到SVG/PNG显示
+            if (result.nesting_png_base64) {
+                const isSvgData = result.nesting_png_base64.startsWith('data:image/svg');
+                container.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">`
+                    + `<img src="${result.nesting_png_base64}" alt="排料图" `
+                    + `style="max-width:100%;height:auto;border:1px solid #e0e0e0;border-radius:4px;"/>`
+                    + `<a href="${result.nesting_png_base64}" download="calc_nesting_result.${isSvgData ? 'svg' : 'png'}" `
+                    + `style="font-size:13px;color:#3b82f6;text-decoration:none;padding:8px 16px;border:1px solid #3b82f6;border-radius:4px;display:inline-block;">`
+                    + `📥 下载排料结果`
+                    + `</a>`
+                    + `</div>`;
+                console.log('[精确计算] ✅ 已使用PNG/SVG回退模式');
+            }
+        }
+    } catch (error) {
+        console.error('[精确计算] ❌ renderNestingResult执行出错:', error);
+        // 出错时也回退到简单显示
+        if (result.nesting_png_base64) {
+            container.innerHTML = `<img src="${result.nesting_png_base64}" alt="排料图错误回退" style="max-width:100%"/>`;
+        } else {
+            container.innerHTML = `<p style="color:red;padding:20px;">排料图渲染失败: ${error.message}</p>`;
+        }
+    }
+
+    console.log(`[精确计算] ✅ 排料图渲染完成`);
 }
 
