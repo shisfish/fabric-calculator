@@ -915,6 +915,8 @@ def calc_nesting():
         fabric_width = float(data.get("fabricWidth", 145))
         seam_allowance = float(data.get("seamAllowance", 1.0))
         options = data.get("options", {})
+        options["shrinkage_rate"] = data.get("shrinkage_rate", data.get("shrinkRate"))
+        options["shrinkage"] = data.get("shrinkage") or data.get("fabricShrinkage")
 
         from calc_engine import generate_nesting_layout
         result = generate_nesting_layout(measurements, fabric_width, seam_allowance, options)
@@ -952,6 +954,8 @@ def calc_all():
         fabric_width = float(data.get("fabricWidth", 145))
         seam_allowance = float(data.get("seamAllowance", 1.0))
         options = data.get("options", {})
+        options["shrinkage_rate"] = data.get("shrinkage_rate", data.get("shrinkRate"))
+        options["shrinkage"] = data.get("shrinkage") or data.get("fabricShrinkage")
 
         from calc_engine import generate_all_modules
         result = generate_all_modules(measurements, fabric_width, seam_allowance, options)

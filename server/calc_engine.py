@@ -166,12 +166,17 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         options = {}
 
     # 🔧 【关键】将measurements中的字段提取到顶层（匹配calc_runner期望的格式）
+    shrinkage_rate = options.get("shrinkage_rate", options.get("shrinkRate"))
+    shrinkage_config = options.get("shrinkage") or options.get("fabricShrinkage")
+
     input_data = json.dumps({
         "mode": "nesting",
         "category": measurements.get("category", "tshirt"),
         "pieces": measurements.get("pieces", []),
         "seamAllowance": seam_allowance,
         "fabricWidth": fabric_width,
+        "shrinkage_rate": shrinkage_rate,
+        "shrinkage": shrinkage_config,
         "options": {
             "showGrid": options.get("showGrid", True),
             "showUtilization": options.get("showUtilization", True),
@@ -246,6 +251,8 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
                 "total_area_m2": round(total_area_cm2 / 10000, 4),
                 "utilization_rate": round(utilization, 1),
                 "fabricInfo": fabric_info,
+                "shrinkage": nesting_data.get("shrinkage"),
+                "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
                 
                 # 元数据
                 "mode": "nesting",
@@ -280,12 +287,17 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
         options = {}
 
     # 🔧 【关键修复】将measurements中的字段提取到顶层（匹配calc_runner期望的格式）
+    shrinkage_rate = options.get("shrinkage_rate", options.get("shrinkRate"))
+    shrinkage_config = options.get("shrinkage") or options.get("fabricShrinkage")
+
     input_data = json.dumps({
         "mode": "all",
         "category": measurements.get("category", "tshirt"),
         "pieces": measurements.get("pieces", []),
         "seamAllowance": seam_allowance,
         "fabricWidth": fabric_width,
+        "shrinkage_rate": shrinkage_rate,
+        "shrinkage": shrinkage_config,
         "options": {
             "showControlPoints": options.get("showControlPoints", False),
             "showLabels": options.get("showLabels", True),
@@ -363,6 +375,8 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "total_area_m2": round(total_area_cm2 / 10000, 4),
                 "utilization_rate": round(utilization, 1),
                 "fabricInfo": fabric_info,
+                "shrinkage": nesting_data.get("shrinkage"),
+                "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
                 # ✅ 【关键】保留完整的statistics字段供前端使用
                 "statistics": nesting_data.get("statistics", {
                     "totalPieces": len(pieces),

@@ -4,6 +4,7 @@ import { SeamAllowanceRenderer } from './renderers/SeamAllowanceRenderer.js';
 import { NestEngine } from './nesting/index.js';
 import { Path, Point } from './nesting/geometry/index.js';
 import type { PatternPiece } from './nesting/types.js';
+import { ShrinkageCompensator, type PieceShrinkageMetadata, type ShrinkageConfig } from './shrinkage/index.js';
 
 interface CalcInput {
   mode: 'pattern' | 'seam' | 'nesting' | 'all';
@@ -18,11 +19,32 @@ interface CalcInput {
   seamAllowance?: number;
   fabricWidth?: number;
   fabricNap?: boolean | string;
+  shrinkage?: ShrinkageConfig;
+  fabricShrinkage?: ShrinkageConfig;
+  shrinkage_rate?: number;
+  shrinkRate?: number;
   options?: {
     showLabels?: boolean;
     showGrid?: boolean;
     showUtilization?: boolean;
     showPieceLabels?: boolean;
+  };
+}
+
+function resolveShrinkageConfig(input: CalcInput): ShrinkageConfig | undefined {
+  if (input.shrinkage || input.fabricShrinkage) {
+    return input.shrinkage || input.fabricShrinkage;
+  }
+
+  const scalarShrinkage = input.shrinkage_rate ?? input.shrinkRate;
+  if (scalarShrinkage === undefined) {
+    return undefined;
+  }
+
+  return {
+    warpPercent: scalarShrinkage,
+    weftPercent: scalarShrinkage,
+    direction: 'both'
   };
 }
 
@@ -105,6 +127,7 @@ function main() {
     const fabricWidth = input.fabricWidth || 145;
     const seamDist = input.seamAllowance || 1.5;
     const fabricNap = input.fabricNap === true || input.fabricNap === 'true';
+    const shrinkageConfig = resolveShrinkageConfig(input);
 
     try {
       console.error('🔍 [精确计算-排料] 开始使用CAD NestEngine');
@@ -132,7 +155,7 @@ function main() {
       }
 
       // ✅ 【核心修复】构建与CAD完全一致的PatternPiece数组
-      const nestPieces: PatternPiece[] = pieces.map(p => {
+      let nestPieces: PatternPiece[] = pieces.map(p => {
         const pathOps = piecePathOpsMap[p.id] || piecePathOpsMap[p.name] || [];
         const seamOps = pieceSeamPathOpsMap[p.id] || pieceSeamPathOpsMap[p.name] || [];
 
@@ -216,6 +239,16 @@ function main() {
       console.error(`🔍 [精确计算-排料] 构建${nestPieces.length}个PatternPiece`);
       for (const np of nestPieces) {
         console.error(`   - ${np.name}: path.ops=${np.path?.ops?.length || 0}, seamPath.ops=${np.seamAllowancePath?.ops?.length || 0}`);
+      }
+
+      const shrinkageResult = ShrinkageCompensator.apply(nestPieces, shrinkageConfig);
+      nestPieces = shrinkageResult.pieces;
+      const shrinkageMetadataByPiece = new Map<string, PieceShrinkageMetadata>(
+        shrinkageResult.pieceMetadata.map(meta => [meta.pieceName, meta])
+      );
+
+      if (shrinkageResult.config.enabled) {
+        console.error(`🔍 [精确计算-缩水预处理] warp=${shrinkageResult.config.warpPercent}% weft=${shrinkageResult.config.weftPercent}%`);
       }
 
       // ✅ 【关键】使用CAD的NestEngine（与CAD完全一致！）
@@ -333,6 +366,7 @@ function main() {
               width: bbox.width,
               height: bbox.height,
               area: inst.polygon.getArea(),
+              dimensions: shrinkageMetadataByPiece.get(piece.name),
               cutCount: 1,
               onFold: piece.onFold || false,
               rotation: inst.rotation || 0,
@@ -362,12 +396,18 @@ function main() {
         positions: positionsData,
         bounds: bounds,
         utilization: nestResult.utilization || 0,
+        actualNestingUtilization: nestResult.utilization || 0,
         totalArea: nestResult.totalArea || 0,
         usedArea: nestResult.usedArea || 0,
+        shrinkage: {
+          config: shrinkageResult.config,
+          pieces: shrinkageResult.pieceMetadata
+        },
         fabricInfo: {
           width: fabricWidth,
           height: bounds.height,
-          utilization: nestResult.utilization || 0
+          utilization: nestResult.utilization || 0,
+          actualNestingUtilization: nestResult.utilization || 0
         },
         statistics: {
           totalPieces: piecesData.length,
