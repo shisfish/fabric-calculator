@@ -495,6 +495,9 @@ function collectPieces() {
 }
 
 async function calculate() {
+    // ✅ 登录检查：未登录则跳转到登录页面
+    if (!Auth.requireLogin('进行精确计算')) return;
+
     const pieces = collectPieces();
     if (pieces.length === 0) {
         alert('请至少填写一个裁片的尺寸数据（长度和宽度都必须大于0）');

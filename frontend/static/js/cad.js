@@ -245,6 +245,9 @@ function getCustomPiecesData() {
 }
 
 async function calculateNesting() {
+    // ✅ 登录检查：未登录则跳转到登录页面
+    if (!Auth.requireLogin('进行CAD排料')) return;
+
     if (!currentCategory) {
         alert('请先选择品类');
         return;

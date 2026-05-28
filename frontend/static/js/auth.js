@@ -12,9 +12,34 @@ const Auth = {
     async init() {
         await this.checkLoginStatus();
         this.updateNavbar();
+        this.setupGlobalInterceptors();
         
         // 每5分钟检查一次登录状态（防止session过期）
         setInterval(() => this.checkLoginStatus(), 5 * 60 * 1000);
+    },
+    
+    /**
+     * 设置全局拦截器（拦截所有fetch请求）
+     */
+    setupGlobalInterceptors() {
+        const originalFetch = window.fetch;
+        window.fetch = async (...args) => {
+            const response = await originalFetch(...args);
+            
+            // 如果返回401状态码，跳转到登录页
+            if (response.status === 401 && !window.location.pathname.includes('/login')) {
+                console.log('[Auth] Session过期或未登录，跳转到登录页面');
+                this.currentUser = null;
+                this.updateNavbar();
+                
+                // 延迟一点再跳转，让用户看到提示
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 500);
+            }
+            
+            return response;
+        };
     },
     
     /**
@@ -31,13 +56,6 @@ const Auth = {
                 return true;
             } else {
                 this.currentUser = null;
-                
-                // 如果当前页面不是登录页面，跳转到登录页
-                const currentPath = window.location.pathname;
-                if (currentPath !== '/login' && currentPath !== '/') {
-                    // 不自动跳转，让用户手动操作
-                    console.log('[Auth] 未登录');
-                }
                 return false;
             }
         } catch (error) {
@@ -85,6 +103,28 @@ const Auth = {
             
             navLinks.appendChild(loginBtn);
         }
+    },
+    
+    /**
+     * ✅ 核心方法：要求登录后才能执行操作
+     * @param {string} actionName - 操作名称（如"计算"、"保存"、"查看详情"）
+     * @returns {boolean} 是否已登录（true=已登录可继续，false=未登录已拦截）
+     */
+    requireLogin(actionName = '此操作') {
+        if (this.isLoggedIn()) {
+            return true;  // 已登录，允许执行
+        }
+        
+        // 未登录，显示提示并跳转
+        alert(`⚠️ 请先登录后再${actionName}\n\n即将跳转到登录页面...`);
+        
+        // 记录当前URL，方便登录后返回
+        sessionStorage.setItem('redirect_after_login', window.location.href);
+        
+        // 跳转到登录页
+        window.location.href = '/login';
+        
+        return false;  // 未登录，已拦截
     },
     
     /**

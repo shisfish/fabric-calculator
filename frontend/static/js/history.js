@@ -243,6 +243,9 @@ function renderHistory(records) {
 }
 
 async function deleteRecord(id) {
+    // ✅ 登录检查：未登录则跳转到登录页面
+    if (!Auth.requireLogin('删除记录')) return;
+
     const confirmed = await showConfirm({
         icon: '️',
         title: '删除确认',
@@ -273,6 +276,9 @@ async function clearHistory() {
 }
 
 function viewRecord(id) {
+    // ✅ 登录检查：未登录则跳转到登录页面
+    if (!Auth.requireLogin('查看详情')) return;
+
     window.location.href = `/history/${id}`;
 }
 

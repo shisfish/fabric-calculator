@@ -64,7 +64,7 @@ def get_current_user():
     if 'user_id' not in session:
         return None
     try:
-        conn = db_manager.get_connection()
+        conn = db_manager._get_connection()  # ✅ 使用正确的私有方法
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT id, username, nickname, avatar_url, role, status
@@ -107,7 +107,7 @@ def api_login():
         return jsonify({"success": False, "message": "请输入用户名和密码"}), 400
     
     try:
-        conn = db_manager.get_connection()
+        conn = db_manager._get_connection()  # ✅ 使用正确的私有方法
         with conn.cursor() as cursor:
             # 查询用户
             cursor.execute("""
