@@ -296,6 +296,7 @@ export class NestEngine {
     if (b.width + spacing * 2 > fw) return null;
 
     const xCands = new Set<number>();
+    const directCands: Point[] = [];
     xCands.add(spacing - b.minX);
 
     for (const placed of this.placedPieces) {
@@ -303,6 +304,12 @@ export class NestEngine {
       const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
       xCands.add(pb.maxX + spacing - b.minX);
       xCands.add(pb.minX - spacing - b.maxX);
+      directCands.push(
+        new Point(pb.maxX + spacing - b.minX, pb.minY - b.minY),
+        new Point(pb.minX - spacing - b.maxX, pb.minY - b.minY),
+        new Point(pb.minX - b.minX, pb.maxY + spacing - b.minY),
+        new Point(pb.maxX - b.maxX, pb.maxY + spacing - b.minY)
+      );
     }
 
     // Also try intermediate positions between placed pieces (gap filling)
@@ -336,6 +343,31 @@ export class NestEngine {
 
     let best: Point | null = null;
     let bestScore = Infinity;
+    const evaluateCandidate = (candidate: Point): void => {
+      if (candidate.x + b.minX < spacing) return;
+      if (candidate.x + b.maxX > fw - spacing) return;
+      if (candidate.y + b.minY < spacing) return;
+      if (candidate.y + b.maxY > this.config.fabricHeight - spacing) return;
+
+      const testPoly = polygon.translate(candidate.x, candidate.y);
+      if (!this.isValidPlacement(testPoly, pieceId, spacing)) return;
+
+      const tb = testPoly.getBoundingBox();
+      let currentMaxY = tb.maxY;
+      let currentMaxX = tb.maxX;
+      for (const placed of this.placedPieces) {
+        if (placed.pieceId === pieceId) continue;
+        const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+        currentMaxY = Math.max(currentMaxY, pb.maxY);
+        currentMaxX = Math.max(currentMaxX, pb.maxX);
+      }
+
+      const score = currentMaxY * fw + currentMaxX + candidate.y * 0.1 + candidate.x * 0.01;
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    };
 
     for (const cx of xCands) {
       if (cx + b.minX < spacing) continue;
@@ -343,12 +375,12 @@ export class NestEngine {
 
       const cy = this.dropY(polygon, cx, pieceId);
       if (cy !== null) {
-        const score = cy * fw + cx;
-        if (score < bestScore) {
-          bestScore = score;
-          best = new Point(cx, cy);
-        }
+        evaluateCandidate(new Point(cx, cy));
       }
+    }
+
+    for (const dc of directCands) {
+      evaluateCandidate(dc);
     }
 
     // 缝隙扫描的直接候选位置也参与评分（已通过SAT验证）
@@ -881,6 +913,17 @@ export class NestEngine {
     }
 
     return SATCollision.getDistance(candidate, placed) >= spacing;
+  }
+
+  private isValidPlacement(candidate: Polygon, pieceId: string, spacing: number): boolean {
+    for (const placed of this.placedPieces) {
+      if (placed.pieceId === pieceId) continue;
+      const placedPoly = placed.polygon.translate(placed.x, placed.y);
+      if (!this.isValidAgainstPlaced(candidate, placedPoly, spacing)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   static nestPieces(pieces: PatternPiece[], config: Partial<NestConfig> = {}): NestResult {

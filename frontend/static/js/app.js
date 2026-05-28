@@ -6,6 +6,8 @@
 let currentCategory = null;
 let categoryDetail = null;
 let lastCalcResult = null;
+const PRECISION_DRAFT_KEY = 'fabric_calculator_precise_draft';
+let restoringDraft = false;
 let pieceTemplateLoaded = false;  // 裁片模板是否已加载
 
 function showLoading(show) {
@@ -55,8 +57,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const editId = new URLSearchParams(window.location.search).get('edit');
         if (editId) {
             loadEditRecord(editId);
+        } else {
+            restorePrecisionDraft();
         }
     });
+
+    document.addEventListener('input', handlePrecisionDraftChange);
+    document.addEventListener('change', handlePrecisionDraftChange);
 });
 
 // 加载品类列表
@@ -89,8 +96,167 @@ function renderCategories(categories) {
     `).join('');
 }
 
+async function loadEditRecord(recordId) {
+    try {
+        clearPrecisionDraft();
+        const resp = await fetch(`/api/history/${recordId}`);
+        const result = await resp.json();
+        if (!result.success || !result.data) {
+            alert('无法加载历史记录数据');
+            return;
+        }
+
+        const record = result.data;
+        const data = record.input_data || record.full_result?.params || {};
+        const pieces = data.pieces || record.pieces || record.full_result?.pieces_detail || [];
+        if (!data.category && !record.category && pieces.length === 0) {
+            alert('历史记录缺少可编辑的输入数据');
+            return;
+        }
+
+        await fillEditData({
+            ...data,
+            category: data.category || record.category || 'custom',
+            pieces,
+        });
+    } catch (e) {
+        console.error('加载历史记录失败:', e);
+        alert('加载历史记录失败');
+    }
+}
+
+async function fillEditData(data) {
+    restoringDraft = true;
+    try {
+        const category = data.category || 'custom';
+        await selectCategory(category, { skipAutoStep: true });
+
+        applyFabricDraft({
+            width: data.fabric_width,
+            weight: data.fabric_weight_gsm,
+            type: data.fabric_type,
+            shrinkage: data.shrinkage_rate,
+            wastage: data.wastage_rate,
+            quantity: data.quantity,
+        });
+
+        const pieces = (data.pieces || []).map(piece => ({
+            id: piece.id || piece.piece_id || '',
+            name: piece.name || piece.piece_name || '',
+            length: piece.length ?? piece.original_length ?? '',
+            width: piece.width ?? piece.original_width ?? '',
+            count: piece.count ?? piece.piece_count ?? 1,
+            shape: piece.shape || 'rectangle',
+            material: piece.material || 'main',
+            seam_allowance: piece.seam_allowance ?? 1.5,
+        }));
+
+        if (pieces.length > 0) {
+            renderPieceRows(pieces);
+            pieceTemplateLoaded = true;
+        } else if (categoryDetail) {
+            loadPieceTemplate();
+            pieceTemplateLoaded = true;
+        }
+
+        goStep(3, true);
+    } finally {
+        restoringDraft = false;
+    }
+}
+
+function handlePrecisionDraftChange(event) {
+    if (restoringDraft) return;
+    const target = event.target;
+    if (!target || !target.closest) return;
+    if (target.closest('#panel-2') || target.closest('#panel-3')) {
+        savePrecisionDraft();
+    }
+}
+
+function collectPrecisionDraft() {
+    const activePanel = document.querySelector('.panel.active');
+    return {
+        category: currentCategory,
+        step: activePanel?.id?.replace('panel-', '') || '1',
+        fabric: {
+            width: document.getElementById('fabric-width')?.value || '',
+            weight: document.getElementById('fabric-weight')?.value || '',
+            type: document.getElementById('fabric-type')?.value || '',
+            shrinkage: document.getElementById('shrinkage-rate')?.value || '',
+            wastage: document.getElementById('wastage-rate')?.value || '',
+            quantity: document.getElementById('quantity')?.value || '',
+        },
+        pieces: collectPieceRows({ includeEmpty: true }),
+        savedAt: Date.now(),
+    };
+}
+
+function savePrecisionDraft() {
+    if (restoringDraft) return;
+    try {
+        const draft = collectPrecisionDraft();
+        if (!draft.category && draft.pieces.length === 0) {
+            sessionStorage.removeItem(PRECISION_DRAFT_KEY);
+            return;
+        }
+        sessionStorage.setItem(PRECISION_DRAFT_KEY, JSON.stringify(draft));
+    } catch (e) {
+        console.warn('保存精确计算草稿失败:', e);
+    }
+}
+
+function clearPrecisionDraft() {
+    sessionStorage.removeItem(PRECISION_DRAFT_KEY);
+}
+
+async function restorePrecisionDraft() {
+    const raw = sessionStorage.getItem(PRECISION_DRAFT_KEY);
+    if (!raw) return;
+
+    let draft;
+    try {
+        draft = JSON.parse(raw);
+    } catch (e) {
+        clearPrecisionDraft();
+        return;
+    }
+
+    if (!draft || !draft.category) return;
+
+    restoringDraft = true;
+    try {
+        await selectCategory(draft.category, { skipAutoStep: true });
+        applyFabricDraft(draft.fabric || {});
+        if (draft.pieces && draft.pieces.length > 0) {
+            renderPieceRows(draft.pieces);
+            pieceTemplateLoaded = true;
+        }
+        goStep(Number(draft.step || 3), true);
+    } finally {
+        restoringDraft = false;
+    }
+}
+
+function applyFabricDraft(fabric) {
+    const fields = {
+        'fabric-width': fabric.width,
+        'fabric-weight': fabric.weight,
+        'fabric-type': fabric.type,
+        'shrinkage-rate': fabric.shrinkage,
+        'wastage-rate': fabric.wastage,
+        quantity: fabric.quantity,
+    };
+    Object.entries(fields).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        if (el && value !== undefined && value !== null && value !== '') {
+            el.value = value;
+        }
+    });
+}
+
 // 选择品类
-async function selectCategory(catId) {
+async function selectCategory(catId, options = {}) {
     currentCategory = catId;
     pieceTemplateLoaded = false;  // 切换品类时重置，允许重新加载模板
 
@@ -114,7 +280,10 @@ async function selectCategory(catId) {
     }
 
     // 自动跳到下一步
-    setTimeout(() => goStep(2), 300);
+    if (!options.skipAutoStep) {
+        setTimeout(() => goStep(2), 300);
+    }
+    savePrecisionDraft();
 }
 
 // 步骤切换
@@ -141,6 +310,9 @@ function goStep(step, skipValidation) {
     if (step === 3 && categoryDetail && !pieceTemplateLoaded) {
         loadPieceTemplate();
         pieceTemplateLoaded = true;
+    }
+    if ((step === 2 || step === 3) && !restoringDraft) {
+        savePrecisionDraft();
     }
 }
 
@@ -181,6 +353,42 @@ function loadPieceTemplate() {
         </tr>
     `).join('');
 
+}
+
+function renderPieceRows(pieces) {
+    const tbody = document.getElementById('pieces-tbody');
+    tbody.innerHTML = pieces.map(piece => `
+        <tr data-piece-id="${escapeHtml(piece.id || '')}">
+            <td><input type="text" class="inline-input" value="${escapeHtml(piece.name || '')}" data-field="name"></td>
+            <td><input type="number" class="inline-input inline-input-sm" value="${piece.length || ''}" placeholder="0" data-field="length" step="0.5" min="0"></td>
+            <td><input type="number" class="inline-input inline-input-sm" value="${piece.width || ''}" placeholder="0" data-field="width" step="0.5" min="0"></td>
+            <td><input type="number" class="inline-input inline-input-sm" value="${piece.count || 1}" data-field="count" min="1" step="1"></td>
+            <td>
+                <select class="inline-input" data-field="shape">
+                    ${SHAPE_OPTIONS.map(s => `<option value="${s.value}" ${s.value === (piece.shape || 'rectangle') ? 'selected' : ''}>${s.label}</option>`).join('')}
+                </select>
+            </td>
+            <td>
+                <select class="inline-input" data-field="material">
+                    ${MATERIAL_OPTIONS.map(o => `<option value="${o.value}" ${o.value === (piece.material || 'main') ? 'selected' : ''}>${o.label}</option>`).join('')}
+                </select>
+            </td>
+            <td><input type="number" class="inline-input inline-input-sm" value="${piece.seam_allowance || 1.5}" data-field="seam_allowance" step="0.5" min="0"></td>
+            <td>
+                <button class="btn-delete" onclick="removePiece(this)" title="鍒犻櫎">鉁?/button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
 }
 
 // 获取默认数量
@@ -239,11 +447,13 @@ function addPiece() {
         </td>
     `;
     tbody.appendChild(row);
+    savePrecisionDraft();
 }
 
 // 删除裁片
 function removePiece(btn) {
     btn.closest('tr').remove();
+    savePrecisionDraft();
 }
 
 // 重置裁片
@@ -253,22 +463,28 @@ function resetPieces() {
         loadPieceTemplate();
         pieceTemplateLoaded = true;
     }
+    savePrecisionDraft();
 }
 
 // 收集裁片数据
-function collectPieces() {
+function collectPieceRows(options = {}) {
+    const includeEmpty = options.includeEmpty === true;
     const rows = document.querySelectorAll('#pieces-tbody tr');
     const pieces = [];
     rows.forEach(row => {
+        if (row.querySelector('.empty-row')) return;
         const name = row.querySelector('[data-field="name"]')?.value || '';
-        const length = parseFloat(row.querySelector('[data-field="length"]')?.value) || 0;
-        const width = parseFloat(row.querySelector('[data-field="width"]')?.value) || 0;
-        if (length <= 0 || width <= 0) return; // 跳过空行
+        const lengthValue = row.querySelector('[data-field="length"]')?.value || '';
+        const length = parseFloat(lengthValue) || 0;
+        const widthValue = row.querySelector('[data-field="width"]')?.value || '';
+        const width = parseFloat(widthValue) || 0;
+        if (!includeEmpty && (length <= 0 || width <= 0)) return; // 跳过空行
 
         pieces.push({
+            id: row.dataset.pieceId || '',
             name: name,
-            length: length,
-            width: width,
+            length: includeEmpty ? lengthValue : length,
+            width: includeEmpty ? widthValue : width,
             count: parseInt(row.querySelector('[data-field="count"]')?.value) || 1,
             shape: row.querySelector('[data-field="shape"]')?.value || 'rectangle',
             material: row.querySelector('[data-field="material"]')?.value || 'main',
@@ -279,6 +495,10 @@ function collectPieces() {
 }
 
 // 计算
+function collectPieces() {
+    return collectPieceRows();
+}
+
 async function calculate() {
     const pieces = collectPieces();
     if (pieces.length === 0) {
@@ -372,6 +592,7 @@ async function calculate() {
 
         if (result.success) {
             lastCalcResult = result;
+            clearPrecisionDraft();
             renderCalcEngineResult(result, data);
             goStep(4);
         } else {
