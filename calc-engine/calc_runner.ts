@@ -205,6 +205,7 @@ function main() {
           cutCount: p.quantity || 1,
           onFold: p.onFold || false,
           seamAllowance: seamDist,
+          isAccessory: false,
           _custom: true
         } as any;  // 使用any避免类型检查问题
       });

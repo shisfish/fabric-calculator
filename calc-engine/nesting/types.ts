@@ -21,6 +21,7 @@ export interface PatternPiece {
 
   allowedRotations?: number[];
   isMirrorable?: boolean;
+  isAccessory?: boolean;
 
   _custom?: boolean;
 }
