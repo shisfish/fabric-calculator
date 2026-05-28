@@ -126,14 +126,17 @@ export class NestEngine {
 
         const bb = normalized.getBoundingBox();
         const isSmallFiller = bb.width * bb.height < 1000;
+        const minSide = Math.min(bb.width, bb.height);
+        const maxSide = Math.max(bb.width, bb.height);
+        const isNarrowStrip = minSide <= 20 && maxSide / Math.max(minSide, 1) >= 4;
         this.pieces.push({
           id: piece.name,
           polygon: normalized,
           quantity: piece.cutCount,
           rotations,
-          isAccessory: piece.isAccessory === true || isSmallFiller ||
+          isAccessory: piece.isAccessory === true || isSmallFiller || isNarrowStrip ||
             piece.name.includes('口袋') || piece.name.includes('领') ||
-            piece.name.includes('袖口') || piece.name.includes('罗纹') ||
+            piece.name.includes('袖口') || piece.name.includes('罗纹') || piece.name.includes('腰带') ||
             piece.name === '配件' || piece.name === '其他配件',
         });
         this.pieceOnFold.set(piece.name, piece.onFold ?? false);
@@ -163,6 +166,12 @@ export class NestEngine {
       if (p.isAccessory) accessoryPieces.push(p);
       else mainPieces.push(p);
     }
+    accessoryPieces.sort((a, b) => {
+      const pa = this.getAccessoryPriority(a);
+      const pb = this.getAccessoryPriority(b);
+      if (pa !== pb) return pa - pb;
+      return b.polygon.getArea() - a.polygon.getArea();
+    });
 
     logger.info(`\n📦 === 两阶段排料 ===`);
     logger.info(`   Phase 1 主裁片: ${mainPieces.map(p => `${p.id}×${p.quantity}`).join(', ')}`);
@@ -185,10 +194,10 @@ export class NestEngine {
       : 0;
     logger.info(`   ✅ Phase 1 完成: 长度=${phase1MaxY.toFixed(1)}cm`);
 
-    // Phase 2: 放入配件（使用底部优先填充）
+    // Phase 2: 放入配件，优先利用主裁片形成的空位，不主动拉长排料
     for (const nestingPiece of accessoryPieces) {
       for (let q = 0; q < nestingPiece.quantity; q++) {
-        this.placePiece(nestingPiece, q, true); // true = 底部优先模式
+        this.placePiece(nestingPiece, q);
       }
     }
 
@@ -201,6 +210,13 @@ export class NestEngine {
 
   private sortPiecesByArea(): NestingPiece[] {
     return [...this.pieces].sort((a, b) => b.polygon.getArea() - a.polygon.getArea());
+  }
+
+  private getAccessoryPriority(piece: NestingPiece): number {
+    if (piece.id.includes('领')) return 0;
+    if (piece.id.includes('袖口') || piece.id.includes('口袋')) return 1;
+    if (piece.id.includes('腰带') || piece.id.includes('罗纹')) return 2;
+    return 3;
   }
 
   private placePiece(nestingPiece: NestingPiece, index: number, preferBottom: boolean = false): boolean {

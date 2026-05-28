@@ -196,6 +196,9 @@ function main() {
           }
         }
 
+        const rotatableNames = ['口袋', '领', '袖口', '罗纹', '腰带', '配件', '其他配件'];
+        const isRotatableAccessory = rotatableNames.some(name => p.name.includes(name));
+
         return {
           name: p.name,
           id: p.id,
@@ -206,6 +209,7 @@ function main() {
           onFold: p.onFold || false,
           seamAllowance: seamDist,
           isAccessory: false,
+          allowedRotations: isRotatableAccessory ? [0, 90, 180, 270] : [0, 180],
           _custom: true
         } as any;  // 使用any避免类型检查问题
       });
@@ -219,7 +223,7 @@ function main() {
       const engine = new NestEngine({
         fabricWidth,
         spacing: 1,
-        rotations: [0, 180],
+        rotations: [0, 90, 180, 270],
         fabricNap: false,
         fabricHeight: 1600
       });
