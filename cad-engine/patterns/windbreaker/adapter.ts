@@ -8,30 +8,36 @@ export function adaptWindbreakerInput(garmentInput: any, seamAllowance: number):
   const collar = gi.collar || {};
 
   const neckWidth = gi.neckWidth || 18.5;
-  const armholeDepth = gi.armholeDepth || 62.5;
+  const defaultArmholeDepth = gi.armholeDepth || 30;
+  const backLength = back.bodyLength || 60;
+  const frontLength = front.bodyLength || 61;
+  const clampArmholeDepth = (value: any, length: number) => {
+    const numeric = Number(value) || defaultArmholeDepth;
+    return Math.min(Math.max(numeric, 20), Math.max(20, length - 8));
+  };
 
   return {
     category: 'windbreaker',
     backPanel: {
       width: back.chestWidth || 49.5,
-      length: back.bodyLength || 60,
+      length: backLength,
       neckWidth: neckWidth * 0.45,
       neckDepth: neckWidth * 0.10,
       shoulderWidth: back.shoulderWidth || 26.75,
       shoulderSlope: 3.5,
-      armholeDepth: back.armholeDepth || armholeDepth,
+      armholeDepth: clampArmholeDepth(back.armholeDepth, backLength),
       yokeDepth: back.yokeDepth || 12,
       ventLength: back.ventLength || 18,
       hemExtension: 2,
     },
     frontPanel: {
       width: front.chestWidth || 49.5,
-      length: front.bodyLength || 61,
+      length: frontLength,
       neckWidth: neckWidth * 0.45,
       neckDepth: front.neckDrop || 19,
       shoulderWidth: front.shoulderWidth || 26,
       shoulderSlope: 4,
-      armholeDepth: front.armholeDepth || armholeDepth,
+      armholeDepth: clampArmholeDepth(front.armholeDepth, frontLength),
       yokeDepth: front.yokeDepth || 12,
       placketWidth: front.placketWidth || 6,
       hemExtension: 2,

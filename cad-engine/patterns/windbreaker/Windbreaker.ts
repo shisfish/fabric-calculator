@@ -140,6 +140,18 @@ export class WindbreakerPatternGenerator {
     }
 
     logger.info(`\n🧥 ===== 完成: ${pieces.length}个裁片 (${pieces.map(p=>p.name).join(', ')}) =====\n`);
+    const accessoryPieces = this.generateAccessoryPieces(params);
+    for (const piece of accessoryPieces) {
+      if (params.seamAllowance && params.seamAllowance > 0) {
+        const accessoryRules = [
+          { segment: 'accessoryEdge', distance: params.seamAllowance },
+          { segment: 'accessoryHem', distance: params.seamAllowance },
+        ];
+        piece.seamAllowancePath = SeamAllowanceGenerator.generate(piece.path, accessoryRules);
+      }
+      pieces.push(piece);
+    }
+
     return pieces;
   }
 
@@ -159,29 +171,36 @@ export class WindbreakerPatternGenerator {
     p.shoulder = new Point(nW + sW, sDrop);
     p.yokeEnd = new Point(W * 0.52, sDrop + yD);
     p.armholeEnd = new Point(W, aD);
-    p.sideHem = new Point(W + 1.5, L);
+    p.sideHem = new Point(W + bp.hemExtension, L);
     p.cbHem = new Point(0, L);
     p.ventTop = new Point(0, L - vL);
+    p.armholePitch = new Point(
+      p.shoulder.x + (W - p.shoulder.x) * 0.18,
+      sDrop + (aD - sDrop) * 0.38
+    );
 
     const ax = W - p.shoulder.x;
-    const ay = aD - sDrop - yD;
-    p.armCp1 = new Point(p.yokeEnd.x + ax * 0.15, p.yokeEnd.y + ay * 0.35);
-    p.armCp2 = new Point(p.armholeEnd.x - ax * 0.28, p.armholeEnd.y - ay * 0.08);
+    const ay = aD - sDrop;
+    p.armCp1 = new Point(p.shoulder.x + ax * 0.10, p.shoulder.y + ay * 0.22);
+    p.armCp2 = new Point(p.armholePitch.x - ax * 0.10, p.armholePitch.y - ay * 0.12);
+    p.armCp3 = new Point(p.armholePitch.x + ax * 0.20, p.armholePitch.y + ay * 0.26);
+    p.armCp4 = new Point(p.armholeEnd.x - ax * 0.28, p.armholeEnd.y - ay * 0.06);
 
     const path = new Path()
       .move(p.cbNeck)
       .quad(new Point(nW * 0.4, nW * 0.06), p.hps).segment('neckline')
       .line(p.shoulder).segment('shoulder')
-      .line(p.yokeEnd).segment('yoke')
-      .curve(p.armCp1, p.armCp2, p.armholeEnd).segment('armhole')
+      .curve(p.armCp1, p.armCp2, p.armholePitch).segment('armhole')
+      .curve(p.armCp3, p.armCp4, p.armholeEnd).segment('armhole')
       .line(p.sideHem).segment('sideSeam')
       .quad(new Point(W * 0.35, L + 1), p.cbHem).segment('hem')
       .line(p.ventTop).segment('vent')
       .line(p.cbNeck).segment('closure')
       .close();
 
-    const armLen = p.shoulder.dist(p.yokeEnd) +
-      new CubicBezier(p.yokeEnd, p.armCp1, p.armCp2, p.armholeEnd).getLength();
+    const armLen =
+      new CubicBezier(p.shoulder, p.armCp1, p.armCp2, p.armholePitch).getLength() +
+      new CubicBezier(p.armholePitch, p.armCp3, p.armCp4, p.armholeEnd).getLength();
 
     logger.info(`📐 后片: ${W}×${L}cm, 袖窿=${armLen.toFixed(1)}cm, 过肩=${yD}cm, 开衩=${vL}cm`);
 
@@ -193,6 +212,15 @@ export class WindbreakerPatternGenerator {
       cutCount: 1,
       onFold: true,
       backArmholeLength: armLen,
+      grainline: {
+        start: new Point(W * 0.5, Math.max(8, aD * 0.35)),
+        end: new Point(W * 0.5, L - 8),
+      },
+      notches: [
+        p.armholePitch,
+        new Point(W, aD * 0.72),
+        new Point(0, L - vL),
+      ],
       allowedRotations: [0],
       isMirrorable: false,
     };
@@ -211,23 +239,17 @@ export class WindbreakerPatternGenerator {
     const slopeDeg = fp.shoulderSlope || 4;
     const sDrop = Math.tan(slopeDeg * Math.PI / 180) * (sW * 0.5);
 
-    const armholeRatio = 0.42;
-    const aD = L * armholeRatio;
+    const aD = Math.min(Math.max(fp.armholeDepth || L * 0.42, 20), L - 8);
 
-    p.cfTop = new Point(0, 0);
+    p.cfNeck = new Point(0, nD);
     p.cfBottom = new Point(pkW, L);
-    p.hps = new Point(nW, nD * 0.12);
-
-    const lapelNotchX = nW + sW * 0.06;
-    const lapelNotchY = nD * 0.30;
-    p.lapelNotch = new Point(lapelNotchX, lapelNotchY);
-    p.lapelTip = new Point(pkW * 1.05, nD * 0.78);
+    p.hps = new Point(nW, 0);
 
     const shX = nW + sW * 0.46;
     p.shoulder = new Point(shX, sDrop);
     p.yokeEnd = new Point(shX + (W - shX) * 0.16, sDrop + yD);
     p.armholeEnd = new Point(W, aD);
-    p.sideBottom = new Point(W + 1.5, L);
+    p.sideBottom = new Point(W + fp.hemExtension, L);
     p.hemCp = new Point(W * 0.38, L + 1.2);
 
     const ax = W - shX;
@@ -239,19 +261,14 @@ export class WindbreakerPatternGenerator {
     p.armCp4 = new Point(p.armholeEnd.x - ax * 0.32, p.armholeEnd.y - ay * 0.06);
 
     const path = new Path()
-      .move(p.cfTop)
-      .quad(new Point(nW * 0.50, nD * 0.04), p.hps).segment('neckline')
-      .line(p.lapelNotch).segment('lapel')
-      .quad(
-        new Point((p.lapelNotch.x + p.lapelTip.x) / 2 + 0.5, p.lapelNotch.y + (p.lapelTip.y - p.lapelNotch.y) * 0.45),
-        p.lapelTip
-      ).segment('lapel')
-      .line(p.cfBottom).segment('placket')
-      .quad(p.hemCp, p.sideBottom).segment('hem')
-      .line(p.armholeEnd).segment('sideSeam')
-      .curve(p.armCp4, p.armCp3, p.armPitch).segment('armhole')
-      .curve(p.armCp2, p.armCp1, p.shoulder).segment('armhole')
-      .line(p.yokeEnd).segment('yoke')
+      .move(p.cfNeck)
+      .quad(new Point(nW * 0.42, nD), p.hps).segment('neckline')
+      .line(p.shoulder).segment('shoulder')
+      .curve(p.armCp1, p.armCp2, p.armPitch).segment('armhole')
+      .curve(p.armCp3, p.armCp4, p.armholeEnd).segment('armhole')
+      .line(p.sideBottom).segment('sideSeam')
+      .quad(p.hemCp, p.cfBottom).segment('hem')
+      .line(p.cfNeck).segment('placket')
       .close();
 
     const upperLen = new CubicBezier(p.shoulder, p.armCp1, p.armCp2, p.armPitch).getLength();
@@ -268,6 +285,15 @@ export class WindbreakerPatternGenerator {
       cutCount: 2,
       onFold: false,
       frontArmholeLength: armLen,
+      grainline: {
+        start: new Point(W * 0.55, Math.max(10, aD * 0.40)),
+        end: new Point(W * 0.55, L - 8),
+      },
+      notches: [
+        p.armPitch,
+        new Point(W, aD * 0.74),
+        new Point(pkW, L * 0.50),
+      ],
       allowedRotations: [0, 180],
       isMirrorable: true,
     };
@@ -299,11 +325,13 @@ export class WindbreakerPatternGenerator {
     const bicepY = sCH * 0.15;
 
     const fs: Record<string, Point> = {};
-    fs.capTop = new Point(fBW * 0.78, -sCH);
+    fs.capTop = new Point(fBW * 0.52, -sCH);
     fs.capFront = new Point(0, bicepY);
-    fs.elbowFront = new Point(fEW * 0.88, elbowY);
-    fs.cuffFront = new Point(fCW * 0.92, sL);
-    fs.underarmFront = new Point(0, bicepY + 2);
+    fs.elbowFront = new Point(0.8, elbowY);
+    fs.cuffFront = new Point(0.6, sL);
+    fs.cuffBack = new Point(fCW, sL);
+    fs.elbowBack = new Point(fEW, elbowY);
+    fs.underarmBack = new Point(fBW, bicepY + 2);
 
     const fcp1x = fs.capTop.x - fBW * 0.32;
     const fcp1y = -sCH * 0.42;
@@ -313,19 +341,30 @@ export class WindbreakerPatternGenerator {
     fs.fCapCp1 = new Point(fcp1x, fcp1y);
     fs.fCapCp2 = new Point(fcp2x, fcp2y);
 
+    fs.fBackCapCp1 = new Point(fBW * 0.86, bicepY - sCH * 0.18);
+    fs.fBackCapCp2 = new Point(fs.capTop.x + fBW * 0.28, -sCH * 0.38);
+
     const frontPath = new Path()
       .move(fs.capTop)
       .curve(fs.fCapCp1, fs.fCapCp2, fs.capFront).segment('sleeveCap')
-      .line(fs.underarmFront).segment('underarmSeam')
       .quad(
-        new Point(fEW * 0.35, (fs.underarmFront.y + elbowY) / 2 + 1),
+        new Point(0.2, (fs.capFront.y + elbowY) / 2 + 1),
         fs.elbowFront
       ).segment('frontSeam')
       .quad(
-        new Point((fEW * 0.88 + fCW * 0.92) / 2, elbowY + (sL - elbowY) / 2 + 0.5),
+        new Point(0.8, elbowY + (sL - elbowY) / 2 + 0.5),
         fs.cuffFront
       ).segment('frontSeam')
-      .quad(new Point(fCW * 0.5, sL + 1.5), new Point(fs.capTop.x * 0.4, sL + 0.8)).segment('sleeveHem')
+      .line(fs.cuffBack).segment('sleeveHem')
+      .quad(
+        new Point((fCW + fEW) / 2, elbowY + (sL - elbowY) / 2 + 1),
+        fs.elbowBack
+      ).segment('backSeam')
+      .quad(
+        new Point((fEW + fBW) / 2 + 0.5, (fs.underarmBack.y + elbowY) / 2),
+        fs.underarmBack
+      ).segment('backSeam')
+      .curve(fs.fBackCapCp1, fs.fBackCapCp2, fs.capTop).segment('sleeveCap')
       .close();
 
     const fCapLen = new CubicBezier(fs.capTop, fs.fCapCp1, fs.fCapCp2, fs.capFront).getLength();
@@ -335,7 +374,9 @@ export class WindbreakerPatternGenerator {
     bs.capBack = new Point(bBW, bicepY + 1);
     bs.elbowBack = new Point(bEW, elbowY + 2);
     bs.cuffBack = new Point(bCW, sL);
-    bs.underarmBack = new Point(bBW * 0.94, bicepY + 3);
+    bs.cuffFront = new Point(0.6, sL);
+    bs.elbowFront = new Point(0.8, elbowY + 1);
+    bs.underarmFront = new Point(0, bicepY + 2);
 
     const bcp1x = bs.capTop.x + bBW * 0.28;
     const bcp1y = -sCH * 0.38;
@@ -344,20 +385,30 @@ export class WindbreakerPatternGenerator {
 
     bs.bCapCp1 = new Point(bcp1x, bcp1y);
     bs.bCapCp2 = new Point(bcp2x, bcp2y);
+    bs.bFrontCapCp1 = new Point(bs.capTop.x - bBW * 0.10, -sCH * 0.36);
+    bs.bFrontCapCp2 = new Point(bBW * 0.04, bicepY - sCH * 0.14);
 
     const backPath = new Path()
       .move(bs.capTop)
       .curve(bs.bCapCp1, bs.bCapCp2, bs.capBack).segment('sleeveCap')
-      .line(bs.underarmBack).segment('underarmSeam')
       .quad(
-        new Point((bBW * 0.94 + bEW) / 2 + 1.5, (bs.underarmBack.y + elbowY) / 2 + 2),
+        new Point((bBW + bEW) / 2 + 1.5, (bs.capBack.y + elbowY) / 2 + 2),
         bs.elbowBack
       ).segment('backSeam')
       .quad(
         new Point((bEW + bCW) / 2 + 0.8, elbowY + (sL - elbowY) / 2 + 1),
         bs.cuffBack
       ).segment('backSeam')
-      .quad(new Point(bCW * 0.55, sL + 1.5), new Point(bs.capTop.x + bBW * 0.08, sL + 0.8)).segment('sleeveHem')
+      .line(bs.cuffFront).segment('sleeveHem')
+      .quad(
+        new Point(0.8, elbowY + (sL - elbowY) / 2 + 1),
+        bs.elbowFront
+      ).segment('frontSeam')
+      .quad(
+        new Point(0.2, (bs.underarmFront.y + elbowY) / 2 + 1),
+        bs.underarmFront
+      ).segment('frontSeam')
+      .curve(bs.bFrontCapCp2, bs.bFrontCapCp1, bs.capTop).segment('sleeveCap')
       .close();
 
     const bCapLen = new CubicBezier(bs.capTop, bs.bCapCp1, bs.bCapCp2, bs.capBack).getLength();
@@ -374,6 +425,16 @@ export class WindbreakerPatternGenerator {
         cutCount: 2,
         onFold: false,
         frontCapLength: fCapLen,
+        grainline: {
+          start: new Point(fBW * 0.52, bicepY + 6),
+          end: new Point(fBW * 0.52, sL - 7),
+        },
+        notches: [
+          fs.capFront,
+          fs.underarmBack,
+          new Point(fBW * 0.52, bicepY),
+          fs.elbowFront,
+        ],
         allowedRotations: [0, 180],
         isMirrorable: true,
       },
@@ -385,6 +446,16 @@ export class WindbreakerPatternGenerator {
         cutCount: 2,
         onFold: false,
         backCapLength: bCapLen,
+        grainline: {
+          start: new Point(bBW * 0.52, bicepY + 6),
+          end: new Point(bBW * 0.52, sL - 7),
+        },
+        notches: [
+          bs.capBack,
+          bs.underarmFront,
+          new Point(bBW * 0.52, bicepY),
+          bs.elbowBack,
+        ],
         allowedRotations: [0, 180],
         isMirrorable: true,
       },
@@ -448,6 +519,143 @@ export class WindbreakerPatternGenerator {
       points: p,
       seamAllowance: _sa,
       cutCount: 2,
+      onFold: false,
+      grainline: {
+        start: new Point(-cL * 0.35, sH + cW * 0.45),
+        end: new Point(cL * 0.35, sH + cW * 0.45),
+      },
+      notches: [
+        p.cbCenter,
+        p.collRollCenter,
+        p.cbLeft,
+        p.cbRight,
+      ],
+      allowedRotations: [0, 180],
+      isMirrorable: true,
+    };
+  }
+
+  private static generateAccessoryPieces(params: WindbreakerParams): PatternPiece[] {
+    const pieces: PatternPiece[] = [];
+    const sa = params.seamAllowance;
+    const front = params.frontPanel;
+    const sleeve = params.sleeve;
+
+    if (params.hasStormFlap) {
+      const width = Math.max(front.placketWidth ?? 6, 5);
+      pieces.push(this.createRectanglePiece('stormFlap', width, front.length, 2, sa, {
+        grainline: 'vertical',
+        allowedRotations: [0, 180],
+      }));
+    }
+
+    if (params.hasBelt) {
+      const length = Math.max((params.backPanel.width + params.frontPanel.width * 2) * 0.92, 95);
+      pieces.push(this.createRectanglePiece('belt', length, 5.5, 1, sa, {
+        grainline: 'horizontal',
+        allowedRotations: [0, 180],
+      }));
+    }
+
+    if (params.hasEpaulettes) {
+      pieces.push(this.createTaperedTabPiece('epaulette', 15, 5.5, 4.2, 2, sa));
+    }
+
+    pieces.push(this.createRectanglePiece('sleeveTab', Math.max(sleeve.cuffWidth * 0.75, 11), 4.5, 2, sa, {
+      grainline: 'horizontal',
+      allowedRotations: [0, 180],
+    }));
+
+    pieces.push(this.createRectanglePiece('pocketFlap', 16, 5, 2, sa, {
+      grainline: 'horizontal',
+      allowedRotations: [0, 180],
+    }));
+
+    return pieces;
+  }
+
+  private static createRectanglePiece(
+    name: string,
+    width: number,
+    height: number,
+    cutCount: number,
+    seamAllowance: number,
+    options: { grainline: 'vertical' | 'horizontal'; allowedRotations: number[] }
+  ): PatternPiece {
+    const p: Record<string, Point> = {
+      topLeft: new Point(0, 0),
+      topRight: new Point(width, 0),
+      bottomRight: new Point(width, height),
+      bottomLeft: new Point(0, height),
+    };
+
+    const path = new Path()
+      .move(p.topLeft)
+      .line(p.topRight).segment('accessoryEdge')
+      .line(p.bottomRight).segment('accessoryEdge')
+      .line(p.bottomLeft).segment('accessoryHem')
+      .line(p.topLeft).segment('accessoryEdge')
+      .close();
+
+    const grainline = options.grainline === 'vertical'
+      ? { start: new Point(width / 2, height * 0.20), end: new Point(width / 2, height * 0.80) }
+      : { start: new Point(width * 0.20, height / 2), end: new Point(width * 0.80, height / 2) };
+
+    return {
+      name,
+      path,
+      points: p,
+      seamAllowance,
+      grainline,
+      notches: [
+        new Point(width / 2, 0),
+        new Point(width / 2, height),
+      ],
+      cutCount,
+      onFold: false,
+      allowedRotations: options.allowedRotations,
+      isMirrorable: cutCount > 1,
+    };
+  }
+
+  private static createTaperedTabPiece(
+    name: string,
+    length: number,
+    baseWidth: number,
+    tipWidth: number,
+    cutCount: number,
+    seamAllowance: number
+  ): PatternPiece {
+    const inset = (baseWidth - tipWidth) / 2;
+    const p: Record<string, Point> = {
+      baseTop: new Point(0, 0),
+      tipTop: new Point(length, inset),
+      tipBottom: new Point(length, inset + tipWidth),
+      baseBottom: new Point(0, baseWidth),
+    };
+
+    const path = new Path()
+      .move(p.baseTop)
+      .line(p.tipTop).segment('accessoryEdge')
+      .line(p.tipBottom).segment('accessoryEdge')
+      .line(p.baseBottom).segment('accessoryHem')
+      .line(p.baseTop).segment('accessoryEdge')
+      .close();
+
+    return {
+      name,
+      path,
+      points: p,
+      seamAllowance,
+      grainline: {
+        start: new Point(length * 0.20, baseWidth / 2),
+        end: new Point(length * 0.80, baseWidth / 2),
+      },
+      notches: [
+        new Point(0, baseWidth / 2),
+        new Point(length, baseWidth / 2),
+      ],
+      cutCount,
       onFold: false,
       allowedRotations: [0, 180],
       isMirrorable: true,

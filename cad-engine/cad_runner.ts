@@ -246,6 +246,11 @@ if (input.mode === 'preview') {
         cp2: (op.cp2 && Number.isFinite(op.cp2.x) && Number.isFinite(op.cp2.y)) ? { x: op.cp2.x, y: op.cp2.y } : null
       }))
       .filter((op: any) => op.to !== null),
+    grainline: piece.grainline ? {
+      start: { x: piece.grainline.start.x, y: piece.grainline.start.y },
+      end: { x: piece.grainline.end.x, y: piece.grainline.end.y }
+    } : null,
+    notches: (piece.notches || []).map((point: any) => ({ x: point.x, y: point.y })),
     cutCount: piece.cutCount,
     onFold: piece.onFold
   }));
@@ -295,6 +300,11 @@ if (input.mode === 'preview') {
         }))
         .filter((op: any) => op.to !== null),
       points: piece.points || {},
+      grainline: piece.grainline ? {
+        start: { x: piece.grainline.start.x, y: piece.grainline.start.y },
+        end: { x: piece.grainline.end.x, y: piece.grainline.end.y }
+      } : null,
+      notches: (piece.notches || []).map((point: any) => ({ x: point.x, y: point.y })),
       _custom: isCustom
     });
   }
@@ -342,6 +352,8 @@ if (input.mode === 'preview') {
           seamAllowance: originalData?.seamAllowance || 0,
           seamAllowancePathOps: originalSeamOps,
           expandedSeamAllowancePathOps: piece.onFold ? finalSeamOps : null,
+          grainline: originalData?.grainline || null,
+          notches: originalData?.notches || [],
           _custom: (originalData?._custom) || false,
         });
       }
@@ -392,6 +404,8 @@ if (input.mode === 'preview') {
           pathOps: pathOps,
           seamAllowance: originalPiece?.seamAllowance || 0,
           seamAllowancePathOps: originalPiece?.seamAllowancePathOps || [],
+          grainline: originalPiece?.grainline || null,
+          notches: originalPiece?.notches || [],
           _custom: (originalPiece as any)?._custom || false,
         });
       }

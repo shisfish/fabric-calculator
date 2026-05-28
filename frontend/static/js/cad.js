@@ -125,12 +125,12 @@ function getGarmentInput() {
         return {
             ...base,
             neckWidth: parseFloat(document.getElementById('wb-neckWidth')?.value) || 18.5,
-            armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 62.5,
+            armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 30,
             back: {
                 chestWidth: parseFloat(document.getElementById('wb-back-chestWidth')?.value) || 49.5,
                 bodyLength: parseFloat(document.getElementById('wb-back-bodyLength')?.value) || 60,
                 shoulderWidth: parseFloat(document.getElementById('wb-back-shoulderWidth')?.value) || 26.75,
-                armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 62.5,
+                armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 30,
                 yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
                 ventLength: parseFloat(document.getElementById('wb-ventLength')?.value) || 18,
             },
@@ -138,7 +138,7 @@ function getGarmentInput() {
                 chestWidth: parseFloat(document.getElementById('wb-front-chestWidth')?.value) || 49.5,
                 bodyLength: parseFloat(document.getElementById('wb-front-bodyLength')?.value) || 61,
                 shoulderWidth: parseFloat(document.getElementById('wb-front-shoulderWidth')?.value) || 26,
-                armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 62.5,
+                armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 30,
                 neckDrop: parseFloat(document.getElementById('wb-front-neckDepth')?.value) || 19,
                 placketWidth: parseFloat(document.getElementById('wb-placketWidth')?.value) || 6,
                 yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
