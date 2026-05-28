@@ -656,19 +656,47 @@ class DatabaseManager:
         """
         full_result = {}
         
-        # 1. 获取材料用量汇总
-        materials = self._get_materials_summary(conn, row['id'])
-        if materials:
-            full_result['material_breakdown'] = {
-                mat_key: {
-                    "name": mat_val.get('name', ''),
-                    "length_m": float(mat_val.get('length_m', 0)),
-                    "area_m2": float(mat_val.get('area_m2', 0)),
-                    "weight_kg": float(mat_val.get('weight_kg', 0)),
-                    "width_utilization": float(mat_val.get('width_utilization', 0)),
-                }
-                for mat_key, mat_val in materials.items()
-            }
+        # 1. 获取材料用量汇总（完整格式，用于详情页）
+        # ✅ 直接查询数据库，避免依赖 _get_materials_summary() 的简化格式
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT material, material_name, length_m, area_m2, weight_kg, width_utilization
+                    FROM history_materials
+                    WHERE history_id = %s
+                    ORDER BY id
+                """, (row['id'],))
+                mat_rows = cursor.fetchall()
+                
+                if mat_rows:
+                    full_result['material_breakdown'] = {}
+                    for r in mat_rows:
+                        # 确保每行都是字典格式（DictCursor）
+                        if isinstance(r, dict):
+                            mat_key = r.get('material') or 'unknown'
+                            mat_name = r.get('material_name', '') or mat_key
+                            length_m = self._safe_float(r.get('length_m'))
+                            area_m2 = self._safe_float(r.get('area_m2'))
+                            weight_kg = self._safe_float(r.get('weight_kg'))
+                            width_utilization = self._safe_float(r.get('width_utilization'))
+                            
+                            full_result['material_breakdown'][mat_key] = {
+                                "name": mat_name,
+                                "length_m": length_m,
+                                "area_m2": area_m2,
+                                "weight_kg": weight_kg,
+                                "width_utilization": width_utilization,
+                            }
+                    
+                    print(f"[DB] ✅ _build_full_result: 从 history_materials 加载 {len(mat_rows)} 种材料")
+                    if 'material_breakdown' in full_result:
+                        for key, val in full_result['material_breakdown'].items():
+                            print(f"   - {val['name']}: {val['length_m']}m")
+                else:
+                    print(f"[DB] ⚠️ _build_full_result: history_materials 表中无记录 {row['id']}")
+        except Exception as e:
+            print(f"[DB] ❌ _build_full_result 查询材料失败: {e}")
+            # 查询失败时不中断，继续处理其他数据
         
         # 2. 添加图片数据
         if piece_images:
@@ -685,13 +713,22 @@ class DatabaseManager:
                     "name": p.get('piece_name', ''),
                     "original_length": float(p.get('original_length', 0)) if p.get('original_length') else None,
                     "original_width": float(p.get('original_width', 0)) if p.get('original_width') else None,
+                    "effective_length": None,  # 历史记录可能没有此字段
+                    "effective_width": None,
                     "count": int(p.get('piece_count', 1)),
+                    "calc_method": p.get('shape', '矩形'),
+                    "area_cm2": None,
+                    "area_with_shrinkage_cm2": None,
                     "material": p.get('material', ''),
-                    "shape": p.get('shape', ''),
+                    "shoulder_width": p.get('shoulder_width'),
+                    "bicep_width": p.get('bicep_width'),
+                    "cuff_width": p.get('cuff_width'),
                 }
                 for p in pieces
                 if p.get('piece_name')  # 过滤空记录
             ]
+            
+            print(f"[DB] ✅ _build_full_result: 从 history_pieces 加载 {len(full_result['pieces_detail'])} 个裁片")
         
         # 4. 添加主表统计数据
         if row.get('per_piece_length_m') is not None:
@@ -704,6 +741,16 @@ class DatabaseManager:
             full_result['fabric_weight_kg'] = float(row['fabric_weight_kg'])
         
         return full_result
+
+    @staticmethod
+    def _safe_float(value):
+        """安全转换为 float，处理 None 和非法值"""
+        if value is None:
+            return 0.0
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
 
     # ============================================================
     # 辅助方法

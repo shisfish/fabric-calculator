@@ -186,54 +186,77 @@ def get_history():
 @app.route('/api/history/<record_id>', methods=['GET'])
 def get_history_detail(record_id):
     """获取单条历史记录详情（含重新计算的完整结果）"""
-    record = db_manager.get_record(record_id)
-    if not record:
-        return jsonify({"success": False, "message": "记录不存在"}), 404
+    try:
+        record = db_manager.get_record(record_id)
+        if not record:
+            return jsonify({"success": False, "message": "记录不存在"}), 404
 
-    # 重新调用计算引擎获取完整结果（pieces_detail、material_breakdown等）
-    if record.get("input_data"):
-        try:
-            record_type = record.get("type", "")
+        print(f"\n[History-Detail] 📋 加载记录详情: {record_id}")
+        print(f"  类型: {record.get('type')}")
+        print(f"  品类: {record.get('category')}")
+        print(f"  是否有 full_result: {'✅' if record.get('full_result') else '❌'}")
+        if record.get('full_result'):
+            materials = record['full_result'].get('material_breakdown', {})
+            print(f"  材料种类: {list(materials.keys()) if materials else '无'}")
 
-            if record_type == "curved":
-                # 曲线计算：使用 curved_engine
-                full_result = curved_calculator.calculate_consumption_curved(record["input_data"])
-            elif record_type == "quick":
-                # 快速估算：使用 calculator_engine
-                full_result = calculator.quick_estimate(record["input_data"])
-            elif record_type in ["precise", "cad"]:
-                # ✅ 精确计算/CAD排料：已在保存时存储完整的 full_result，无需重新计算
-                # 直接使用数据库中的 full_result（包含 material_breakdown、图片路径等）
-                full_result = record.get("full_result")
-                if not full_result:
-                    # 如果数据库中没有 full_result，标记警告但不报错
-                    print(f"[History-Detail] ⚠️ 记录 {record_id} 缺少 full_result 数据")
-                    record["calc_warning"] = "该记录缺少详细计算数据"
-            else:
-                # 其他类型：尝试使用 calculator_engine
-                full_result = calculator.calculate_consumption(record["input_data"])
+        # 重新调用计算引擎获取完整结果（pieces_detail、material_breakdown等）
+        if record.get("input_data"):
+            try:
+                record_type = record.get("type", "")
 
-            if full_result:
-                record["full_result"] = full_result
+                if record_type == "curved":
+                    full_result = curved_calculator.calculate_consumption_curved(record["input_data"])
+                elif record_type == "quick":
+                    full_result = calculator.quick_estimate(record["input_data"])
+                elif record_type in ["precise", "cad"]:
+                    # ✅ 精确计算/CAD排料：优先使用数据库中的 full_result
+                    full_result = record.get("full_result")
+                    
+                    # 如果数据库中没有 full_result，尝试构建基础数据
+                    if not full_result:
+                        print(f"[History-Detail] ⚠️ 记录 {record_id} 缺少 full_result，构建基础版本")
+                        full_result = _build_basic_full_result(record)
+                        record["calc_warning"] = "该记录使用基础数据显示（部分字段来自重新计算）"
+                else:
+                    full_result = calculator.calculate_consumption(record["input_data"])
 
-        except Exception as e:
-            import traceback
-            error_msg = str(e)
-            
-            # 对于 precise/cad 类型，重新计算失败不应阻断显示
-            if record_type in ["precise", "cad"]:
-                print(f"[History-Detail] ⚠️ {record_type} 类型记录重新计算跳过: {error_msg}")
-                record["calc_warning"] = f"该记录使用独立计算引擎生成，部分字段可能缺失"
-                # 保留已有的 full_result（如果有）
-                if not record.get("full_result"):
+                if full_result:
+                    record["full_result"] = full_result
+
+            except Exception as e:
+                import traceback
+                error_msg = str(e)
+                
+                # 对于 precise/cad 类型，失败时保留已有数据或构建基础数据
+                if record_type in ["precise", "cad"]:
+                    print(f"[History-Detail] ⚠️ {record_type} 类型处理异常: {error_msg}")
+                    
+                    # 如果已有 full_result 就保留，否则构建基础版
+                    if not record.get("full_result"):
+                        record["full_result"] = _build_basic_full_result(record)
+                        record["calc_warning"] = f"使用基础数据显示: {error_msg}"
+                    else:
+                        record["calc_warning"] = f"部分数据可能不完整: {error_msg}"
+                else:
                     record["full_result"] = None
-            else:
-                # 其他类型：记录错误信息
-                record["full_result"] = None
-                record["calc_error"] = f"无法重新计算完整结果: {error_msg}\n详细信息: {traceback.format_exc()}"
+                    record["calc_error"] = f"无法重新计算完整结果: {error_msg}\n详细信息: {traceback.format_exc()}"
 
-    # input_data 保留给详情页（返回修改功能需要）
-    return jsonify({"success": True, "data": record})
+        # 确保 full_result 存在（即使是空对象）
+        if not record.get("full_result"):
+            record["full_result"] = _build_basic_full_result(record)
+
+        return jsonify({"success": True, "data": record})
+
+    except Exception as e:
+        import traceback
+        print(f"[History-Detail] ❌ 加载记录失败: {record_id}")
+        print(f"  错误: {str(e)}")
+        print(traceback.format_exc())
+        
+        return jsonify({
+            "success": False, 
+            "message": f"加载失败: {str(e)}"
+        }), 500
 
 
 @app.route('/api/history/<record_id>', methods=['DELETE'])
@@ -1234,6 +1257,38 @@ def _build_material_breakdown(category, nesting_data, fabric_weight_gsm=0):
         print(f"  - {val['name']}: {val['length_m']}m ({val['area_m2']}m²)")
     
     return material_breakdown
+
+
+def _build_basic_full_result(record):
+    """
+    构建基础版本的 full_result（用于历史记录详情页）
+    
+    当数据库中缺少完整的 full_result 时使用此函数，
+    从 record.result 和 record.params 构建基础数据
+    """
+    full_result = {}
+    
+    # 从 result 中复制基础统计数据
+    if record.get("result"):
+        result = record["result"]
+        for key in ["per_piece_length_m", "total_area_m2", "utilization_rate", 
+                    "fabric_weight_kg", "main_fabric_per_piece_m", "lining_per_piece_m",
+                    "calculated_wastage_rate"]:
+            if result.get(key) is not None:
+                full_result[key] = result[key]
+    
+    # 如果有材料数据（从数据库查询的），保留它
+    # （_build_full_result 已经处理了 history_materials 表）
+    
+    # 添加空的材料明细和裁片明细（避免前端报错）
+    if "material_breakdown" not in full_result:
+        full_result["material_breakdown"] = {}
+    
+    if "pieces_detail" not in full_result:
+        full_result["pieces_detail"] = []
+    
+    print(f"[Basic-Full-Result] ✅ 构建基础版本完成")
+    return full_result
 
 
 # ============================================================
