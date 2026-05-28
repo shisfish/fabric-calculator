@@ -375,7 +375,7 @@ function renderPieceRows(pieces) {
             </td>
             <td><input type="number" class="inline-input inline-input-sm" value="${piece.seam_allowance || 1.5}" data-field="seam_allowance" step="0.5" min="0"></td>
             <td>
-                <button class="btn-delete" onclick="removePiece(this)" title="鍒犻櫎">鉁?/button>
+                <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
             </td>
         </tr>
     `).join('');

@@ -124,12 +124,17 @@ export class NestEngine {
           polygon: normalized.rotate(angle)
         }));
 
+        const bb = normalized.getBoundingBox();
+        const isSmallFiller = bb.width * bb.height < 1000;
         this.pieces.push({
           id: piece.name,
           polygon: normalized,
           quantity: piece.cutCount,
           rotations,
-          isAccessory: piece.isAccessory === true || piece.name === '口袋' || piece.name === '配件' || piece.name === '其他配件',
+          isAccessory: piece.isAccessory === true || isSmallFiller ||
+            piece.name.includes('口袋') || piece.name.includes('领') ||
+            piece.name.includes('袖口') || piece.name.includes('罗纹') ||
+            piece.name === '配件' || piece.name === '其他配件',
         });
         this.pieceOnFold.set(piece.name, piece.onFold ?? false);
       } else {
@@ -187,9 +192,8 @@ export class NestEngine {
       }
     }
 
-    // 最终优化 + 强制配件下沉
+    // 最终优化：保留小件填缝结果，避免把配件强制下沉后拉长排料长度
     this.compactLayout();
-    this.sinkAccessories(); // 让配件尽可能往下沉
     this.clampToBoundary();
 
     return this.calculateResult();
@@ -385,18 +389,12 @@ export class NestEngine {
 
     // 缝隙扫描的直接候选位置也参与评分（已通过SAT验证）
     for (const gc of gapDirectCandidates) {
-      if (gc.x + b.minX < spacing || gc.x + b.maxX > fw - spacing) continue;
-      if (gc.y + b.minY < spacing) continue;
-      const score = gc.y * fw + gc.x;
-      if (score < bestScore) {
-        bestScore = score;
-        best = gc;
-        logger.info(`   ✨ 缝隙位置胜出: (${gc.x.toFixed(1)}, ${gc.y.toFixed(1)}) score=${score.toFixed(0)}`);
-      }
+      evaluateCandidate(gc);
     }
 
-    logger.info(`   ✅ findBLPosition结果: ${pieceId} → ${best ? `(${best.x.toFixed(1)}, ${best.y.toFixed(1)}) score=${bestScore.toFixed(0)}` : 'NULL'}`);
-    return best;
+    const selected = best as Point | null;
+    logger.info(`   ✅ findBLPosition结果: ${pieceId} → ${selected ? `(${selected.x.toFixed(1)}, ${selected.y.toFixed(1)}) score=${bestScore.toFixed(0)}` : 'NULL'}`);
+    return selected;
   }
 
   /**
