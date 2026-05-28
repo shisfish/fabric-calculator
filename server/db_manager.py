@@ -237,6 +237,9 @@ class DatabaseManager:
         # 从平铺表重新组装 input_data（用于重新计算）
         input_data = self._build_input_data(conn, row, pieces, quick_params)
 
+        # 组装 full_result（从各子表重建完整数据）
+        full_result = self._build_full_result(conn, row, pieces, piece_images, nesting_images, seam_images)
+
         return {
             "id": row['id'],
             "timestamp": self._fmt_time(row['timestamp']),
@@ -250,6 +253,7 @@ class DatabaseManager:
             "piece_images": piece_images,
             "nesting_images": nesting_images,
             "seam_images": seam_images,
+            "full_result": full_result,  # ✅ 新增：完整计算结果
         }
 
     # ============================================================
@@ -638,6 +642,68 @@ class DatabaseManager:
                     "file_path": r['image_path'],
                 })
         return piece_images, nesting_images, seam_images
+
+    def _build_full_result(self, conn, row, pieces, piece_images, nesting_images, seam_images):
+        """
+        从各子表重建完整的 full_result 数据
+        
+        用于历史记录详情页显示，包含：
+        - material_breakdown: 材料用量汇总
+        - piece_images: 裁片图片
+        - nesting_images: 排料图片
+        - seam_images: 缝份图片
+        - pieces_detail: 裁片明细
+        """
+        full_result = {}
+        
+        # 1. 获取材料用量汇总
+        materials = self._get_materials_summary(conn, row['id'])
+        if materials:
+            full_result['material_breakdown'] = {
+                mat_key: {
+                    "name": mat_val.get('name', ''),
+                    "length_m": float(mat_val.get('length_m', 0)),
+                    "area_m2": float(mat_val.get('area_m2', 0)),
+                    "weight_kg": float(mat_val.get('weight_kg', 0)),
+                    "width_utilization": float(mat_val.get('width_utilization', 0)),
+                }
+                for mat_key, mat_val in materials.items()
+            }
+        
+        # 2. 添加图片数据
+        if piece_images:
+            full_result['piece_images'] = piece_images
+        if nesting_images:
+            full_result['nesting_images'] = nesting_images
+        if seam_images:
+            full_result['seam_images'] = seam_images
+        
+        # 3. 添加裁片明细（从 history_pieces 表）
+        if pieces:
+            full_result['pieces_detail'] = [
+                {
+                    "name": p.get('piece_name', ''),
+                    "original_length": float(p.get('original_length', 0)) if p.get('original_length') else None,
+                    "original_width": float(p.get('original_width', 0)) if p.get('original_width') else None,
+                    "count": int(p.get('piece_count', 1)),
+                    "material": p.get('material', ''),
+                    "shape": p.get('shape', ''),
+                }
+                for p in pieces
+                if p.get('piece_name')  # 过滤空记录
+            ]
+        
+        # 4. 添加主表统计数据
+        if row.get('per_piece_length_m') is not None:
+            full_result['per_piece_length_m'] = float(row['per_piece_length_m'])
+        if row.get('total_area_m2') is not None:
+            full_result['total_area_m2'] = float(row['total_area_m2'])
+        if row.get('utilization_rate') is not None:
+            full_result['utilization_rate'] = float(row['utilization_rate'])
+        if row.get('fabric_weight_kg') is not None:
+            full_result['fabric_weight_kg'] = float(row['fabric_weight_kg'])
+        
+        return full_result
 
     # ============================================================
     # 辅助方法
