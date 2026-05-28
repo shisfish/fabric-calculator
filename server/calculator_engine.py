@@ -528,7 +528,6 @@ class FabricCalculator:
         fabric_width = float(data.get("fabric_width", 145))
         fabric_weight_gsm = float(data.get("fabric_weight_gsm", 0))
         shrinkage_rate = float(data.get("shrinkage_rate", category["default_shrinkage"]))
-        wastage_rate = float(data.get("wastage_rate", category["default_wastage"]))
         quantity = int(data.get("quantity", 1))
         pieces = data.get("pieces", [])
 
@@ -539,8 +538,6 @@ class FabricCalculator:
             raise ValueError(f"订单数量异常: {quantity}，应在 1-1000000 之间")
         if shrinkage_rate < 0 or shrinkage_rate > 50:
             raise ValueError(f"缩水率异常: {shrinkage_rate}%，应在 0-50% 之间")
-        if wastage_rate < 0 or wastage_rate > 50:
-            raise ValueError(f"损耗率异常: {wastage_rate}%，应在 0-50% 之间")
         if not pieces or len(pieces) == 0:
             raise ValueError("未提供任何裁片数据")
         if len(pieces) > 100:
@@ -601,10 +598,7 @@ class FabricCalculator:
                 "area_with_shrinkage_cm2": round(area_with_shrinkage, 2),
                 "seam_allowance": seam_allowance,
             }
-            result["pieces_detail"].append(piece_detail)
-
-        # 加上损耗率
-        total_area_with_wastage = total_area_cm2 * (1 + wastage_rate / 100)
+        result["pieces_detail"].append(piece_detail)
 
         # 有效门幅
         effective_fabric_width = fabric_width - 3  # 减去针孔边3cm
@@ -623,14 +617,6 @@ class FabricCalculator:
         # 面料利用率（用于显示参考）
         utilization = category["fabric_utilization"] * type_factor
 
-        # 面料重量
-        fabric_weight_g = 0
-        fabric_weight_kg = 0
-        if fabric_weight_gsm > 0:
-            total_area_m2 = total_area_with_wastage / 10000
-            fabric_weight_g = total_area_m2 * fabric_weight_gsm
-            fabric_weight_kg = fabric_weight_g / 1000
-
         # 材料分类汇总（使用排料模拟计算用料长度）
         material_breakdown = {}
         material_names = {
@@ -646,6 +632,7 @@ class FabricCalculator:
         }
 
         total_nesting_length_cm = 0  # 所有材料的排料长度之和
+        all_nesting_utils = []  # 收集所有材料的利用率，用于计算综合损耗率
 
         for mat_type, area in material_areas.items():
             # 用排料模拟计算该材料的门幅利用率
@@ -659,11 +646,11 @@ class FabricCalculator:
             nesting_util = nesting_result["width_utilization"]
             if nesting_util > 0:
                 adjusted_length_cm = base_length_cm / nesting_util
+                all_nesting_utils.append(nesting_util)
             else:
                 adjusted_length_cm = base_length_cm
 
-            # 再乘以损耗率
-            mat_length_cm = adjusted_length_cm * (1 + wastage_rate / 100)
+            mat_length_cm = adjusted_length_cm
             mat_length_m = mat_length_cm / 100
             total_nesting_length_cm += mat_length_cm
 
@@ -681,6 +668,29 @@ class FabricCalculator:
 
         # 单件用料长度 = 所有材料的排料长度之和
         per_piece_length_cm = total_nesting_length_cm
+
+        # 计算实际损耗率（基于排料结果）
+        # 理论面积 vs 实际排料所需面积
+        if total_area_cm2 > 0 and effective_fabric_width > 0:
+            theoretical_length = total_area_cm2 / effective_fabric_width
+            if theoretical_length > 0:
+                calculated_wastage_rate = ((per_piece_length_cm - theoretical_length) / theoretical_length) * 100
+                calculated_wastage_rate = max(0, min(calculated_wastage_rate, 50))  # 限制在0-50%范围内
+            else:
+                calculated_wastage_rate = 0
+        else:
+            calculated_wastage_rate = 0
+
+        # 基于计算出的损耗率计算总用料面积
+        total_area_with_wastage = total_area_cm2 * (1 + calculated_wastage_rate / 100)
+
+        # 面料重量（使用包含损耗的总面积）
+        fabric_weight_g = 0
+        fabric_weight_kg = 0
+        if fabric_weight_gsm > 0:
+            total_area_m2 = total_area_with_wastage / 10000
+            fabric_weight_g = total_area_m2 * fabric_weight_gsm
+            fabric_weight_kg = fabric_weight_g / 1000
 
         # 总用料长度（所有件数）
         total_fabric_length_cm = per_piece_length_cm * quantity
@@ -729,14 +739,14 @@ class FabricCalculator:
         warnings = []
         if fabric_width < 100:
             warnings.append("面料门幅较窄（<100cm），可能导致用料增加")
-        if wastage_rate > 15:
-            warnings.append("损耗率设置较高（>15%），请确认是否合理")
-        if wastage_rate < 3:
-            warnings.append("损耗率设置较低（<3%），建议不低于5%")
+        if calculated_wastage_rate > 15:
+            warnings.append(f"计算损耗率较高（{calculated_wastage_rate:.1f}%），建议优化裁片排列或检查面料门幅")
+        if calculated_wastage_rate < 5 and calculated_wastage_rate > 0:
+            warnings.append(f"计算损耗率较低（{calculated_wastage_rate:.1f}%），排料效率优秀")
         if shrinkage_rate > 5:
             warnings.append("缩水率设置较高（>5%），建议对面料进行预缩处理")
         if quantity < 50:
-            warnings.append(f"订单数量较少（{quantity}件），小批量生产损耗可能偏高，建议在标准损耗基础上增加3%-6%")
+            warnings.append(f"订单数量较少（{quantity}件），小批量生产可能需要额外预留余量")
         if not pieces:
             warnings.append("未输入任何裁片数据")
 
@@ -754,6 +764,7 @@ class FabricCalculator:
             "fabric_weight_g": round(fabric_weight_g, 2),
             "fabric_weight_kg": round(fabric_weight_kg, 4),
             "utilization_rate": round(utilization * 100, 1),
+            "calculated_wastage_rate": round(calculated_wastage_rate, 1),
             "effective_fabric_width_cm": effective_fabric_width,
             "material_breakdown": material_breakdown,
             "warnings": warnings,
@@ -763,7 +774,6 @@ class FabricCalculator:
                 "fabric_type": data.get("fabric_type", "woven"),
                 "fabric_weight_gsm": fabric_weight_gsm,
                 "shrinkage_rate": shrinkage_rate,
-                "wastage_rate": wastage_rate,
                 "quantity": quantity,
             }
         })

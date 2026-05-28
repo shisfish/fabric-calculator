@@ -136,7 +136,6 @@ async function fillEditData(data) {
             weight: data.fabric_weight_gsm,
             type: data.fabric_type,
             shrinkage: data.shrinkage_rate,
-            wastage: data.wastage_rate,
             quantity: data.quantity,
         });
 
@@ -184,7 +183,6 @@ function collectPrecisionDraft() {
             weight: document.getElementById('fabric-weight')?.value || '',
             type: document.getElementById('fabric-type')?.value || '',
             shrinkage: document.getElementById('shrinkage-rate')?.value || '',
-            wastage: document.getElementById('wastage-rate')?.value || '',
             quantity: document.getElementById('quantity')?.value || '',
         },
         pieces: collectPieceRows({ includeEmpty: true }),
@@ -244,7 +242,6 @@ function applyFabricDraft(fabric) {
         'fabric-weight': fabric.weight,
         'fabric-type': fabric.type,
         'shrinkage-rate': fabric.shrinkage,
-        'wastage-rate': fabric.wastage,
         quantity: fabric.quantity,
     };
     Object.entries(fields).forEach(([id, value]) => {
@@ -271,8 +268,6 @@ async function selectCategory(catId, options = {}) {
         const data = await resp.json();
         if (data.success) {
             categoryDetail = data.data;
-            // 更新默认参数
-            document.getElementById('wastage-rate').value = categoryDetail.default_wastage;
             document.getElementById('shrinkage-rate').value = categoryDetail.default_shrinkage;
         }
     } catch (e) {

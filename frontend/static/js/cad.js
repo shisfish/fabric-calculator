@@ -179,7 +179,6 @@ function getFabricParams() {
         width: parseFloat(document.getElementById('fabric-width').value) || 145,
         weightGsm: parseFloat(document.getElementById('fabric-weight').value) || 0,
         shrinkageRate: parseFloat(document.getElementById('shrinkage-rate').value) || 3,
-        wastageRate: parseFloat(document.getElementById('wastage-rate').value) || 8,
         quantity: parseInt(document.getElementById('quantity').value) || 2,
         fabricNap: document.getElementById('fabric-nap')?.checked || false,
         qtyNestMode: document.getElementById('qty-nest-mode')?.checked || false,
@@ -980,7 +979,9 @@ function exportResult() {
     text += `品类: T恤\n`;
     text += `面料门幅: ${params.fabric_width}cm\n`;
     text += `缩水率: ${params.shrinkage_rate}%\n`;
-    text += `损耗率: ${params.wastage_rate}%\n`;
+    if (data.calculated_wastage_rate !== undefined) {
+        text += `计算损耗率: ${data.calculated_wastage_rate}%\n`;
+    }
     text += `订单数量: ${params.quantity}件\n\n`;
 
     text += '--- 计算结果 ---\n';
@@ -1088,7 +1089,6 @@ async function loadEditRecord() {
             if (fabricParams.width) document.getElementById('fabric-width').value = fabricParams.width;
             if (fabricParams.weightGsm) document.getElementById('fabric-weight').value = fabricParams.weightGsm;
             if (fabricParams.shrinkageRate) document.getElementById('shrinkage-rate').value = fabricParams.shrinkageRate;
-            if (fabricParams.wastageRate) document.getElementById('wastage-rate').value = fabricParams.wastageRate;
             if (fabricParams.quantity) document.getElementById('quantity').value = fabricParams.quantity;
 
             document.querySelectorAll('.category-card').forEach(card => {

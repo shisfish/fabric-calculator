@@ -127,11 +127,12 @@ function renderInfoCardCompact(record, isPrecise, categoryName) {
             <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
         </div>`;
     }
-    if (params.wastage_rate !== undefined) {
+    if (params.wastage_rate !== undefined || data.calculated_wastage_rate !== undefined) {
+        const wastageValue = data.calculated_wastage_rate !== undefined ? data.calculated_wastage_rate : params.wastage_rate;
         html += `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">损耗率</span>
-            <strong style="font-size:14px;">${params.wastage_rate}%</strong>
+            <span style="color:var(--text-secondary);font-size:13px;">计算损耗率</span>
+            <strong style="font-size:14px;">${typeof wastageValue === 'number' ? wastageValue.toFixed(1) + '%' : wastageValue + '%'}</strong>
         </div>`;
     }
     if (params.garment_length) {
@@ -178,7 +179,11 @@ function exportDetailResult() {
     text += `面料门幅: ${data.params.fabric_width}cm\n`;
     text += `面料克重: ${data.params.fabric_weight_gsm} g/m²\n`;
     text += `缩水率: ${data.params.shrinkage_rate}%\n`;
-    text += `损耗率: ${data.params.wastage_rate}%\n`;
+    if (data.calculated_wastage_rate !== undefined) {
+        text += `计算损耗率: ${data.calculated_wastage_rate}%\n`;
+    } else if (data.params.wastage_rate !== undefined) {
+        text += `损耗率: ${data.params.wastage_rate}%\n`;
+    }
     text += `订单数量: ${data.params.quantity}件\n`;
     text += `面料利用率: ${data.utilization_rate}%\n\n`;
     text += '--- 计算结果 ---\n';
@@ -416,10 +421,17 @@ function renderQuickResult(record) {
                                 <div class="sub-label">面料利用率</div>
                                 <div class="sub-value">${fullResult.utilization_rate}%</div>
                             </div>
+                            ${fullResult.calculated_wastage_rate !== undefined ? `
+                            <div class="sub-item">
+                                <div class="sub-label">计算损耗率</div>
+                                <div class="sub-value">${fullResult.calculated_wastage_rate}%</div>
+                            </div>
+                            ` : (fullResult.wastage_rate !== undefined ? `
                             <div class="sub-item">
                                 <div class="sub-label">损耗率</div>
                                 <div class="sub-value">${fullResult.wastage_rate}%</div>
                             </div>
+                            ` : '')}
                         </div>
                     </div>
                 </div>
