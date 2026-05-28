@@ -572,7 +572,11 @@ async function calculate() {
                     }))
                 },
                 fabricWidth: data.fabric_width,
-                seamAllowance: 1.5
+                seamAllowance: 1.5,
+                fabricType: data.fabric_type,
+                fabricWeight: data.fabric_weight_gsm,
+                shrinkRate: data.shrinkage_rate,
+                quantity: data.quantity
             }),
             signal: controller.signal,
         });

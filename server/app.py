@@ -995,16 +995,33 @@ def calc_all():
                 "params": {
                     "fabric_width": fabric_width,
                     "seam_allowance": seam_allowance,
+                    "fabric_type": data.get("fabricType", "woven"),
+                    "fabric_weight_gsm": data.get("fabricWeight", 0),
+                    "shrinkage_rate": data.get("shrinkRate", 3),
+                    "quantity": data.get("quantity", 1),
                     **measurements
                 },
                 "result": {
                     "per_piece_length_m": nesting_data.get("per_piece_length_m", 0),
                     "total_area_m2": nesting_data.get("total_area_m2", 0),
                     "utilization_rate": nesting_data.get("utilization_rate", 0),
+                    "fabric_weight_kg": (nesting_data.get("total_area_m2", 0) * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0,
+                    "main_fabric_per_piece_m": nesting_data.get("per_piece_length_m", 0),
+                    "lining_per_piece_m": 0,
+                    "calculated_wastage_rate": round((100 - (nesting_data.get("utilization_rate", 0) or 0)), 1) if nesting_data.get("utilization_rate", 0) > 0 else 8,
                 },
                 "input_data": data,
                 "full_result": {
                     **result,
+                    "material_breakdown": {
+                        "main_fabric": {
+                            "name": "主面料",
+                            "length_m": nesting_data.get("per_piece_length_m", 0),
+                            "area_m2": nesting_data.get("total_area_m2", 0),
+                            "weight_kg": (nesting_data.get("total_area_m2", 0) * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0,
+                            "width_utilization": nesting_data.get("utilization_rate", 0)
+                        }
+                    },
                     "piece_images": piece_images,
                     "seam_images": seam_images,
                     "nesting_images": nesting_images,
