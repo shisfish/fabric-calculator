@@ -123,14 +123,15 @@ class DatabaseManager:
     # 历史记录列表（主表）
     # ============================================================
 
-    def load_history(self, page=1, page_size=20, record_type=None):
+    def load_history(self, page=1, page_size=20, record_type=None, user_id=None):
         """
-        加载历史记录列表（支持分页和类型筛选）
+        加载历史记录列表（支持分页和类型筛选，可按用户过滤）
 
         Args:
             page: 页码（从1开始）
             page_size: 每页数量
             record_type: 筛选类型 (quick/precise/curved/polygon/cad)，None表示全部
+            user_id: 用户ID（可选，如果提供则只返回该用户的数据）
 
         Returns:
             dict: {
@@ -151,6 +152,11 @@ class DatabaseManager:
             if record_type:
                 count_sql += " AND type = %s"
                 count_params.append(record_type)
+            
+            # 添加用户过滤条件
+            if user_id:
+                count_sql += " AND user_id = %s"
+                count_params.append(user_id)
 
             with conn.cursor() as count_cursor:
                 count_cursor.execute(count_sql, count_params)
@@ -175,6 +181,11 @@ class DatabaseManager:
             if record_type:
                 query_sql += " AND type = %s"
                 query_params.append(record_type)
+            
+            # 添加用户过滤条件
+            if user_id:
+                query_sql += " AND user_id = %s"
+                query_params.append(user_id)
 
             query_sql += " ORDER BY timestamp DESC LIMIT %s OFFSET %s"
             query_params.extend([page_size, offset])
@@ -266,7 +277,10 @@ class DatabaseManager:
         try:
             conn = self._get_connection_for_save()
             
-            # 1. 写主表
+            # 获取当前用户ID（从record中传入）
+            user_id = record.get('user_id')
+            
+            # 1. 写主表（包含 user_id）
             with conn.cursor() as cursor:
                 cursor.execute("""
                 INSERT INTO calculation_history
@@ -274,8 +288,9 @@ class DatabaseManager:
                  fabric_width, fabric_type, fabric_weight_gsm,
                  shrinkage_rate, wastage_rate, quantity,
                  per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg,
-                 main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count,
+                 user_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                 timestamp = VALUES(timestamp),
                 type = VALUES(type),
@@ -293,10 +308,11 @@ class DatabaseManager:
                 fabric_weight_kg = VALUES(fabric_weight_kg),
                 main_fabric_per_piece_m = VALUES(main_fabric_per_piece_m),
                 lining_per_piece_m = VALUES(lining_per_piece_m),
-                curved_pieces_count = VALUES(curved_pieces_count)
-            """, self._extract_main_fields(record))
+                curved_pieces_count = VALUES(curved_pieces_count),
+                user_id = VALUES(user_id)
+            """, self._extract_main_fields(record) + (user_id,))
 
-            # 2. 写裁片明细（先删后插）
+            # 2. 写裁片明细（先删后插，包含 user_id）
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record['id'],))
                 pieces = record.get('input_data', {}).get('pieces', [])
@@ -307,8 +323,9 @@ class DatabaseManager:
                         INSERT INTO history_pieces
                         (history_id, piece_name, original_length, original_width,
                          piece_count, shape, material, seam_allowance,
-                         piece_id, shoulder_width, bicep_width, cuff_width)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         piece_id, shoulder_width, bicep_width, cuff_width,
+                         user_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         record['id'],
                         p.get('name', ''),
@@ -322,9 +339,10 @@ class DatabaseManager:
                         p.get('shoulder_width'),
                         p.get('bicep_width'),
                         p.get('cuff_width'),
+                        user_id,
                     ))
 
-            # 3. 写快速估算参数（仅 quick 类型）
+            # 3. 写快速估算参数（仅 quick 类型，包含 user_id）
             if record['type'] == 'quick':
                 with conn.cursor() as cursor:
                     cursor.execute("DELETE FROM history_quick_params WHERE history_id = %s", (record['id'],))
@@ -332,8 +350,9 @@ class DatabaseManager:
                     cursor.execute("""
                         INSERT INTO history_quick_params
                         (history_id, garment_length, chest, shoulder, sleeve_length,
-                         has_hood, has_lining, style_complexity)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                         has_hood, has_lining, style_complexity,
+                         user_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         record['id'],
                         input_data.get('garment_length'),
@@ -343,6 +362,7 @@ class DatabaseManager:
                         1 if input_data.get('has_hood') else 0,
                         1 if input_data.get('has_lining') else 0,
                         input_data.get('style_complexity'),
+                        user_id,
                     ))
 
             # 4. ✅ 写材料用量汇总（所有类型共享）
@@ -369,8 +389,9 @@ class DatabaseManager:
 
                         cursor.execute("""
                             INSERT INTO history_materials
-                            (history_id, material, material_name, length_m, area_m2, weight_kg, width_utilization)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            (history_id, material, material_name, length_m, area_m2, weight_kg, width_utilization,
+                             user_id)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         """, (
                             record['id'],
                             mat_key,
@@ -379,13 +400,14 @@ class DatabaseManager:
                             mat_val.get('area_m2'),
                             mat_val.get('weight_kg'),
                             safe_utilization,
+                            user_id,
                         ))
                         
                         print(f"   - {mat_val.get('name', mat_key)}: {mat_val.get('length_m')}m")
             else:
                 print(f"[DB] ⚠️ 无 material_breakdown 数据，跳过保存")
 
-            # 5. ✅ 写图片路径（所有类型共享）
+            # 5. ✅ 写图片路径（所有类型共享，包含 user_id）
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record['id'],))
                 piece_images = full_result.get('piece_images', [])
@@ -398,14 +420,16 @@ class DatabaseManager:
                     if file_path:
                         cursor.execute("""
                             INSERT INTO history_images
-                            (history_id, image_type, image_name, image_path, image_order)
-                            VALUES (%s, %s, %s, %s, %s)
+                            (history_id, image_type, image_name, image_path, image_order,
+                             user_id)
+                            VALUES (%s, %s, %s, %s, %s, %s)
                         """, (
                             record['id'],
                             'piece',
                             img_info.get('name', ''),
                             file_path,
                             idx,
+                            user_id,
                         ))
                         image_count += 1
 
@@ -414,14 +438,16 @@ class DatabaseManager:
                     if file_path:
                         cursor.execute("""
                             INSERT INTO history_images
-                            (history_id, image_type, image_name, image_path, image_order)
-                            VALUES (%s, %s, %s, %s, %s)
+                            (history_id, image_type, image_name, image_path, image_order,
+                             user_id)
+                            VALUES (%s, %s, %s, %s, %s, %s)
                         """, (
                             record['id'],
                             'nesting',
                             img_info.get('material_name', ''),
                             file_path,
                             idx,
+                            user_id,
                         ))
                         image_count += 1
 
@@ -431,14 +457,16 @@ class DatabaseManager:
                     if file_path:
                         cursor.execute("""
                             INSERT INTO history_images
-                            (history_id, image_type, image_name, image_path, image_order)
-                            VALUES (%s, %s, %s, %s, %s)
+                            (history_id, image_type, image_name, image_path, image_order,
+                             user_id)
+                            VALUES (%s, %s, %s, %s, %s, %s)
                         """, (
                             record['id'],
                             'seam',
                             img_info.get('name', '缝份图'),
                             file_path,
                             idx,
+                            user_id,
                         ))
                         image_count += 1
                 

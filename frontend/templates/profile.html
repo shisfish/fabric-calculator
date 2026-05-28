@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人中心 - 面料用量快速计算系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .profile-container {
+            max-width: 900px;
+            margin: 24px auto;
+            padding: 0 20px;
+        }
+
+        .page-header {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .avatar {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            color: white;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+        }
+
+        .user-details h2 {
+            font-size: 26px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 6px;
+        }
+
+        .user-details p {
+            color: #64748b;
+            font-size: 15px;
+            margin-bottom: 12px;
+        }
+
+        .user-meta {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .meta-item {
+            background: #f1f5f9;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .stat-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px;
+            font-size: 28px;
+        }
+
+        .stat-icon.blue { background: #dbeafe; }
+        .stat-icon.green { background: #dcfce7; }
+        .stat-icon.purple { background: #ede9fe; }
+        .stat-icon.orange { background: #fef3c7; }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #64748b;
+        }
+
+        .section {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #f1f5f9;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 22px;
+            background: linear-gradient(180deg, #3b82f6, #60a5fa);
+            border-radius: 2px;
+        }
+
+        .btn-outline-sm {
+            padding: 7px 16px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            color: #475569;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+
+        .btn-outline-sm:hover {
+            border-color: #3b82f6;
+            color: #2563eb;
+            background: #eff6ff;
+        }
+
+        .btn-danger {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #fee2e2;
+            color: #dc2626;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+
+        .btn-danger:hover {
+            background: #fecaca;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .info-item {
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 10px;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .info-label {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 6px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="nav-icon">✂️</span>
+            <span class="nav-title">面料用量快速计算系统</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">首页计算</a>
+            <a href="/cad" class="nav-link">CAD排料</a>
+            <a href="/history" class="nav-link">历史记录</a>
+            <a href="/quotation" class="nav-link">报价管理</a>
+            <a href="/profile" class="nav-link active">个人中心</a>
+            <button onclick="handleLogout()" class="btn btn-sm btn-outline" style="margin-left:12px;">退出登录</button>
+        </div>
+    </nav>
+
+    <div class="profile-container">
+        <!-- 用户信息卡片 -->
+        <div class="page-header">
+            <div class="user-info">
+                <div class="avatar" id="user-avatar">👤</div>
+                <div class="user-details">
+                    <h2 id="user-nickname">加载中...</h2>
+                    <p id="user-username">@username</p>
+                    <div class="user-meta">
+                        <span class="meta-item" id="user-role-badge">普通用户</span>
+                        <span class="meta-item" id="user-status">账号正常</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 统计数据 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon blue">📊</div>
+                <div class="stat-value" id="total-calculations">-</div>
+                <div class="stat-label">总计算次数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">✂️</div>
+                <div class="stat-value" id="precise-count">-</div>
+                <div class="stat-label">精确计算</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple">🎨</div>
+                <div class="stat-value" id="cad-count">-</div>
+                <div class="stat-label">CAD排料</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon orange">📅</div>
+                <div class="stat-value" id="last-login">-</div>
+                <div class="stat-label">最后登录</div>
+            </div>
+        </div>
+
+        <!-- 账号信息 -->
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">账号信息</h3>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">用户ID</div>
+                    <div class="info-value" id="info-user-id">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">用户名</div>
+                    <div class="info-value" id="info-username">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">昵称</div>
+                    <div class="info-value" id="info-nickname">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">角色权限</div>
+                    <div class="info-value" id="info-role">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">账户操作</h3>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <button onclick="window.location.href='/history'" class="btn-outline-sm">
+                    📜 查看我的历史记录
+                </button>
+                <button onclick="handleLogout()" class="btn-danger">
+                    🚪 退出登录
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadUserInfo();
+            await loadUserStats();
+        });
+
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/auth/current-user');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    currentUser = data.data;
+                    
+                    // 更新用户信息显示
+                    document.getElementById('user-nickname').textContent = currentUser.nickname || '未设置昵称';
+                    document.getElementById('user-username').textContent = '@' + currentUser.username;
+                    document.getElementById('user-avatar').textContent = (currentUser.nickname || '用').charAt(0).toUpperCase();
+                    
+                    // 角色显示
+                    const roleMap = { admin: '管理员', user: '普通用户' };
+                    document.getElementById('user-role-badge').textContent = roleMap[currentUser.role] || '普通用户';
+                    if (currentUser.role === 'admin') {
+                        document.getElementById('user-role-badge').style.background = '#ede9fe';
+                        document.getElementById('user-role-badge').color = '#7c3aed';
+                    }
+                    
+                    // 账号信息
+                    document.getElementById('info-user-id').textContent = currentUser.user_id;
+                    document.getElementById('info-username').textContent = currentUser.username;
+                    document.getElementById('info-nickname').textContent = currentUser.nickname || '未设置';
+                    document.getElementById('info-role').textContent = roleMap[currentUser.role] || '普通用户';
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('获取用户信息失败:', error);
+                window.location.href = '/login';
+            }
+        }
+
+        async function loadUserStats() {
+            try {
+                const response = await fetch('/api/calc/all?limit=100');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const records = data.data.records || [];
+                    
+                    // 统计各类型数量
+                    let total = records.length;
+                    let preciseCount = records.filter(r => r.type === 'precise').length;
+                    let cadCount = records.filter(r => r.type === 'cad').length;
+                    
+                    // 更新统计数字（带动画效果）
+                    animateNumber('total-calculations', total);
+                    animateNumber('precise-count', preciseCount);
+                    animateNumber('cad-count', cadCount);
+                }
+                
+                // 显示最后登录时间（从session或本地存储）
+                const lastLogin = localStorage.getItem('last_login_time') || new Date().toLocaleString();
+                document.getElementById('last-login').textContent = lastLogin.split(' ')[0];
+                
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+            }
+        }
+
+        function animateNumber(elementId, targetValue) {
+            const element = document.getElementById(elementId);
+            let current = 0;
+            const increment = Math.ceil(targetValue / 30);
+            
+            const timer = setInterval(() => {
+                current += increment;
+                if (current >= targetValue) {
+                    current = targetValue;
+                    clearInterval(timer);
+                }
+                element.textContent = current;
+            }, 30);
+        }
+
+        async function handleLogout() {
+            if (!confirm('确定要退出登录吗？')) return;
+            
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                localStorage.removeItem('last_login_time');
+                window.location.href = '/login';
+            } catch (error) {
+                console.error('登出失败:', error);
+                window.location.href = '/login';
+            }
+        }
+    </script>
+</body>
+</html>

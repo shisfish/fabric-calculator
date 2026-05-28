@@ -4,7 +4,8 @@
 Fabric Consumption Quick Calculator
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from functools import wraps
 from calculator_engine import FabricCalculator, QuotationEngine
 from curved_engine import CurvedPieceCalculator
 from db_manager import db_manager
@@ -12,6 +13,7 @@ from pymysql import OperationalError
 import json
 import os
 import sys
+import hashlib
 from datetime import datetime
 
 # 前端资源路径（相对于server/目录）
@@ -20,6 +22,7 @@ app = Flask(__name__,
             template_folder=os.path.join(_FRONTEND_DIR, 'templates'),
             static_folder=os.path.join(_FRONTEND_DIR, 'static'))
 app.config['JSON_AS_ASCII'] = False
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'fabric-calculator-secret-key-2026')  # Session密钥
 
 calculator = FabricCalculator()
 quotation_engine = QuotationEngine()
@@ -38,6 +41,159 @@ os.makedirs(os.path.join(DATA_DIR, 'uploads'), exist_ok=True)
 # 项目内 uploads 目录
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+# ============================================================
+# 用户认证辅助函数
+# ============================================================
+
+def login_required(f):
+    """登录验证装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            if request.is_json or request.path.startswith('/api/'):
+                return jsonify({"success": False, "message": "请先登录", "code": 401}), 401
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def get_current_user():
+    """获取当前登录用户信息"""
+    if 'user_id' not in session:
+        return None
+    try:
+        conn = db_manager.get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, username, nickname, avatar_url, role, status
+                FROM users 
+                WHERE id = %s AND status = 1
+            """, (session['user_id'],))
+            user = cursor.fetchone()
+            return user
+    except Exception as e:
+        print(f"[Auth] 获取用户信息失败: {e}")
+        return None
+
+
+def hash_password(password):
+    """密码哈希（SHA256）"""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+# ============================================================
+# 用户认证 API
+# ============================================================
+
+@app.route('/login')
+def login():
+    """登录页面"""
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """用户登录API"""
+    data = request.get_json()
+    
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    
+    if not username or not password:
+        return jsonify({"success": False, "message": "请输入用户名和密码"}), 400
+    
+    try:
+        conn = db_manager.get_connection()
+        with conn.cursor() as cursor:
+            # 查询用户
+            cursor.execute("""
+                SELECT id, username, password_hash, nickname, avatar_url, role, status
+                FROM users 
+                WHERE username = %s
+            """, (username,))
+            user = cursor.fetchone()
+            
+            if not user:
+                return jsonify({"success": False, "message": "用户名或密码错误"}), 401
+            
+            # 验证密码
+            password_hash = hash_password(password)
+            if user['password_hash'] != password_hash:
+                return jsonify({"success": False, "message": "用户名或密码错误"}), 401
+            
+            # 检查账号状态
+            if user['status'] != 1:
+                return jsonify({"success": False, "message": "账号已被禁用"}), 403
+            
+            # 设置会话
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['nickname'] = user['nickname'] or user['username']
+            session['role'] = user['role']
+            
+            # 更新最后登录时间
+            cursor.execute("""
+                UPDATE users SET last_login_at = NOW(), last_login_ip = %s WHERE id = %s
+            """, (request.remote_addr, user['id']))
+            
+            print(f"[Auth] ✅ 用户登录成功: {user['username']} ({user['nickname']})")
+            
+            return jsonify({
+                "success": True,
+                "message": "登录成功",
+                "data": {
+                    "user_id": user['id'],
+                    "username": user['username'],
+                    "nickname": user['nickname'] or user['username'],
+                    "avatar_url": user.get('avatar_url', ''),
+                    "role": user['role']
+                }
+            })
+            
+    except Exception as e:
+        print(f"[Auth] ❌ 登录失败: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"登录失败: {str(e)}"}), 500
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def api_logout():
+    """用户登出API"""
+    username = session.get('username', '未知')
+    session.clear()
+    print(f"[Auth] ✅ 用户已登出: {username}")
+    return jsonify({"success": True, "message": "已退出登录"})
+
+
+@app.route('/api/auth/current-user')
+def api_get_current_user():
+    """获取当前登录用户信息"""
+    user = get_current_user()
+    if not user:
+        return jsonify({"success": False, "message": "未登录", "data": None})
+    
+    return jsonify({
+        "success": True,
+        "data": {
+            "user_id": user['id'],
+            "username": user['username'],
+            "nickname": user['nickname'] or user['username'],
+            "avatar_url": user.get('avatar_url', ''),
+            "role": user['role']
+        }
+    })
+
+
+@app.route('/profile')
+@login_required
+def profile():
+    """个人中心页面"""
+    return render_template('profile.html')
 
 
 # ============================================================
@@ -162,7 +318,10 @@ def calculate_quotation():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """获取历史记录（支持分页和类型筛选）"""
+    """获取历史记录（支持分页和类型筛选，只返回当前用户的数据）"""
+    # 获取当前用户ID
+    user_id = session.get('user_id')
+    
     # 获取查询参数
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('pageSize', 20))
@@ -174,7 +333,7 @@ def get_history():
     if page_size < 1 or page_size > 100:
         page_size = 20
 
-    result = db_manager.load_history(page=page, page_size=page_size, record_type=record_type)
+    result = db_manager.load_history(page=page, page_size=page_size, record_type=record_type, user_id=user_id)
     
     return jsonify({
         "success": True,
@@ -464,6 +623,7 @@ def calculate_curved():
             },
             "input_data": data,
             "full_result": result,
+            "user_id": session.get('user_id'),  # 关联当前用户
         }
         db_manager.save_record(record)
 
@@ -724,6 +884,7 @@ def api_polygon_nesting():
                 "warnings": warnings,
                 "nesting_images": nesting_images,
             },
+            "user_id": session.get('user_id'),  # 关联当前用户
         }
         db_manager.save_record(record)
         
@@ -863,6 +1024,7 @@ def cad_nesting():
             },
             "input_data": data,
             "full_result": result,
+            "user_id": session.get('user_id'),  # 关联当前用户
         }
         try:
             db_manager.save_record(record)
@@ -1078,6 +1240,7 @@ def calc_all():
                     "seam_images": seam_images,
                     "nesting_images": nesting_images,
                 },
+                "user_id": session.get('user_id'),  # 关联当前用户
             }
             
             try:
