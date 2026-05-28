@@ -205,7 +205,7 @@ export class WindbreakerPatternGenerator {
     logger.info(`📐 后片: ${W}×${L}cm, 袖窿=${armLen.toFixed(1)}cm, 过肩=${yD}cm, 开衩=${vL}cm`);
 
     return {
-      name: 'back',
+      name: '后片',
       path,
       points: p,
       seamAllowance: _sa,
@@ -278,7 +278,7 @@ export class WindbreakerPatternGenerator {
     logger.info(`📐 前片: ${W}×${L}cm, 袖窿=${armLen.toFixed(1)}cm, 门襟=${pkW}cm, 领深=${nD}cm`);
 
     return {
-      name: 'front',
+      name: '前片',
       path,
       points: p,
       seamAllowance: _sa,
@@ -418,7 +418,7 @@ export class WindbreakerPatternGenerator {
 
     return {
       frontSleeve: {
-        name: 'frontSleeve',
+        name: '前袖',
         path: frontPath,
         points: fs,
         seamAllowance: _sa,
@@ -439,7 +439,7 @@ export class WindbreakerPatternGenerator {
         isMirrorable: true,
       },
       backSleeve: {
-        name: 'backSleeve',
+        name: '后袖',
         path: backPath,
         points: bs,
         seamAllowance: _sa,
@@ -514,7 +514,7 @@ export class WindbreakerPatternGenerator {
     logger.info(`📐 领子: 长${cL}cm, 翻领${cW}cm, 领座${sH}cm`);
 
     return {
-      name: 'collar',
+      name: '领子',
       path,
       points: p,
       seamAllowance: _sa,
@@ -545,7 +545,7 @@ export class WindbreakerPatternGenerator {
       pieces.push(this.createBackStormShieldPiece(params.backPanel.width * 1.55, 13, 1, sa));
 
       const width = Math.max(front.placketWidth ?? 6, 5);
-      pieces.push(this.createRectanglePiece('frontFacing', width, front.length, 2, sa, {
+      pieces.push(this.createRectanglePiece('门襟贴边', width, front.length, 2, sa, {
         grainline: 'vertical',
         allowedRotations: [0, 180],
       }));
@@ -553,27 +553,27 @@ export class WindbreakerPatternGenerator {
 
     if (params.hasBelt) {
       const length = Math.max((params.backPanel.width + params.frontPanel.width * 2) * 0.92, 95);
-      pieces.push(this.createRectanglePiece('belt', length, 5.5, 1, sa, {
+      pieces.push(this.createRectanglePiece('腰带', length, 5.5, 1, sa, {
         grainline: 'horizontal',
         allowedRotations: [0, 180],
       }));
     }
 
     if (params.hasEpaulettes) {
-      pieces.push(this.createTaperedTabPiece('epaulette', 15, 5.5, 4.2, 2, sa));
+      pieces.push(this.createTaperedTabPiece('肩袢', 15, 5.5, 4.2, 2, sa));
     }
 
-    pieces.push(this.createRectanglePiece('sleeveTab', Math.max(sleeve.cuffWidth * 0.75, 11), 4.5, 2, sa, {
+    pieces.push(this.createRectanglePiece('袖袢', Math.max(sleeve.cuffWidth * 0.75, 11), 4.5, 2, sa, {
       grainline: 'horizontal',
       allowedRotations: [0, 180],
     }));
 
-    pieces.push(this.createRectanglePiece('cuff', Math.max(sleeve.cuffWidth * 2 + 4, 36), 8, 2, sa, {
+    pieces.push(this.createRectanglePiece('袖口', Math.max(sleeve.cuffWidth * 2 + 4, 36), 8, 2, sa, {
       grainline: 'horizontal',
       allowedRotations: [0, 180],
     }));
 
-    pieces.push(this.createRectanglePiece('pocketFlap', 16, 5, 2, sa, {
+    pieces.push(this.createRectanglePiece('袋盖', 16, 5, 2, sa, {
       grainline: 'horizontal',
       allowedRotations: [0, 180],
     }));
@@ -649,7 +649,7 @@ export class WindbreakerPatternGenerator {
       .close();
 
     return {
-      name: 'backStormShield',
+      name: '后覆肩',
       path,
       points: p,
       seamAllowance,

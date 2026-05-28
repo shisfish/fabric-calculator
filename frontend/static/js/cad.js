@@ -522,16 +522,16 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    ctx.fillStyle = '#050505';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    ctx.fillStyle = 'rgba(0, 255, 255, 0.08)';
-    ctx.strokeStyle = '#00ffff';
-    ctx.lineWidth = 1.2 / scale;
+    ctx.fillStyle = '#e3f2fd';
+    ctx.strokeStyle = '#1976d2';
+    ctx.lineWidth = 1.5 / scale;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -566,7 +566,7 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#39ff14';
+    ctx.fillStyle = '#dc2626';
     keyPoints.forEach((pt, i) => {
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, 1.5 / scale, 0, Math.PI * 2);
@@ -579,8 +579,8 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
         const angle = Math.atan2(ge.y - gs.y, ge.x - gs.x);
         const arrow = 4 / scale;
 
-        ctx.strokeStyle = '#00ffff';
-        ctx.fillStyle = '#00ffff';
+        ctx.strokeStyle = '#0891b2';
+        ctx.fillStyle = '#0891b2';
         ctx.lineWidth = 1.2 / scale;
         ctx.beginPath();
         ctx.moveTo(gs.x, gs.y);
@@ -602,7 +602,7 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     }
 
     if (Array.isArray(pieceData?.notches)) {
-        ctx.fillStyle = '#39ff14';
+        ctx.fillStyle = '#16a34a';
         pieceData.notches.forEach(notch => {
             if (!notch || !Number.isFinite(notch.x) || !Number.isFinite(notch.y)) return;
             const size = 2.2 / scale;
@@ -632,14 +632,14 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     // ctx.setLineDash([]);
     ctx.restore();
 
-    ctx.fillStyle = '#ff3bbd';
+    ctx.fillStyle = '#dc2626';
     ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
 
     const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
 
     const textMetrics = ctx.measureText(infoText);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.fillRect(
         canvas.width / 2 - textMetrics.width / 2 - 6,
         canvas.height - 18,
@@ -647,7 +647,7 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
         16
     );
 
-    ctx.fillStyle = '#ff3bbd';
+    ctx.fillStyle = '#dc2626';
     ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
 
     if (pieceData && pieceData.bbox) {
