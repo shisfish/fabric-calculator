@@ -127,8 +127,8 @@ function renderInfoCardCompact(record, isPrecise, categoryName) {
             <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
         </div>`;
     }
-    if (params.wastage_rate !== undefined || data.calculated_wastage_rate !== undefined) {
-        const wastageValue = data.calculated_wastage_rate !== undefined ? data.calculated_wastage_rate : params.wastage_rate;
+    if (params.wastage_rate !== undefined || record.result && record.result.calculated_wastage_rate !== undefined) {
+        const wastageValue = (record.result && record.result.calculated_wastage_rate !== undefined) ? record.result.calculated_wastage_rate : params.wastage_rate;
         html += `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">计算损耗率</span>
