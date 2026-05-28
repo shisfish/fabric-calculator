@@ -324,7 +324,7 @@ class DatabaseManager:
                         p.get('cuff_width'),
                     ))
 
-            # 3. 写快速估算参数
+            # 3. 写快速估算参数（仅 quick 类型）
             if record['type'] == 'quick':
                 with conn.cursor() as cursor:
                     cursor.execute("DELETE FROM history_quick_params WHERE history_id = %s", (record['id'],))
@@ -345,11 +345,16 @@ class DatabaseManager:
                         input_data.get('style_complexity'),
                     ))
 
-                # 4. 写材料用量汇总
+            # 4. ✅ 写材料用量汇总（所有类型共享）
+            full_result = record.get('full_result', {})
+            material_breakdown = full_result.get('material_breakdown', {})
+            
+            if material_breakdown:
+                print(f"[DB] 💾 保存材料数据: {list(material_breakdown.keys())}")
+                
                 with conn.cursor() as cursor:
                     cursor.execute("DELETE FROM history_materials WHERE history_id = %s", (record['id'],))
-                    full_result = record.get('full_result', {})
-                    material_breakdown = full_result.get('material_breakdown', {})
+                    
                     for mat_key, mat_val in material_breakdown.items():
                         raw_utilization = mat_val.get('width_utilization')
                         if raw_utilization is None:
@@ -375,58 +380,70 @@ class DatabaseManager:
                             mat_val.get('weight_kg'),
                             safe_utilization,
                         ))
+                        
+                        print(f"   - {mat_val.get('name', mat_key)}: {mat_val.get('length_m')}m")
+            else:
+                print(f"[DB] ⚠️ 无 material_breakdown 数据，跳过保存")
 
-                # 5. 写图片路径（先删后插）
-                with conn.cursor() as cursor:
-                    cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record['id'],))
-                    piece_images = full_result.get('piece_images', [])
-                    nesting_images = full_result.get('nesting_images', [])
+            # 5. ✅ 写图片路径（所有类型共享）
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record['id'],))
+                piece_images = full_result.get('piece_images', [])
+                nesting_images = full_result.get('nesting_images', [])
+                
+                image_count = 0
 
-                    for idx, img_info in enumerate(piece_images):
-                        file_path = img_info.get('file_path')
-                        if file_path:
-                            cursor.execute("""
-                                INSERT INTO history_images
-                                (history_id, image_type, image_name, image_path, image_order)
-                                VALUES (%s, %s, %s, %s, %s)
-                            """, (
-                                record['id'],
-                                'piece',
-                                img_info.get('name', ''),
-                                file_path,
-                                idx,
-                            ))
+                for idx, img_info in enumerate(piece_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'piece',
+                            img_info.get('name', ''),
+                            file_path,
+                            idx,
+                        ))
+                        image_count += 1
 
-                    for idx, img_info in enumerate(nesting_images):
-                        file_path = img_info.get('file_path')
-                        if file_path:
-                            cursor.execute("""
-                                INSERT INTO history_images
-                                (history_id, image_type, image_name, image_path, image_order)
-                                VALUES (%s, %s, %s, %s, %s)
-                            """, (
-                                record['id'],
-                                'nesting',
-                                img_info.get('material_name', ''),
-                                file_path,
-                                idx,
-                            ))
+                for idx, img_info in enumerate(nesting_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'nesting',
+                            img_info.get('material_name', ''),
+                            file_path,
+                            idx,
+                        ))
+                        image_count += 1
 
-                    seam_images = full_result.get('seam_images', [])
-                    for idx, img_info in enumerate(seam_images):
-                        file_path = img_info.get('file_path')
-                        if file_path:
-                            cursor.execute("""
-                                INSERT INTO history_images
-                                (history_id, image_type, image_name, image_path, image_order)
-                                VALUES (%s, %s, %s, %s, %s)
-                            """, (
-                                record['id'],
-                                'seam',
-                                img_info.get('name', '缝份图'),
-                                file_path,
-                                idx,
-                            ))
+                seam_images = full_result.get('seam_images', [])
+                for idx, img_info in enumerate(seam_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'seam',
+                            img_info.get('name', '缝份图'),
+                            file_path,
+                            idx,
+                        ))
+                        image_count += 1
+                
+                if image_count > 0:
+                    print(f"[DB] 💾 保存 {image_count} 张图片")
 
             print(f"[DB] ✅ 记录保存成功: {record.get('id', 'unknown')}")
 
