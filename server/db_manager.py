@@ -5,6 +5,8 @@
 
 import os
 import pymysql
+import time
+from pymysql import OperationalError
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -21,26 +23,66 @@ class DatabaseManager:
 
     @contextmanager
     def _get_connection(self):
-        """获取数据库连接"""
+        """获取数据库连接（带重试机制）"""
         conn = None
-        try:
-            conn = pymysql.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
-                password=self.password,
-                database=self.database,
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-            yield conn
-        except Exception as e:
-            if conn:
-                conn.rollback()
-            raise e
-        finally:
-            if conn:
-                conn.close()
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                conn = pymysql.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.user,
+                    password=self.password,
+                    database=self.database,
+                    charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor,
+                    connect_timeout=10,      # 连接超时10秒
+                    read_timeout=30,         # 读取超时30秒
+                    write_timeout=30,        # 写入超时30秒
+                    autocommit=False         # 手动事务控制
+                )
+                
+                yield conn
+                
+                break  # 成功执行，退出循环
+                
+            except OperationalError as e:
+                retry_count += 1
+                
+                if conn:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+                    conn = None
+                
+                if retry_count >= max_retries:
+                    print(f"[DB] 数据库连接失败，已重试 {max_retries} 次: {e}")
+                    raise e
+                    
+                wait_time = retry_count * 1  # 递增等待时间：1s, 2s, 3s
+                print(f"[DB] 连接失败，第 {retry_count} 次重试... ({wait_time}s后)")
+                time.sleep(wait_time)
+                
+            except Exception as e:
+                if conn:
+                    try:
+                        conn.rollback()
+                    except:
+                        pass
+                    try:
+                        conn.close()
+                    except:
+                        pass
+                raise e
+            finally:
+                if conn and retry_count < max_retries:
+                    try:
+                        conn.close()
+                    except:
+                        pass
 
     # ============================================================
     # 历史记录列表（主表）
@@ -333,9 +375,17 @@ class DatabaseManager:
                         ))
 
             conn.commit()
+            print(f"[DB] ✅ 记录保存成功: {record.get('id', 'unknown')}")
+        except OperationalError as e:
+            print(f"[DB] ❌ 数据库连接错误: {type(e).__name__}: {str(e)}")
+            print(f"  可能原因: MySQL服务未启动/网络中断/连接超时")
+            print(f"  主机: {self.host}:{self.port}, 数据库: {self.database}")
+            raise e  # 重新抛出，让调用方处理
         except Exception as e:
-            print(f"[DB] 保存记录失败（数据库不可用，已跳过）: {str(e)}")
-            pass
+            print(f"[DB] ❌ 保存记录失败: {type(e).__name__}: {str(e)}")
+            import traceback
+            print(f"  详细堆栈:\n{traceback.format_exc()}")
+            raise e  # 重新抛出，让调用方处理
 
     def _extract_main_fields(self, record):
         """从 record 字典提取主表字段"""

@@ -8,6 +8,7 @@ from flask import Flask, render_template, request, jsonify, send_file
 from calculator_engine import FabricCalculator, QuotationEngine
 from curved_engine import CurvedPieceCalculator
 from db_manager import db_manager
+from pymysql import OperationalError
 import json
 import os
 import sys
@@ -1073,8 +1074,13 @@ def calc_all():
                 db_manager.save_record(record)
                 print(f"[Calc-Engine] ✅ 已成功保存到数据库: {record_id}")
 
+            except OperationalError as db_err:
+                print(f"\n[Calc-Engine] ⚠️ 数据库连接错误（计算结果正常，仅保存失败）!")
+                print(f"  错误类型: {type(db_err).__name__}")
+                print(f"  错误信息: {str(db_err)}")
+                print(f"  建议: 检查MySQL容器状态 - docker ps | grep mysql")
             except Exception as e:
-                print(f"[Calc-Engine] ❌ 保存历史记录失败!")
+                print(f"\n[Calc-Engine] ⚠️ 保存历史记录失败（计算结果正常，仅保存失败）!")
                 print(f"  错误类型: {type(e).__name__}")
                 print(f"  错误信息: {str(e)}")
                 print(f"  详细堆栈:\n{traceback.format_exc()}")
