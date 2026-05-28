@@ -9,8 +9,8 @@ export function adaptWindbreakerInput(garmentInput: any, seamAllowance: number):
 
   const neckWidth = gi.neckWidth || 18.5;
   const defaultArmholeDepth = gi.armholeDepth || 30;
-  const backLength = back.bodyLength || 60;
-  const frontLength = front.bodyLength || 61;
+  const backLength = back.bodyLength || 95;
+  const frontLength = front.bodyLength || 96;
   const clampArmholeDepth = (value: any, length: number) => {
     const numeric = Number(value) || defaultArmholeDepth;
     return Math.min(Math.max(numeric, 20), Math.max(20, length - 8));
@@ -27,7 +27,7 @@ export function adaptWindbreakerInput(garmentInput: any, seamAllowance: number):
       shoulderSlope: 3.5,
       armholeDepth: clampArmholeDepth(back.armholeDepth, backLength),
       yokeDepth: back.yokeDepth || 12,
-      ventLength: back.ventLength || 18,
+      ventLength: back.ventLength || 35,
       hemExtension: 2,
     },
     frontPanel: {
@@ -46,13 +46,13 @@ export function adaptWindbreakerInput(garmentInput: any, seamAllowance: number):
       bicepsWidth: sleeve.bicepsWidth || sleeve.bicepWidth || 25,
       elbowWidth: sleeve.elbowWidth || 23,
       cuffWidth: sleeve.cuffWidth || 16.5,
-      sleeveLength: sleeve.sleeveLength || 55.5,
+      sleeveLength: sleeve.sleeveLength || 62,
       sleeveCapHeight: sleeve.sleeveCapHeight || 17,
     },
     collar: collar.collarWidth ? {
       collarWidth: collar.collarWidth || 8,
-      standHeight: collar.standHeight || 8.2,
-      collarLength: collar.collarLength || neckWidth * 2 + 4,
+      standHeight: collar.standHeight || 4.2,
+      collarLength: collar.collarLength || neckWidth * 2.6 + 8,
     } : undefined,
     seamAllowance,
     hasStormFlap: true,

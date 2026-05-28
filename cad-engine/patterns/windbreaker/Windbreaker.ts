@@ -542,8 +542,10 @@ export class WindbreakerPatternGenerator {
     const sleeve = params.sleeve;
 
     if (params.hasStormFlap) {
+      pieces.push(this.createBackStormShieldPiece(params.backPanel.width * 1.55, 13, 1, sa));
+
       const width = Math.max(front.placketWidth ?? 6, 5);
-      pieces.push(this.createRectanglePiece('stormFlap', width, front.length, 2, sa, {
+      pieces.push(this.createRectanglePiece('frontFacing', width, front.length, 2, sa, {
         grainline: 'vertical',
         allowedRotations: [0, 180],
       }));
@@ -562,6 +564,11 @@ export class WindbreakerPatternGenerator {
     }
 
     pieces.push(this.createRectanglePiece('sleeveTab', Math.max(sleeve.cuffWidth * 0.75, 11), 4.5, 2, sa, {
+      grainline: 'horizontal',
+      allowedRotations: [0, 180],
+    }));
+
+    pieces.push(this.createRectanglePiece('cuff', Math.max(sleeve.cuffWidth * 2 + 4, 36), 8, 2, sa, {
       grainline: 'horizontal',
       allowedRotations: [0, 180],
     }));
@@ -615,6 +622,49 @@ export class WindbreakerPatternGenerator {
       onFold: false,
       allowedRotations: options.allowedRotations,
       isMirrorable: cutCount > 1,
+    };
+  }
+
+  private static createBackStormShieldPiece(
+    width: number,
+    height: number,
+    cutCount: number,
+    seamAllowance: number
+  ): PatternPiece {
+    const p: Record<string, Point> = {
+      topLeft: new Point(0, height * 0.18),
+      topRight: new Point(width, height * 0.18),
+      bottomRight: new Point(width - height * 0.25, height),
+      bottomLeft: new Point(height * 0.25, height),
+      topCp: new Point(width / 2, -height * 0.08),
+      bottomCp: new Point(width / 2, height * 1.08),
+    };
+
+    const path = new Path()
+      .move(p.topLeft)
+      .quad(p.topCp, p.topRight).segment('accessoryEdge')
+      .line(p.bottomRight).segment('accessoryEdge')
+      .quad(p.bottomCp, p.bottomLeft).segment('accessoryHem')
+      .line(p.topLeft).segment('accessoryEdge')
+      .close();
+
+    return {
+      name: 'backStormShield',
+      path,
+      points: p,
+      seamAllowance,
+      grainline: {
+        start: new Point(width * 0.25, height * 0.55),
+        end: new Point(width * 0.75, height * 0.55),
+      },
+      notches: [
+        new Point(width / 2, height * 0.18),
+        new Point(width / 2, height),
+      ],
+      cutCount,
+      onFold: false,
+      allowedRotations: [0, 180],
+      isMirrorable: false,
     };
   }
 

@@ -128,15 +128,15 @@ function getGarmentInput() {
             armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 30,
             back: {
                 chestWidth: parseFloat(document.getElementById('wb-back-chestWidth')?.value) || 49.5,
-                bodyLength: parseFloat(document.getElementById('wb-back-bodyLength')?.value) || 60,
+                bodyLength: parseFloat(document.getElementById('wb-back-bodyLength')?.value) || 95,
                 shoulderWidth: parseFloat(document.getElementById('wb-back-shoulderWidth')?.value) || 26.75,
                 armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 30,
                 yokeDepth: parseFloat(document.getElementById('wb-yokeDepth')?.value) || 12,
-                ventLength: parseFloat(document.getElementById('wb-ventLength')?.value) || 18,
+                ventLength: parseFloat(document.getElementById('wb-ventLength')?.value) || 35,
             },
             front: {
                 chestWidth: parseFloat(document.getElementById('wb-front-chestWidth')?.value) || 49.5,
-                bodyLength: parseFloat(document.getElementById('wb-front-bodyLength')?.value) || 61,
+                bodyLength: parseFloat(document.getElementById('wb-front-bodyLength')?.value) || 96,
                 shoulderWidth: parseFloat(document.getElementById('wb-front-shoulderWidth')?.value) || 26,
                 armholeDepth: parseFloat(document.getElementById('wb-armholeDepth')?.value) || 30,
                 neckDrop: parseFloat(document.getElementById('wb-front-neckDepth')?.value) || 19,
@@ -147,13 +147,13 @@ function getGarmentInput() {
                 bicepsWidth: parseFloat(document.getElementById('wb-bicepWidth')?.value) || 25,
                 elbowWidth: parseFloat(document.getElementById('wb-elbowWidth')?.value) || 23,
                 cuffWidth: parseFloat(document.getElementById('wb-cuffWidth')?.value) || 16.5,
-                sleeveLength: parseFloat(document.getElementById('wb-sleeveLength')?.value) || 55.5,
+                sleeveLength: parseFloat(document.getElementById('wb-sleeveLength')?.value) || 62,
                 sleeveCapHeight: parseFloat(document.getElementById('wb-sleeveCapHeight')?.value) || 17,
             },
             collar: {
                 collarWidth: parseFloat(document.getElementById('wb-collarWidth')?.value) || 8,
-                standHeight: parseFloat(document.getElementById('wb-standHeight')?.value) || 8.2,
-                collarLength: (parseFloat(document.getElementById('wb-neckWidth')?.value) || 18.5) * 2 + 4,
+                standHeight: parseFloat(document.getElementById('wb-standHeight')?.value) || 4.2,
+                collarLength: (parseFloat(document.getElementById('wb-neckWidth')?.value) || 18.5) * 2.6 + 8,
             }
         };
     }
@@ -522,16 +522,16 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#050505';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
 
-    ctx.fillStyle = '#e3f2fd';
-    ctx.strokeStyle = '#1976d2';
-    ctx.lineWidth = 1.5 / scale;
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.08)';
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 1.2 / scale;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -566,12 +566,54 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#dc2626';
+    ctx.fillStyle = '#39ff14';
     keyPoints.forEach((pt, i) => {
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, 1.5 / scale, 0, Math.PI * 2);
         ctx.fill();
     });
+
+    if (pieceData?.grainline?.start && pieceData?.grainline?.end) {
+        const gs = pieceData.grainline.start;
+        const ge = pieceData.grainline.end;
+        const angle = Math.atan2(ge.y - gs.y, ge.x - gs.x);
+        const arrow = 4 / scale;
+
+        ctx.strokeStyle = '#00ffff';
+        ctx.fillStyle = '#00ffff';
+        ctx.lineWidth = 1.2 / scale;
+        ctx.beginPath();
+        ctx.moveTo(gs.x, gs.y);
+        ctx.lineTo(ge.x, ge.y);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(ge.x, ge.y);
+        ctx.lineTo(
+            ge.x - arrow * Math.cos(angle - Math.PI / 6),
+            ge.y - arrow * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+            ge.x - arrow * Math.cos(angle + Math.PI / 6),
+            ge.y - arrow * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    if (Array.isArray(pieceData?.notches)) {
+        ctx.fillStyle = '#39ff14';
+        pieceData.notches.forEach(notch => {
+            if (!notch || !Number.isFinite(notch.x) || !Number.isFinite(notch.y)) return;
+            const size = 2.2 / scale;
+            ctx.beginPath();
+            ctx.moveTo(notch.x, notch.y - size);
+            ctx.lineTo(notch.x + size, notch.y + size);
+            ctx.lineTo(notch.x - size, notch.y + size);
+            ctx.closePath();
+            ctx.fill();
+        });
+    }
 
     ctx.restore();
 
@@ -590,14 +632,14 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
     // ctx.setLineDash([]);
     ctx.restore();
 
-    ctx.fillStyle = '#dc2626';
+    ctx.fillStyle = '#ff3bbd';
     ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
 
     const infoText = `尺寸: ${srcWidth.toFixed(1)} × ${srcHeight.toFixed(1)} cm`;
 
     const textMetrics = ctx.measureText(infoText);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
     ctx.fillRect(
         canvas.width / 2 - textMetrics.width / 2 - 6,
         canvas.height - 18,
@@ -605,7 +647,7 @@ function convertSVGToCanvas(canvas, pathOps, pieceName, pieceData) {
         16
     );
 
-    ctx.fillStyle = '#dc2626';
+    ctx.fillStyle = '#ff3bbd';
     ctx.fillText(infoText, canvas.width / 2, canvas.height - 6);
 
     if (pieceData && pieceData.bbox) {
