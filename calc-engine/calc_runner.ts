@@ -17,6 +17,7 @@ interface CalcInput {
   }>;
   seamAllowance?: number;
   fabricWidth?: number;
+  fabricNap?: boolean | string;
   options?: {
     showLabels?: boolean;
     showGrid?: boolean;
@@ -103,6 +104,7 @@ function main() {
   if (input.mode === 'nesting' || input.mode === 'all') {
     const fabricWidth = input.fabricWidth || 145;
     const seamDist = input.seamAllowance || 1.5;
+    const fabricNap = input.fabricNap === true || input.fabricNap === 'true';
 
     try {
       console.error('🔍 [精确计算-排料] 开始使用CAD NestEngine');
@@ -196,9 +198,6 @@ function main() {
           }
         }
 
-        const rotatableNames = ['口袋', '领', '袖口', '罗纹', '腰带', '配件', '其他配件'];
-        const isRotatableAccessory = rotatableNames.some(name => p.name.includes(name));
-
         return {
           name: p.name,
           id: p.id,
@@ -209,7 +208,7 @@ function main() {
           onFold: p.onFold || false,
           seamAllowance: seamDist,
           isAccessory: false,
-          allowedRotations: isRotatableAccessory ? [0, 90, 180, 270] : [0, 180],
+          allowedRotations: [0, 180],
           _custom: true
         } as any;  // 使用any避免类型检查问题
       });
@@ -223,8 +222,8 @@ function main() {
       const engine = new NestEngine({
         fabricWidth,
         spacing: 1,
-        rotations: [0, 90, 180, 270],
-        fabricNap: false,
+        rotations: [0, 180],
+        fabricNap,
         fabricHeight: 1600
       });
 

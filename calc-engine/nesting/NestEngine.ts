@@ -47,7 +47,7 @@ export const DEFAULT_NEST_CONFIG: NestConfig = {
   fabricWidth: 1500,
   fabricHeight: 3000,
   spacing: 5,
-  rotations: [0, 90, 180, 270],
+  rotations: [0, 180],
   populationSize: 20,
   mutationRate: 0.1,
   iterations: 100,
@@ -126,17 +126,14 @@ export class NestEngine {
 
         const bb = normalized.getBoundingBox();
         const isSmallFiller = bb.width * bb.height < 1000;
-        const minSide = Math.min(bb.width, bb.height);
-        const maxSide = Math.max(bb.width, bb.height);
-        const isNarrowStrip = minSide <= 20 && maxSide / Math.max(minSide, 1) >= 4;
         this.pieces.push({
           id: piece.name,
           polygon: normalized,
           quantity: piece.cutCount,
           rotations,
-          isAccessory: piece.isAccessory === true || isSmallFiller || isNarrowStrip ||
+          isAccessory: piece.isAccessory === true || isSmallFiller ||
             piece.name.includes('口袋') || piece.name.includes('领') ||
-            piece.name.includes('袖口') || piece.name.includes('罗纹') || piece.name.includes('腰带') ||
+            piece.name.includes('袖口') || piece.name.includes('罗纹') ||
             piece.name === '配件' || piece.name === '其他配件',
         });
         this.pieceOnFold.set(piece.name, piece.onFold ?? false);
@@ -215,7 +212,7 @@ export class NestEngine {
   private getAccessoryPriority(piece: NestingPiece): number {
     if (piece.id.includes('领')) return 0;
     if (piece.id.includes('袖口') || piece.id.includes('口袋')) return 1;
-    if (piece.id.includes('腰带') || piece.id.includes('罗纹')) return 2;
+    if (piece.id.includes('罗纹')) return 2;
     return 3;
   }
 

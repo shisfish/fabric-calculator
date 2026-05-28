@@ -34,7 +34,7 @@ export interface NestingPiece {
   id: string;
   polygon: Polygon;
   quantity: number;
-  rotations: Polygon[];
+  rotations: Array<{ angle: number; polygon: Polygon }>;
   isAccessory?: boolean; // 标记是否为配件（口袋等小裁片），用于两阶段排料
 }
 
@@ -42,7 +42,7 @@ export const DEFAULT_NEST_CONFIG: NestConfig = {
   fabricWidth: 1500,
   fabricHeight: 3000,
   spacing: 5,
-  rotations: [0, 90, 180, 270],
+  rotations: [0, 180],
   populationSize: 20,
   mutationRate: 0.1,
   iterations: 100,
@@ -114,14 +114,22 @@ export class NestEngine {
 
         logger.info(`   ✅ 裁片"${piece.name}" 允许旋转角度: [${effectiveRotations.join(', ')}]`);
 
-        const rotations = effectiveRotations.map(angle => normalized.rotate(angle));
+        const rotations = effectiveRotations.map(angle => ({
+          angle,
+          polygon: normalized.rotate(angle)
+        }));
 
+        const bb = normalized.getBoundingBox();
+        const isSmallFiller = bb.width * bb.height < 1000;
         this.pieces.push({
           id: piece.name,
           polygon: normalized,
           quantity: piece.cutCount,
           rotations,
-          isAccessory: !!(piece as any)._custom || piece.name === '口袋' || piece.name === '配件' || piece.name === '其他配件',
+          isAccessory: !!(piece as any).isAccessory || isSmallFiller ||
+            piece.name.includes('口袋') || piece.name.includes('领') ||
+            piece.name.includes('袖口') || piece.name.includes('罗纹') ||
+            piece.name === '配件' || piece.name === '其他配件',
         });
         this.pieceOnFold.set(piece.name, piece.onFold ?? false);
       } else {
@@ -150,6 +158,12 @@ export class NestEngine {
       if (p.isAccessory) accessoryPieces.push(p);
       else mainPieces.push(p);
     }
+    accessoryPieces.sort((a, b) => {
+      const pa = this.getAccessoryPriority(a);
+      const pb = this.getAccessoryPriority(b);
+      if (pa !== pb) return pa - pb;
+      return b.polygon.getArea() - a.polygon.getArea();
+    });
 
     logger.info(`\n📦 === 两阶段排料 ===`);
     logger.info(`   Phase 1 主裁片: ${mainPieces.map(p => `${p.id}×${p.quantity}`).join(', ')}`);
@@ -170,16 +184,15 @@ export class NestEngine {
       p.polygon.translate(p.x, p.y).getBoundingBox().maxY));
     logger.info(`   ✅ Phase 1 完成: 长度=${phase1MaxY.toFixed(1)}cm`);
 
-    // Phase 2: 放入配件（使用底部优先填充）
+    // Phase 2: 放入配件，优先利用主裁片形成的空位，不主动拉长排料
     for (const nestingPiece of accessoryPieces) {
       for (let q = 0; q < nestingPiece.quantity; q++) {
-        this.placePiece(nestingPiece, q, true); // true = 底部优先模式
+        this.placePiece(nestingPiece, q);
       }
     }
 
-    // 最终优化 + 强制配件下沉
+    // 最终优化：保留小件填缝结果，避免把配件强制下沉后拉长排料长度
     this.compactLayout();
-    this.sinkAccessories(); // 让配件尽可能往下沉
     this.clampToBoundary();
 
     return this.calculateResult();
@@ -187,6 +200,13 @@ export class NestEngine {
 
   private sortPiecesByArea(): NestingPiece[] {
     return [...this.pieces].sort((a, b) => b.polygon.getArea() - a.polygon.getArea());
+  }
+
+  private getAccessoryPriority(piece: NestingPiece): number {
+    if (piece.id.includes('领')) return 0;
+    if (piece.id.includes('袖口') || piece.id.includes('口袋')) return 1;
+    if (piece.id.includes('罗纹')) return 2;
+    return 3;
   }
 
   private placePiece(nestingPiece: NestingPiece, index: number, preferBottom: boolean = false): boolean {
@@ -208,8 +228,9 @@ export class NestEngine {
     }
 
     for (const ri of rotationOrder) {
-      const poly = nestingPiece.rotations[ri];
-      const rotation = this.config.rotations[ri];
+      const rotationOption = nestingPiece.rotations[ri];
+      const poly = rotationOption.polygon;
+      const rotation = rotationOption.angle;
       const pos = this.findBLPosition(poly, pieceId);
 
       if (pos) {
@@ -259,8 +280,8 @@ export class NestEngine {
     }
 
     if (bestPos) {
-      const ri = this.config.rotations.indexOf(bestPos.rotation);
-      const poly = nestingPiece.rotations[ri >= 0 ? ri : 0];
+      const rotationOption = nestingPiece.rotations.find(r => r.angle === bestPos.rotation) ?? nestingPiece.rotations[0];
+      const poly = rotationOption.polygon;
       this.placedPieces.push({ pieceId, polygon: poly, x: bestPos.x, y: bestPos.y, rotation: bestPos.rotation });
       return true;
     }
@@ -285,6 +306,7 @@ export class NestEngine {
     if (b.width + spacing * 2 > fw) return null;
 
     const xCands = new Set<number>();
+    const directCands: Point[] = [];
     xCands.add(spacing - b.minX);
 
     for (const placed of this.placedPieces) {
@@ -292,6 +314,12 @@ export class NestEngine {
       const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
       xCands.add(pb.maxX + spacing - b.minX);
       xCands.add(pb.minX - spacing - b.maxX);
+      directCands.push(
+        new Point(pb.maxX + spacing - b.minX, pb.minY - b.minY),
+        new Point(pb.minX - spacing - b.maxX, pb.minY - b.minY),
+        new Point(pb.minX - b.minX, pb.maxY + spacing - b.minY),
+        new Point(pb.maxX - b.maxX, pb.maxY + spacing - b.minY)
+      );
     }
 
     // Also try intermediate positions between placed pieces (gap filling)
@@ -325,6 +353,41 @@ export class NestEngine {
 
     let best: Point | null = null;
     let bestScore = Infinity;
+    const evaluateCandidate = (candidate: Point): void => {
+      if (candidate.x + b.minX < spacing) return;
+      if (candidate.x + b.maxX > fw - spacing) return;
+      if (candidate.y + b.minY < spacing) return;
+      if (candidate.y + b.maxY > this.config.fabricHeight - spacing) return;
+
+      const testPoly = polygon.translate(candidate.x, candidate.y);
+      let valid = true;
+      for (const placed of this.placedPieces) {
+        if (placed.pieceId === pieceId) continue;
+        const placedPoly = placed.polygon.translate(placed.x, placed.y);
+        if (SATCollision.testCollisionRobust(testPoly, placedPoly).collides ||
+            SATCollision.getDistance(testPoly, placedPoly) < spacing) {
+          valid = false;
+          break;
+        }
+      }
+      if (!valid) return;
+
+      const tb = testPoly.getBoundingBox();
+      let currentMaxY = tb.maxY;
+      let currentMaxX = tb.maxX;
+      for (const placed of this.placedPieces) {
+        if (placed.pieceId === pieceId) continue;
+        const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+        currentMaxY = Math.max(currentMaxY, pb.maxY);
+        currentMaxX = Math.max(currentMaxX, pb.maxX);
+      }
+
+      const score = currentMaxY * fw + currentMaxX + candidate.y * 0.1 + candidate.x * 0.01;
+      if (score < bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    };
 
     for (const cx of xCands) {
       if (cx + b.minX < spacing) continue;
@@ -332,28 +395,22 @@ export class NestEngine {
 
       const cy = this.dropY(polygon, cx, pieceId);
       if (cy !== null) {
-        const score = cy * fw + cx;
-        if (score < bestScore) {
-          bestScore = score;
-          best = new Point(cx, cy);
-        }
+        evaluateCandidate(new Point(cx, cy));
       }
+    }
+
+    for (const dc of directCands) {
+      evaluateCandidate(dc);
     }
 
     // 缝隙扫描的直接候选位置也参与评分（已通过SAT验证）
     for (const gc of gapDirectCandidates) {
-      if (gc.x + b.minX < spacing || gc.x + b.maxX > fw - spacing) continue;
-      if (gc.y + b.minY < spacing) continue;
-      const score = gc.y * fw + gc.x;
-      if (score < bestScore) {
-        bestScore = score;
-        best = gc;
-        logger.info(`   ✨ 缝隙位置胜出: (${gc.x.toFixed(1)}, ${gc.y.toFixed(1)}) score=${score.toFixed(0)}`);
-      }
+      evaluateCandidate(gc);
     }
 
-    logger.info(`   ✅ findBLPosition结果: ${pieceId} → ${best ? `(${best.x.toFixed(1)}, ${best.y.toFixed(1)}) score=${bestScore.toFixed(0)}` : 'NULL'}`);
-    return best;
+    const selected = best as Point | null;
+    logger.info(`   ✅ findBLPosition结果: ${pieceId} → ${selected ? `(${selected.x.toFixed(1)}, ${selected.y.toFixed(1)}) score=${bestScore.toFixed(0)}` : 'NULL'}`);
+    return selected;
   }
 
   /**
@@ -494,78 +551,6 @@ export class NestEngine {
       }
     }
     return null;
-  }
-
-  /**
-   * 强制配件下沉：让配件尽可能往下移动，填充下半部分空白
-   * 只对isAccessory标记的裁片生效，不影响主裁片位置
-   */
-  private sinkAccessories(): void {
-    const spacing = this.config.spacing;
-    const accessoryIds = new Set<string>();
-    for (const p of this.pieces) {
-      if (p.isAccessory) accessoryIds.add(p.id);
-    }
-    if (accessoryIds.size === 0) return;
-
-    logger.info(`   📍 下沉配件: ${Array.from(accessoryIds).join(', ')}`);
-
-    for (let iter = 0; iter < 20; iter++) {
-      let moved = false;
-      for (const inst of this.placedPieces) {
-        const baseId = inst.pieceId.split('_')[0];
-        if (!accessoryIds.has(baseId)) continue;
-
-        // 尝试向下移动
-        let ny = inst.y + 0.5;
-        const tp = inst.polygon.translate(inst.x, ny);
-        const tb = tp.getBoundingBox();
-        let ok = true;
-
-        for (const other of this.placedPieces) {
-          if (other === inst) continue;
-          const op = other.polygon.translate(other.x, other.y);
-          const dist = SATCollision.getDistance(tp, op);
-          if (dist < spacing) { ok = false; break; }
-        }
-
-        if (ok && tb.maxY <= this.config.fabricHeight - spacing) {
-          inst.y = ny;
-          moved = true;
-        }
-      }
-      if (!moved) break;
-    }
-
-    // 下沉后也尝试左推
-    for (let iter = 0; iter < 20; iter++) {
-      let moved = false;
-      for (const inst of this.placedPieces) {
-        const baseId = inst.pieceId.split('_')[0];
-        if (!accessoryIds.has(baseId)) continue;
-
-        let nx = inst.x - 0.5;
-        const tp = inst.polygon.translate(nx, inst.y);
-        const tb = tp.getBoundingBox();
-        let ok = true;
-
-        if (tb.minX < spacing) { ok = false; }
-        else {
-          for (const other of this.placedPieces) {
-            if (other === inst) continue;
-            const op = other.polygon.translate(other.x, other.y);
-            const dist = SATCollision.getDistance(tp, op);
-            if (dist < spacing) { ok = false; break; }
-          }
-        }
-
-        if (ok && tb.minX >= spacing) {
-          inst.x = nx;
-          moved = true;
-        }
-      }
-      if (!moved) break;
-    }
   }
 
   private clampToBoundary(): void {
@@ -767,15 +752,16 @@ export class NestEngine {
         let improved = false;
 
         for (const inst of instances) {
-          const currentRi = this.config.rotations.indexOf(inst.rotation);
+          const currentRi = piece.rotations.findIndex(r => r.angle === inst.rotation);
           if (currentRi < 0 || piece.rotations.length <= 1) continue;
 
           // 尝试另一个旋转角度
           const otherRi = (currentRi + 1) % piece.rotations.length;
           if (otherRi === currentRi) continue;
 
-          const altPoly = piece.rotations[otherRi];
-          const altAngle = this.config.rotations[otherRi];
+          const altOption = piece.rotations[otherRi];
+          const altPoly = altOption.polygon;
+          const altAngle = altOption.angle;
 
           // 先尝试原位旋转（快速路径）
           const testPolyAtOrigin = altPoly.translate(inst.x, inst.y);

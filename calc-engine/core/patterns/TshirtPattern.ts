@@ -200,7 +200,7 @@ export class TshirtPatternGenerator {
       seamAllowance,
       cutCount: 2,
       onFold: false,
-      allowedRotations: [0, 90, 180, 270],
+      allowedRotations: [0, 180],
       isMirrorable: true
     };
   }

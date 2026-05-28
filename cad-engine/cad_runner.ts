@@ -170,7 +170,6 @@ if (input.customPieces && Array.isArray(input.customPieces)) {
     const h = parseFloat(cp.height) || 10;
     const count = parseInt(cp.count) || 1;
     const name = cp.name || '配件';
-
     const rectPath = Path.rectangle(w, h);
     const seam = 1.5;
     const seamPath = new Path()
