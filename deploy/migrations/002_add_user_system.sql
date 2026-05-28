@@ -27,11 +27,11 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 -- ========================================
--- 2. 插入默认测试用户（test / test123456）
--- 密码 test123456 的 SHA256 哈希值
+-- 2. 插入默认测试用户（test / Fabric@2026）
+-- 密码 Fabric@2026 的 SHA256 哈希值
 -- ========================================
 INSERT IGNORE INTO users (username, password_hash, nickname, role, status) VALUES 
-('test', SHA2('test123456', 256), '测试用户', 'admin', 1);
+('test', SHA2('Fabric@2026', 256), '测试用户', 'admin', 1);
 
 -- ========================================
 -- 3. 给所有业务表添加 user_id 字段
