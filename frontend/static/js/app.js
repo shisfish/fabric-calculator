@@ -505,7 +505,6 @@ async function calculate() {
     const fabricWidth = parseFloat(document.getElementById('fabric-width').value);
     const quantity = parseInt(document.getElementById('quantity').value);
     const shrinkage = parseFloat(document.getElementById('shrinkage-rate').value);
-    const wastage = parseFloat(document.getElementById('wastage-rate').value);
 
     if (!fabricWidth || fabricWidth < 60 || fabricWidth > 300) {
         alert('面料门幅应在 60-300 cm 之间');
@@ -517,10 +516,6 @@ async function calculate() {
     }
     if (isNaN(shrinkage) || shrinkage < 0 || shrinkage > 50) {
         alert('缩水率应在 0-50% 之间');
-        return;
-    }
-    if (isNaN(wastage) || wastage < 0 || wastage > 50) {
-        alert('损耗率应在 0-50% 之间');
         return;
     }
 
@@ -550,7 +545,6 @@ async function calculate() {
         fabric_type: document.getElementById('fabric-type').value,
         fabric_weight_gsm: parseFloat(document.getElementById('fabric-weight').value) || 0,
         shrinkage_rate: parseFloat(document.getElementById('shrinkage-rate').value) || 3,
-        wastage_rate: parseFloat(document.getElementById('wastage-rate').value) || 8,
         quantity: parseInt(document.getElementById('quantity').value) || 1,
         pieces: pieces,
     };
@@ -578,7 +572,11 @@ async function calculate() {
                     }))
                 },
                 fabricWidth: data.fabric_width,
-                seamAllowance: 1.5
+                seamAllowance: 1.5,
+                fabricType: data.fabric_type,
+                fabricWeight: data.fabric_weight_gsm,
+                shrinkRate: data.shrinkage_rate,
+                quantity: data.quantity
             }),
             signal: controller.signal,
         });

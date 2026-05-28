@@ -681,7 +681,6 @@ function fillEditData(data) {
     if (data.fabric_weight_gsm) document.getElementById('fabric-weight').value = data.fabric_weight_gsm;
     if (data.fabric_type) document.getElementById('fabric-type').value = data.fabric_type;
     if (data.shrinkage_rate !== undefined) document.getElementById('shrinkage-rate').value = data.shrinkage_rate;
-    if (data.wastage_rate !== undefined) document.getElementById('wastage-rate').value = data.wastage_rate;
     if (data.quantity) document.getElementById('quantity').value = data.quantity;
 
     // 3. 直接渲染 Step 3 裁片表格
