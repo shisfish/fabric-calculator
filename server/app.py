@@ -799,7 +799,6 @@ def cad_nesting():
             "params": {
                 "fabric_width": fabric_width,
                 "shrinkage_rate": shrinkage_rate,
-                "wastage_rate": wastage_rate,
                 "fabric_weight_gsm": fabric_weight_gsm,
                 "quantity": quantity,
                 "garmentInput": garment_input if garment_input else {},
@@ -810,6 +809,7 @@ def cad_nesting():
                 "total_area_m2": result.get("total_area_m2"),
                 "utilization_rate": result.get("utilization_rate"),
                 "fabric_weight_kg": result.get("fabric_weight_kg"),
+                "calculated_wastage_rate": result.get("calculated_wastage_rate"),
             },
             "input_data": data,
             "full_result": result,
