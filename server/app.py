@@ -64,15 +64,16 @@ def get_current_user():
     if 'user_id' not in session:
         return None
     try:
-        conn = db_manager._get_connection()  # ✅ 使用正确的私有方法
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT id, username, nickname, avatar_url, role, status
-                FROM users 
-                WHERE id = %s AND status = 1
-            """, (session['user_id'],))
-            user = cursor.fetchone()
-            return user
+        # ✅ 正确用法：使用上下文管理器方式获取连接
+        with db_manager._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, username, nickname, avatar_url, role, status
+                    FROM users 
+                    WHERE id = %s AND status = 1
+                """, (session['user_id'],))
+                user = cursor.fetchone()
+                return user
     except Exception as e:
         print(f"[Auth] 获取用户信息失败: {e}")
         return None
@@ -107,52 +108,53 @@ def api_login():
         return jsonify({"success": False, "message": "请输入用户名和密码"}), 400
     
     try:
-        conn = db_manager._get_connection()  # ✅ 使用正确的私有方法
-        with conn.cursor() as cursor:
-            # 查询用户
-            cursor.execute("""
-                SELECT id, username, password_hash, nickname, avatar_url, role, status
-                FROM users 
-                WHERE username = %s
-            """, (username,))
-            user = cursor.fetchone()
-            
-            if not user:
-                return jsonify({"success": False, "message": "用户名或密码错误"}), 401
-            
-            # 验证密码
-            password_hash = hash_password(password)
-            if user['password_hash'] != password_hash:
-                return jsonify({"success": False, "message": "用户名或密码错误"}), 401
-            
-            # 检查账号状态
-            if user['status'] != 1:
-                return jsonify({"success": False, "message": "账号已被禁用"}), 403
-            
-            # 设置会话
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            session['nickname'] = user['nickname'] or user['username']
-            session['role'] = user['role']
-            
-            # 更新最后登录时间
-            cursor.execute("""
-                UPDATE users SET last_login_at = NOW(), last_login_ip = %s WHERE id = %s
-            """, (request.remote_addr, user['id']))
-            
-            print(f"[Auth] ✅ 用户登录成功: {user['username']} ({user['nickname']})")
-            
-            return jsonify({
-                "success": True,
-                "message": "登录成功",
-                "data": {
-                    "user_id": user['id'],
-                    "username": user['username'],
-                    "nickname": user['nickname'] or user['username'],
-                    "avatar_url": user.get('avatar_url', ''),
-                    "role": user['role']
-                }
-            })
+        # ✅ 正确用法：使用上下文管理器方式获取连接
+        with db_manager._get_connection() as conn:
+            with conn.cursor() as cursor:
+                # 查询用户
+                cursor.execute("""
+                    SELECT id, username, password_hash, nickname, avatar_url, role, status
+                    FROM users 
+                    WHERE username = %s
+                """, (username,))
+                user = cursor.fetchone()
+                
+                if not user:
+                    return jsonify({"success": False, "message": "用户名或密码错误"}), 401
+                
+                # 验证密码
+                password_hash = hash_password(password)
+                if user['password_hash'] != password_hash:
+                    return jsonify({"success": False, "message": "用户名或密码错误"}), 401
+                
+                # 检查账号状态
+                if user['status'] != 1:
+                    return jsonify({"success": False, "message": "账号已被禁用"}), 403
+                
+                # 设置会话
+                session['user_id'] = user['id']
+                session['username'] = user['username']
+                session['nickname'] = user['nickname'] or user['username']
+                session['role'] = user['role']
+                
+                # 更新最后登录时间
+                cursor.execute("""
+                    UPDATE users SET last_login_at = NOW(), last_login_ip = %s WHERE id = %s
+                """, (request.remote_addr, user['id']))
+                
+                print(f"[Auth] ✅ 用户登录成功: {user['username']} ({user['nickname']})")
+                
+                return jsonify({
+                    "success": True,
+                    "message": "登录成功",
+                    "data": {
+                        "user_id": user['id'],
+                        "username": user['username'],
+                        "nickname": user['nickname'] or user['username'],
+                        "avatar_url": user.get('avatar_url', ''),
+                        "role": user['role']
+                    }
+                })
             
     except Exception as e:
         print(f"[Auth] ❌ 登录失败: {e}")
