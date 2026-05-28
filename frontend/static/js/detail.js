@@ -127,11 +127,12 @@ function renderInfoCardCompact(record, isPrecise, categoryName) {
             <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
         </div>`;
     }
-    if (params.wastage_rate !== undefined) {
+    if (params.wastage_rate !== undefined || data.calculated_wastage_rate !== undefined) {
+        const wastageValue = data.calculated_wastage_rate !== undefined ? data.calculated_wastage_rate : params.wastage_rate;
         html += `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">损耗率</span>
-            <strong style="font-size:14px;">${params.wastage_rate}%</strong>
+            <span style="color:var(--text-secondary);font-size:13px;">计算损耗率</span>
+            <strong style="font-size:14px;">${typeof wastageValue === 'number' ? wastageValue.toFixed(1) + '%' : wastageValue + '%'}</strong>
         </div>`;
     }
     if (params.garment_length) {
@@ -178,7 +179,11 @@ function exportDetailResult() {
     text += `面料门幅: ${data.params.fabric_width}cm\n`;
     text += `面料克重: ${data.params.fabric_weight_gsm} g/m²\n`;
     text += `缩水率: ${data.params.shrinkage_rate}%\n`;
-    text += `损耗率: ${data.params.wastage_rate}%\n`;
+    if (data.calculated_wastage_rate !== undefined) {
+        text += `计算损耗率: ${data.calculated_wastage_rate}%\n`;
+    } else if (data.params.wastage_rate !== undefined) {
+        text += `损耗率: ${data.params.wastage_rate}%\n`;
+    }
     text += `订单数量: ${data.params.quantity}件\n`;
     text += `面料利用率: ${data.utilization_rate}%\n\n`;
     text += '--- 计算结果 ---\n';
@@ -305,6 +310,85 @@ function renderPreciseResult(record) {
             <td style="${hasCuff ? '' : 'display:none'}">${p.cuff_width || '-'}</td>
         </tr>`;
     }).join('');
+
+    // ✅ 【新增】渲染精确计算的图片（裁片图、缝份图、排料图）
+    renderCalcImages(record);
+}
+
+function renderCalcImages(record) {
+    const imagesSection = document.getElementById('calc-images-section');
+    const pieceImagesEl = document.getElementById('calc-piece-images');
+    const seamImagesEl = document.getElementById('calc-seam-images');
+    const nestingImagesEl = document.getElementById('calc-nesting-images');
+
+    // 获取图片数据（优先从record获取，如果没有则尝试full_result）
+    const piece_images = record.piece_images || [];
+    const seam_images = record.seam_images || [];
+    const nesting_images = record.nesting_images || [];
+
+    // 检查是否有任何图片
+    const hasImages = piece_images.length > 0 || seam_images.length > 0 || nesting_images.length > 0;
+
+    if (!hasImages) {
+        imagesSection.style.display = 'none';
+        return;
+    }
+
+    imagesSection.style.display = 'block';
+
+    // 渲染裁片图
+    if (piece_images.length > 0) {
+        pieceImagesEl.style.display = 'flex';
+        pieceImagesEl.innerHTML = `
+            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#1976d2;">✂️ 裁片图</h4>
+            ${piece_images.map(img => `
+                <div class="card" style="padding:16px;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.name || '裁片图'}</div>
+                    <img src="${img.file_path}" alt="${img.name || '裁片图'}" 
+                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
+                         onclick="window.open('${img.file_path}', '_blank')">
+                </div>
+            `).join('')}
+        `;
+    } else {
+        pieceImagesEl.style.display = 'none';
+    }
+
+    // 渲染缝份图
+    if (seam_images.length > 0) {
+        seamImagesEl.style.display = 'flex';
+        seamImagesEl.innerHTML = `
+            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#388e3c;">🧵 缝份图</h4>
+            ${seam_images.map(img => `
+                <div class="card" style="padding:16px;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.name || '缝份图'}</div>
+                    <img src="${img.file_path}" alt="${img.name || '缝份图'}" 
+                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
+                         onclick="window.open('${img.file_path}', '_blank')">
+                </div>
+            `).join('')}
+        `;
+    } else {
+        seamImagesEl.style.display = 'none';
+    }
+
+    // 渲染排料图
+    if (nesting_images.length > 0) {
+        nestingImagesEl.style.display = 'flex';
+        nestingImagesEl.innerHTML = `
+            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#d32f2f;">📐 排料图</h4>
+            ${nesting_images.map(img => `
+                <div class="card" style="padding:16px;">
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.material_name || '排料图'}</div>
+                    <img src="${img.file_path}" alt="${img.material_name || '排料图'}" 
+                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
+                         onclick="window.open('${img.file_path}', '_blank')">
+                </div>
+            `).join('')}
+        `;
+    } else {
+        nestingImagesEl.style.display = 'none';
+    }
 }
 
 function renderQuickResult(record) {
@@ -337,10 +421,17 @@ function renderQuickResult(record) {
                                 <div class="sub-label">面料利用率</div>
                                 <div class="sub-value">${fullResult.utilization_rate}%</div>
                             </div>
+                            ${fullResult.calculated_wastage_rate !== undefined ? `
+                            <div class="sub-item">
+                                <div class="sub-label">计算损耗率</div>
+                                <div class="sub-value">${fullResult.calculated_wastage_rate}%</div>
+                            </div>
+                            ` : (fullResult.wastage_rate !== undefined ? `
                             <div class="sub-item">
                                 <div class="sub-label">损耗率</div>
                                 <div class="sub-value">${fullResult.wastage_rate}%</div>
                             </div>
+                            ` : '')}
                         </div>
                     </div>
                 </div>

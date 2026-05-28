@@ -161,9 +161,25 @@ def calculate_quotation():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """获取历史记录"""
-    history = db_manager.load_history(limit=100)
-    return jsonify({"success": True, "data": history})
+    """获取历史记录（支持分页和类型筛选）"""
+    # 获取查询参数
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('pageSize', 20))
+    record_type = request.args.get('type')  # 可选: quick/precise/curved/polygon/cad
+
+    # 参数校验
+    if page < 1:
+        page = 1
+    if page_size < 1 or page_size > 100:
+        page_size = 20
+
+    result = db_manager.load_history(page=page, page_size=page_size, record_type=record_type)
+    
+    return jsonify({
+        "success": True,
+        "data": result['records'],
+        "pagination": result['pagination']
+    })
 
 
 @app.route('/api/history/<record_id>', methods=['GET'])
@@ -452,7 +468,6 @@ def api_polygon_nesting():
         pieces = data.get("pieces", [])
         fabric_width = float(data.get("fabric_width", 140))
         shrinkage_rate = float(data.get("shrinkage_rate", 3))
-        wastage_rate = float(data.get("wastage_rate", 8))
         fabric_weight_gsm = float(data.get("fabric_weight_gsm", 0))
         quantity = int(data.get("quantity", 1))
 
@@ -531,22 +546,27 @@ def api_polygon_nesting():
         
         effective_fabric_width = fabric_width - 3
         material_breakdown = {}
-        
+        total_nesting_length_cm = 0
+        total_area_all = sum(material_areas.values())
+        all_nesting_utils = []
+
         for mat_type, area in material_areas.items():
             from calculator_engine import simulate_nesting
             mat_piece_dims = material_pieces.get(mat_type, [])
             mat_nesting_result = simulate_nesting(mat_piece_dims, effective_fabric_width)
-            
+
             base_length_cm = area / effective_fabric_width if effective_fabric_width > 0 else 0
             nesting_util = mat_nesting_result["width_utilization"]
             if nesting_util > 0:
                 adjusted_length_cm = base_length_cm / nesting_util
+                all_nesting_utils.append(nesting_util)
             else:
                 adjusted_length_cm = base_length_cm
-            
-            mat_length_cm = adjusted_length_cm * (1 + wastage_rate / 100)
+
+            mat_length_cm = adjusted_length_cm
             mat_length_m = mat_length_cm / 100
-            
+            total_nesting_length_cm += mat_length_cm
+
             material_breakdown[mat_type] = {
                 "name": material_names.get(mat_type, mat_type),
                 "area_cm2": round(area, 2),
@@ -557,19 +577,30 @@ def api_polygon_nesting():
                 "weight_kg": round(area / 10000 * fabric_weight_gsm / 1000, 4) if fabric_weight_gsm > 0 else 0,
                 "width_utilization": mat_nesting_result["width_utilization"],
             }
-        
+
+        # 计算实际损耗率
+        if total_area_all > 0 and effective_fabric_width > 0:
+            theoretical_length = total_area_all / effective_fabric_width
+            if theoretical_length > 0:
+                calculated_wastage_rate = ((total_nesting_length_cm - theoretical_length) / theoretical_length) * 100
+                calculated_wastage_rate = max(0, min(calculated_wastage_rate, 50))
+            else:
+                calculated_wastage_rate = 0
+        else:
+            calculated_wastage_rate = 0
+
         # 警告信息
         warnings = []
         if fabric_width < 100:
             warnings.append("面料门幅较窄（<100cm），可能导致用料增加")
-        if wastage_rate > 15:
-            warnings.append("损耗率设置较高（>15%），请确认是否合理")
-        if wastage_rate < 3:
-            warnings.append("损耗率设置较低（<3%），建议不低于5%")
+        if calculated_wastage_rate > 15:
+            warnings.append(f"计算损耗率较高（{calculated_wastage_rate:.1f}%），建议优化裁片排列或检查面料门幅")
+        if calculated_wastage_rate < 5 and calculated_wastage_rate > 0:
+            warnings.append(f"计算损耗率较低（{calculated_wastage_rate:.1f}%），排料效率优秀")
         if shrinkage_rate > 5:
             warnings.append("缩水率设置较高（>5%），建议对面料进行预缩处理")
         if quantity < 50:
-            warnings.append(f"订单数量较少（{quantity}件），小批量生产损耗可能偏高，建议在标准损耗基础上增加3%-6%")
+            warnings.append(f"订单数量较少（{quantity}件），小批量生产可能需要额外预留余量")
         
         elapsed = time.time() - start_time
         print(f"[API] 排料完成: 总长度{nesting_result['total_length_cm']:.2f}cm, 耗时{elapsed:.3f}秒")
@@ -615,7 +646,6 @@ def api_polygon_nesting():
             "params": {
                 "fabric_width": fabric_width,
                 "shrinkage_rate": shrinkage_rate,
-                "wastage_rate": wastage_rate,
                 "fabric_weight_gsm": fabric_weight_gsm,
                 "quantity": quantity,
             },
@@ -624,16 +654,17 @@ def api_polygon_nesting():
                 "total_area_m2": round(sum(m["area_m2"] for m in material_breakdown.values()), 4),
                 "utilization_rate": round(nesting_result["width_utilization"] * 100, 1),
                 "fabric_weight_kg": round(sum(m["weight_kg"] for m in material_breakdown.values()), 4),
+                "calculated_wastage_rate": round(calculated_wastage_rate, 1),
             },
             "input_data": data,
             "full_result": {
                 "params": {
                     "fabric_width": fabric_width,
                     "shrinkage_rate": shrinkage_rate,
-                    "wastage_rate": wastage_rate,
                     "fabric_weight_gsm": fabric_weight_gsm,
                     "quantity": quantity,
                 },
+                "calculated_wastage_rate": round(calculated_wastage_rate, 1),
                 "total_length_cm": nesting_result["total_length_cm"],
                 "width_utilization": nesting_result["width_utilization"],
                 "rows": nesting_result["rows"],
@@ -651,10 +682,10 @@ def api_polygon_nesting():
                 "params": {
                     "fabric_width": fabric_width,
                     "shrinkage_rate": shrinkage_rate,
-                    "wastage_rate": wastage_rate,
                     "fabric_weight_gsm": fabric_weight_gsm,
                     "quantity": quantity,
                 },
+                "calculated_wastage_rate": round(calculated_wastage_rate, 1),
                 "total_length_cm": nesting_result["total_length_cm"],
                 "width_utilization": nesting_result["width_utilization"],
                 "rows": nesting_result["rows"],
@@ -735,7 +766,6 @@ def cad_nesting():
 
         fabric_width = float(fabric_params.get("width", 145))
         shrinkage_rate = float(fabric_params.get("shrinkageRate", 3))
-        wastage_rate = float(fabric_params.get("wastageRate", 8))
         fabric_weight_gsm = float(fabric_params.get("weightGsm", 0))
         quantity = int(fabric_params.get("quantity", 1))
         fabric_nap = fabric_params.get("fabricNap", False)
@@ -750,7 +780,6 @@ def cad_nesting():
             options={},
             fabric_width=fabric_width,
             shrinkage_rate=shrinkage_rate,
-            wastage_rate=wastage_rate,
             fabric_weight_gsm=fabric_weight_gsm,
             quantity=quantity,
             fabric_nap=fabric_nap,
@@ -910,8 +939,9 @@ def calc_nesting():
 def calc_all():
     """独立计算模块 - 一次性生成所有三个模块API"""
     import time
+    from datetime import datetime
     start_time = time.time()
-    
+
     try:
         data = request.get_json()
         if not data:
@@ -926,8 +956,98 @@ def calc_all():
         result = generate_all_modules(measurements, fabric_width, seam_allowance, options)
 
         elapsed = time.time() - start_time
-        
+
         if result["success"]:
+            # ✅ 【新增】保存精确计算结果到数据库
+            record_id = datetime.now().strftime("%Y%m%d%H%M%S")
+            
+            # 构建图片数据（用于保存到数据库）
+            pattern_data = result.get("pattern", {})
+            seam_data = result.get("seam", {})
+            nesting_data = result.get("nesting", {})
+            
+            piece_images = []
+            if pattern_data.get("pattern_png_base64"):
+                piece_images.append({
+                    "name": "裁片图",
+                    "file_path": f"/static/uploads/calc_{record_id}_pattern.png"
+                })
+            
+            seam_images = []
+            if seam_data.get("seam_png_base64"):
+                seam_images.append({
+                    "name": "缝份图",
+                    "file_path": f"/static/uploads/calc_{record_id}_seam.png"
+                })
+            
+            nesting_images = []
+            if nesting_data.get("nesting_png_base64"):
+                nesting_images.append({
+                    "material_name": "主面料",
+                    "file_path": f"/static/uploads/calc_{record_id}_nesting.png"
+                })
+
+            record = {
+                "id": record_id,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "type": "precise",
+                "category": measurements.get("category", "tshirt"),
+                "params": {
+                    "fabric_width": fabric_width,
+                    "seam_allowance": seam_allowance,
+                    **measurements
+                },
+                "result": {
+                    "per_piece_length_m": nesting_data.get("per_piece_length_m", 0),
+                    "total_area_m2": nesting_data.get("total_area_m2", 0),
+                    "utilization_rate": nesting_data.get("utilization_rate", 0),
+                },
+                "input_data": data,
+                "full_result": {
+                    **result,
+                    "piece_images": piece_images,
+                    "seam_images": seam_images,
+                    "nesting_images": nesting_images,
+                },
+            }
+            
+            try:
+                # 保存base64图片到文件系统
+                import base64
+                import os
+                
+                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+                os.makedirs(upload_dir, exist_ok=True)
+                
+                # 保存裁片图
+                if pattern_data.get("pattern_png_base64"):
+                    pattern_b64 = pattern_data["pattern_png_base64"]
+                    if pattern_b64.startswith('data:'):
+                        pattern_b64 = pattern_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_pattern.png", 'wb') as f:
+                        f.write(base64.b64decode(pattern_b64))
+                
+                # 保存缝份图
+                if seam_data.get("seam_png_base64"):
+                    seam_b64 = seam_data["seam_png_base64"]
+                    if seam_b64.startswith('data:'):
+                        seam_b64 = seam_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_seam.png", 'wb') as f:
+                        f.write(base64.b64decode(seam_b64))
+                
+                # 保存排料图
+                if nesting_data.get("nesting_png_base64"):
+                    nest_b64 = nesting_data["nesting_png_base64"]
+                    if nest_b64.startswith('data:'):
+                        nest_b64 = nest_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_nesting.png", 'wb') as f:
+                        f.write(base64.b64decode(nest_b64))
+                
+                db_manager.save_record(record)
+                print(f"[Calc-Engine] ✅ 已保存到数据库: {record_id}")
+            except Exception as e:
+                print(f"[Calc-Engine] ⚠️ 保存历史记录失败（不影响返回结果）: {e}")
+
             return jsonify({
                 "success": True,
                 **result,

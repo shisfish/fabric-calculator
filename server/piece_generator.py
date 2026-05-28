@@ -393,7 +393,7 @@ def generate_cad_pieces_preview(measurements, options=None, category="tshirt"):
 
 
 def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_rate,
-                                 wastage_rate, fabric_weight_gsm, quantity, fabric_nap=False,
+                                 fabric_weight_gsm, quantity, fabric_nap=False,
                                  qty_nest_mode=False, custom_pieces=None, category="tshirt"):
     """
     CAD排料计算 - 基于实物测量数据生成裁片并排料
@@ -453,9 +453,16 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         # qtyNestMode时，排料已包含全部数量裁片，不再乘以quantity
         total_length_m = per_piece_length_m * (1 if qty_nest_mode else quantity)
 
+        # 计算实际损耗率
+        if used_area_cm2 > 0 and total_area_cm2 > 0:
+            calculated_wastage_rate = ((total_area_cm2 - used_area_cm2) / used_area_cm2) * 100
+            calculated_wastage_rate = max(0, min(calculated_wastage_rate, 50))
+        else:
+            calculated_wastage_rate = 0
+
         fabric_weight_kg = 0
         if fabric_weight_gsm > 0:
-            fabric_weight_kg = (total_area_m2 * fabric_weight_gsm * (1 + wastage_rate / 100)) / 1000
+            fabric_weight_kg = (total_area_m2 * fabric_weight_gsm) / 1000
 
         utilization_rate = data.get('utilization', 0)
 
@@ -502,12 +509,12 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
             "params": {
                 "fabric_width": fabric_width,
                 "shrinkage_rate": shrinkage_rate,
-                "wastage_rate": wastage_rate,
                 "fabric_weight_gsm": fabric_weight_gsm,
                 "quantity": quantity,
                 "measurements": measurements,
                 "options": options
             },
+            "calculated_wastage_rate": round(calculated_wastage_rate, 1),
             "material_breakdown": {
                 "main": {
                     "name": "主面料",

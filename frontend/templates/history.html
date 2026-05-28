@@ -14,8 +14,18 @@
         <div class="page-header">
             <h2>📜 历史记录</h2>
             <p class="page-desc">查看之前的计算记录，方便对比和复用</p>
-            <div class="header-actions">
+            <div class="header-actions" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <!-- 类型筛选器 -->
+                <select id="type-filter" class="form-select" style="min-width:140px;padding:6px 12px;border:1px solid var(--border-color);border-radius:6px;font-size:13px;" onchange="onTypeFilterChange()">
+                    <option value="">全部类型</option>
+                    <option value="quick">快速估算</option>
+                    <option value="precise">精确计算</option>
+                    <option value="curved">曲线计算</option>
+                    <option value="polygon">多边形排料</option>
+                    <option value="cad">CAD排料</option>
+                </select>
                 <button class="btn btn-sm btn-outline" onclick="refreshHistory()">🔄 刷新</button>
+                <span id="record-count" style="font-size:13px;color:var(--text-secondary);"></span>
             </div>
         </div>
 
@@ -37,6 +47,35 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- 分页组件 -->
+        <div id="pagination-container" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:24px;padding:16px 0;">
+            <button id="btn-prev-page" class="btn btn-sm btn-outline" onclick="goToPrevPage()" disabled>← 上一页</button>
+            <span id="page-info" style="font-size:14px;color:var(--text-secondary);min-width:120px;text-align:center;">第 1 / 1 页</span>
+            <button id="btn-next-page" class="btn btn-sm btn-outline" onclick="goToNextPage()" disabled>下一页 →</button>
+            
+            <!-- 页码跳转 -->
+            <div style="display:flex;align-items:center;gap:8px;margin-left:20px;">
+                <span style="font-size:13px;color:var(--text-secondary);">跳转到</span>
+                <input type="number" id="page-jump-input" min="1" value="1" 
+                       style="width:60px;padding:4px 8px;border:1px solid var(--border-color);border-radius:4px;text-align:center;font-size:13px;"
+                       onkeypress="if(event.key==='Enter')jumpToPage()">
+                <span style="font-size:13px;color:var(--text-secondary);">页</span>
+                <button class="btn btn-sm btn-primary" onclick="jumpToPage()">跳转</button>
+            </div>
+
+            <!-- 每页数量选择 -->
+            <div style="display:flex;align-items:center;gap:8px;margin-left:20px;">
+                <span style="font-size:13px;color:var(--text-secondary);">每页</span>
+                <select id="page-size-select" onchange="onPageSizeChange()" 
+                        style="padding:4px 8px;border:1px solid var(--border-color);border-radius:4px;font-size:13px;">
+                    <option value="10">10条</option>
+                    <option value="20" selected>20条</option>
+                    <option value="50">50条</option>
+                    <option value="100">100条</option>
+                </select>
+            </div>
         </div>
     </main>
 

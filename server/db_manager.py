@@ -46,20 +46,64 @@ class DatabaseManager:
     # 历史记录列表（主表）
     # ============================================================
 
-    def load_history(self, limit=100):
-        """加载历史记录列表"""
+    def load_history(self, page=1, page_size=20, record_type=None):
+        """
+        加载历史记录列表（支持分页和类型筛选）
+
+        Args:
+            page: 页码（从1开始）
+            page_size: 每页数量
+            record_type: 筛选类型 (quick/precise/curved/polygon/cad)，None表示全部
+
+        Returns:
+            dict: {
+                records: [...],
+                pagination: {
+                    total: 总数,
+                    page: 当前页,
+                    pageSize: 每页数量,
+                    totalPages: 总页数
+                }
+            }
+        """
         with self._get_connection() as conn:
+            # 1. 统计总数
+            count_sql = "SELECT COUNT(*) as total FROM calculation_history WHERE 1=1"
+            count_params = []
+            
+            if record_type:
+                count_sql += " AND type = %s"
+                count_params.append(record_type)
+
+            with conn.cursor() as count_cursor:
+                count_cursor.execute(count_sql, count_params)
+                total = count_cursor.fetchone()['total']
+
+            # 2. 计算分页参数
+            offset = (page - 1) * page_size
+            total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+            # 3. 查询当前页数据
+            query_sql = """
+                SELECT id, timestamp, type, category, category_name,
+                       fabric_width, fabric_type, fabric_weight_gsm,
+                       shrinkage_rate, wastage_rate, quantity,
+                       per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg,
+                       main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count
+                FROM calculation_history
+                WHERE 1=1
+            """
+            query_params = []
+
+            if record_type:
+                query_sql += " AND type = %s"
+                query_params.append(record_type)
+
+            query_sql += " ORDER BY timestamp DESC LIMIT %s OFFSET %s"
+            query_params.extend([page_size, offset])
+
             with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT id, timestamp, type, category, category_name,
-                           fabric_width, fabric_type, fabric_weight_gsm,
-                           shrinkage_rate, wastage_rate, quantity,
-                           per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg,
-                           main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count
-                    FROM calculation_history
-                    ORDER BY timestamp DESC
-                    LIMIT %s
-                """, (limit,))
+                cursor.execute(query_sql, query_params)
                 rows = cursor.fetchall()
 
                 history = []
@@ -85,7 +129,16 @@ class DatabaseManager:
                         "result": result,
                     }
                     history.append(record)
-                return history
+
+                return {
+                    "records": history,
+                    "pagination": {
+                        "total": total,
+                        "page": page,
+                        "pageSize": page_size,
+                        "totalPages": total_pages
+                    }
+                }
 
     def get_record(self, record_id):
         """获取单条记录详情"""
@@ -103,7 +156,7 @@ class DatabaseManager:
         result = self._build_result(row)
         pieces = self._get_pieces(conn, row['id'])
         quick_params = self._get_quick_params(conn, row['id']) if row['type'] == 'quick' else None
-        piece_images, nesting_images = self._get_images(conn, row['id'])
+        piece_images, nesting_images, seam_images = self._get_images(conn, row['id'])
         # 从平铺表重新组装 input_data（用于重新计算）
         input_data = self._build_input_data(conn, row, pieces, quick_params)
 
@@ -119,6 +172,7 @@ class DatabaseManager:
             "input_data": input_data,
             "piece_images": piece_images,
             "nesting_images": nesting_images,
+            "seam_images": seam_images,
         }
 
     # ============================================================
@@ -257,6 +311,23 @@ class DatabaseManager:
                             record['id'],
                             'nesting',
                             img_info.get('material_name', ''),
+                            file_path,
+                            idx,
+                        ))
+
+                # 保存缝份图（精确计算模块）
+                seam_images = full_result.get('seam_images', [])
+                for idx, img_info in enumerate(seam_images):
+                    file_path = img_info.get('file_path')
+                    if file_path:
+                        cursor.execute("""
+                            INSERT INTO history_images
+                            (history_id, image_type, image_name, image_path, image_order)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            'seam',
+                            img_info.get('name', '缝份图'),
                             file_path,
                             idx,
                         ))
@@ -432,7 +503,7 @@ class DatabaseManager:
             }
 
     def _get_images(self, conn, history_id):
-        """获取图片路径"""
+        """获取图片路径（支持piece/seam/nesting三种类型）"""
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT image_type, image_name, image_path, image_order
@@ -444,6 +515,7 @@ class DatabaseManager:
 
         piece_images = []
         nesting_images = []
+        seam_images = []
         for r in rows:
             img_info = {
                 "name": r['image_name'],
@@ -451,13 +523,15 @@ class DatabaseManager:
             }
             if r['image_type'] == 'piece':
                 piece_images.append(img_info)
+            elif r['image_type'] == 'seam':
+                seam_images.append(img_info)
             elif r['image_type'] == 'nesting':
                 nesting_images.append({
                     "material": r['image_name'],
                     "material_name": r['image_name'],
                     "file_path": r['image_path'],
                 })
-        return piece_images, nesting_images
+        return piece_images, nesting_images, seam_images
 
     # ============================================================
     # 辅助方法
