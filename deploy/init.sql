@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS history_materials (
     length_m DECIMAL(10,4) COMMENT '用料长度(m)',
     area_m2 DECIMAL(10,4) COMMENT '用料面积(m²)',
     weight_kg DECIMAL(10,4) COMMENT '用料重量(kg)',
-    width_utilization DECIMAL(5,1) COMMENT '门幅利用率(%)',
+    width_utilization DECIMAL(5,2) COMMENT '门幅利用率(%)',
     INDEX idx_history_id (history_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计算历史材料汇总表';
 
