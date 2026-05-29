@@ -40,7 +40,15 @@ export interface NestingPiece {
   polygon: Polygon;
   quantity: number;
   rotations: Array<{ angle: number; polygon: Polygon }>;
-  isAccessory?: boolean; // 标记是否为配件（口袋等小裁片），用于两阶段排料
+  isAccessory?: boolean;
+  _geometryScore?: number;
+}
+
+interface PieceClassification {
+  category: 'main' | 'accessory' | 'long_narrow' | 'small_filler';
+  isAccessory: boolean;
+  isLongNarrow: boolean;
+  placementPriority: number;
 }
 
 export const DEFAULT_NEST_CONFIG: NestConfig = {
@@ -127,13 +135,11 @@ export class NestEngine {
         const bb = normalized.getBoundingBox();
         const area = bb.width * bb.height;
         
-        const isSmallFiller = area < 1000;
-        
         const aspectRatio = Math.max(bb.width, bb.height) / Math.min(bb.width, bb.height);
-        const isLongNarrowPiece = aspectRatio > 8;
+        const pieceType = this.classifyPieceByGeometry(area, aspectRatio, piece.name);
         
-        if (isLongNarrowPiece) {
-          logger.info(`   📏 裁片"${piece.name}" 长宽比=${aspectRatio.toFixed(1)} (${bb.width.toFixed(1)}×${bb.height.toFixed(1)}), 标记为配件`);
+        if (pieceType.isLongNarrow) {
+          logger.info(`   📏 裁片"${piece.name}" 长宽比=${aspectRatio.toFixed(1)} (${bb.width.toFixed(1)}×${bb.height.toFixed(1)}), 类型=${pieceType.category}`);
         }
         
         this.pieces.push({
@@ -141,10 +147,8 @@ export class NestEngine {
           polygon: normalized,
           quantity: piece.cutCount,
           rotations,
-          isAccessory: piece.isAccessory === true || isSmallFiller || isLongNarrowPiece ||
-            piece.name.includes('口袋') || piece.name.includes('领') ||
-            piece.name.includes('袖口') || piece.name.includes('罗纹') ||
-            piece.name === '配件' || piece.name === '其他配件',
+          isAccessory: pieceType.isAccessory,
+          _geometryScore: pieceType.placementPriority,
         });
         this.pieceOnFold.set(piece.name, piece.onFold ?? false);
       } else {
@@ -220,14 +224,52 @@ export class NestEngine {
   }
 
   private getAccessoryPriority(piece: NestingPiece): number {
+    return piece._geometryScore ?? this.calculateGeometryScore(piece);
+  }
+
+  private calculateGeometryScore(piece: NestingPiece): number {
     const bb = piece.polygon.getBoundingBox();
+    const area = bb.width * bb.height;
     const aspectRatio = Math.max(bb.width, bb.height) / Math.min(bb.width, bb.height);
+
+    let score = 0;
     
-    if (aspectRatio > 8) return 0;
-    if (piece.id.includes('领')) return 1;
-    if (piece.id.includes('袖口') || piece.id.includes('口袋')) return 2;
-    if (piece.id.includes('罗纹')) return 3;
-    return 4;
+    if (aspectRatio > 10) score -= 100;
+    else if (aspectRatio > 6) score -= 60;
+    else if (aspectRatio > 4) score -= 30;
+
+    if (area < 500) score += 20;
+    else if (area < 1000) score += 10;
+
+    const fabricWidth = this.config.fabricWidth / 10;
+    if (bb.width > fabricWidth * 0.8) score -= 40;
+
+    return score;
+  }
+
+  private classifyPieceByGeometry(area: number, aspectRatio: number, name: string): PieceClassification {
+    const isLongNarrow = aspectRatio > 6;
+    const isSmall = area < 1000;
+
+    let category: PieceClassification['category'];
+    let isAccessory: boolean;
+    let placementPriority: number;
+
+    if (isLongNarrow) {
+      category = 'long_narrow';
+      isAccessory = true;
+      placementPriority = -100 - (aspectRatio > 10 ? 50 : 0);
+    } else if (isSmall) {
+      category = 'small_filler';
+      isAccessory = true;
+      placementPriority = 10 + (area < 500 ? 10 : 0);
+    } else {
+      category = 'main';
+      isAccessory = false;
+      placementPriority = 50 + (area / 100);
+    }
+
+    return { category, isAccessory, isLongNarrow, placementPriority };
   }
 
   private placePiece(nestingPiece: NestingPiece, index: number, preferBottom: boolean = false): boolean {
