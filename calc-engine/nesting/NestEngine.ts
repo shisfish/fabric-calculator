@@ -166,11 +166,66 @@ export class NestEngine {
     }
   }
 
-  nest(sortByArea: boolean = true): NestResult {
-    this.placedPieces = [];
+  nest(sortByArea: boolean = true, numRestarts: number = 5): NestResult {
+    if (numRestarts <= 1) {
+      return this.executeNesting(sortByArea);
+    }
+
+    logger.info(`\n🎲 === 随机重启优化 (${numRestarts}次) ===`);
+    
+    let bestResult: NestResult | null = null;
+    let bestHeight = Infinity;
+    const results: Array<{ attempt: number; height: number; utilization: number }> = [];
+
+    for (let attempt = 0; attempt < numRestarts; attempt++) {
+      logger.info(`\n   🔄 尝试 ${attempt + 1}/${numRestarts}`);
+      
+      this.placedPieces = [];
+      
+      let result: NestResult;
+      if (attempt === 0) {
+        result = this.executeNesting(sortByArea);
+      } else {
+        result = this.executeNestingWithShuffle();
+      }
+
+      const currentHeight = result.bounds.height;
+      const currentUtilization = result.utilization;
+      
+      results.push({
+        attempt: attempt + 1,
+        height: currentHeight,
+        utilization: currentUtilization
+      });
+
+      logger.info(`   📊 结果 ${attempt + 1}: 长度=${currentHeight.toFixed(1)}cm, 利用率=${(currentUtilization * 100).toFixed(1)}%`);
+
+      if (currentHeight < bestHeight) {
+        bestHeight = currentHeight;
+        bestResult = result;
+        
+        if (attempt > 0) {
+          logger.info(`   ✨ 发现更优解! 长度 ${bestHeight.toFixed(1)}cm`);
+        }
+      }
+    }
+
+    logger.info(`\n🏆 === 随机重启完成 ===`);
+    logger.info(`   最佳结果: 长度=${bestHeight.toFixed(1)}cm, 利用率=${((bestResult as NestResult).utilization * 100).toFixed(1)}%`);
+    
+    results.sort((a, b) => a.height - b.height);
+    logger.info(`   所有尝试:`);
+    for (const r of results) {
+      const marker = r.height === bestHeight ? '🏆' : '  ';
+      logger.info(`     ${marker} 尝试${r.attempt}: ${r.height.toFixed(1)}cm (${(r.utilization * 100).toFixed(1)}%)`);
+    }
+
+    return bestResult!;
+  }
+
+  private executeNesting(sortByArea: boolean): NestResult {
     const allPieces = sortByArea ? this.sortPiecesByArea() : [...this.pieces];
 
-    // ===== 分离主裁片和配件 =====
     const mainPieces: NestingPiece[] = [];
     const accessoryPieces: NestingPiece[] = [];
     for (const p of allPieces) {
@@ -188,14 +243,12 @@ export class NestEngine {
     logger.info(`   Phase 1 主裁片: ${mainPieces.map(p => `${p.id}×${p.quantity}`).join(', ')}`);
     logger.info(`   Phase 2 配件: ${accessoryPieces.map(p => `${p.id}×${p.quantity}`).join(', ') || '无'}`);
 
-    // Phase 1: 只放主裁片
     for (const nestingPiece of mainPieces) {
       for (let q = 0; q < nestingPiece.quantity; q++) {
         this.placePiece(nestingPiece, q);
       }
     }
 
-    // Phase 1优化
     this.postOptimizeRotations();
     this.compactLayout();
 
@@ -205,18 +258,58 @@ export class NestEngine {
       : 0;
     logger.info(`   ✅ Phase 1 完成: 长度=${phase1MaxY.toFixed(1)}cm`);
 
-    // Phase 2: 放入配件，优先利用主裁片形成的空位，不主动拉长排料
     for (const nestingPiece of accessoryPieces) {
       for (let q = 0; q < nestingPiece.quantity; q++) {
         this.placePiece(nestingPiece, q);
       }
     }
 
-    // 最终优化：保留小件填缝结果，避免把配件强制下沉后拉长排料长度
+    this.localOptimize();
     this.compactLayout();
     this.clampToBoundary();
 
     return this.calculateResult();
+  }
+
+  private executeNestingWithShuffle(): NestResult {
+    const shuffledMain = this.shuffleArray(
+      this.pieces.filter(p => !p.isAccessory)
+    );
+    const shuffledAccessories = this.shuffleArray(
+      this.pieces.filter(p => p.isAccessory)
+    );
+
+    logger.info(`   🔀 打乱顺序: 主裁片=[${shuffledMain.map(p => p.id).join(',')}], 配件=[${shuffledAccessories.map(p => p.id).join(',')}]`);
+
+    for (const nestingPiece of shuffledMain) {
+      for (let q = 0; q < nestingPiece.quantity; q++) {
+        this.placePiece(nestingPiece, q);
+      }
+    }
+
+    this.postOptimizeRotations();
+    this.compactLayout();
+
+    for (const nestingPiece of shuffledAccessories) {
+      for (let q = 0; q < nestingPiece.quantity; q++) {
+        this.placePiece(nestingPiece, q);
+      }
+    }
+
+    this.localOptimize();
+    this.compactLayout();
+    this.clampToBoundary();
+
+    return this.calculateResult();
+  }
+
+  private shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }
 
   private sortPiecesByArea(): NestingPiece[] {
@@ -248,21 +341,31 @@ export class NestEngine {
   }
 
   private classifyPieceByGeometry(area: number, aspectRatio: number, name: string): PieceClassification {
-    const isLongNarrow = aspectRatio > 6;
-    const isSmall = area < 1000;
+    const isLongNarrow = aspectRatio > 5;
+    const isVeryLongNarrow = aspectRatio > 10;
+    const isSmall = area < 1200;
+    const isVerySmall = area < 600;
 
     let category: PieceClassification['category'];
     let isAccessory: boolean;
     let placementPriority: number;
 
-    if (isLongNarrow) {
+    if (isVeryLongNarrow) {
       category = 'long_narrow';
       isAccessory = true;
-      placementPriority = -100 - (aspectRatio > 10 ? 50 : 0);
+      placementPriority = -150;
+    } else if (isLongNarrow) {
+      category = 'long_narrow';
+      isAccessory = true;
+      placementPriority = -100;
+    } else if (isVerySmall) {
+      category = 'small_filler';
+      isAccessory = true;
+      placementPriority = 15;
     } else if (isSmall) {
       category = 'small_filler';
       isAccessory = true;
-      placementPriority = 10 + (area < 500 ? 10 : 0);
+      placementPriority = 8;
     } else {
       category = 'main';
       isAccessory = false;
@@ -279,7 +382,7 @@ export class NestEngine {
 
     const bb = nestingPiece.polygon.getBoundingBox();
     const aspectRatio = Math.max(bb.width, bb.height) / Math.min(bb.width, bb.height);
-    const isLongNarrow = aspectRatio > 6;
+    const isLongNarrow = aspectRatio > 5;
 
     const rotationOrder: number[] = [];
     if (nestingPiece.quantity >= 2 && nestingPiece.rotations.length >= 2 && !this.config.fabricNap) {
@@ -476,8 +579,13 @@ export class NestEngine {
     const rightSpace = (this.config.fabricWidth / 10) - b.maxX;
     const bottomSpace = this.config.fabricHeight - b.maxY;
     
-    waste += rightSpace * b.height * 0.3;
-    waste += bottomSpace * b.width * 0.5;
+    waste += rightSpace * b.height * 0.6;
+    waste += bottomSpace * b.width * 0.8;
+
+    const topSpace = b.minY - this.config.spacing;
+    if (topSpace > 0) {
+      waste += topSpace * b.width * 0.2;
+    }
 
     return waste;
   }
@@ -904,6 +1012,184 @@ export class NestEngine {
         }
       }
     }
+  }
+
+  private localOptimize(): void {
+    logger.info(`\n🔧 === 局部优化 (Local Optimization) ===`);
+    
+    let improved = true;
+    let iteration = 0;
+    const maxIterations = 3;
+    let totalImprovements = 0;
+
+    while (improved && iteration < maxIterations) {
+      improved = false;
+      iteration++;
+      let iterImprovements = 0;
+
+      const currentHeight = this.getCurrentHeight();
+      logger.info(`   📍 迭代 ${iteration}/${maxIterations}, 当前高度=${currentHeight.toFixed(1)}cm`);
+
+      for (let i = this.placedPieces.length - 1; i >= 0; i--) {
+        const piece = this.placedPieces[i];
+        const bb = piece.polygon.getBoundingBox();
+        const area = bb.width * bb.height;
+        
+        if (area > 3000) continue;
+
+        const originalX = piece.x;
+        const originalY = piece.y;
+
+        this.placedPieces.splice(i, 1);
+
+        const betterPos = this.findBetterPosition(piece, currentHeight);
+        
+        if (betterPos && this.isPositionBetter(betterPos, originalX, originalY)) {
+          piece.x = betterPos.x;
+          piece.y = betterPos.y;
+          this.placedPieces.splice(i, 0, piece);
+          improved = true;
+          iterImprovements++;
+          totalImprovements++;
+          
+          if (iterImprovements <= 3) {
+            logger.info(`   ✅ 优化: ${piece.pieceId} (${originalX.toFixed(1)},${originalY.toFixed(1)}) → (${betterPos.x.toFixed(1)},${betterPos.y.toFixed(1)})`);
+          }
+        } else {
+          this.placedPieces.splice(i, 0, piece);
+        }
+      }
+
+      if (iterImprovements > 0) {
+        const newHeight = this.getCurrentHeight();
+        logger.info(`   📊 迭代 ${iteration} 完成: 改进${iterImprovements}处, 高度 ${currentHeight.toFixed(1)} → ${newHeight.toFixed(1)}cm`);
+      }
+    }
+
+    logger.info(`   ✅ 局部优化完成: 共改进${totalImprovements}处, 最终高度=${this.getCurrentHeight().toFixed(1)}cm`);
+  }
+
+  private getCurrentHeight(): number {
+    if (this.placedPieces.length === 0) return 0;
+    return Math.max(...this.placedPieces.map(p => 
+      p.polygon.translate(p.x, p.y).getBoundingBox().maxY
+    ));
+  }
+
+  private findBetterPosition(piece: PlacedPiece, currentHeight: number): { x: number; y: number } | null {
+    const poly = piece.polygon;
+    const bb = poly.getBoundingBox();
+    const spacing = this.config.spacing;
+    
+    let bestPos: { x: number; y: number } | null = null;
+    let bestScore = Infinity;
+
+    const yLevels = new Set<number>();
+    yLevels.add(spacing - bb.minY);
+
+    for (const placed of this.placedPieces) {
+      if (placed.pieceId === piece.pieceId) continue;
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      yLevels.add(pb.maxY + spacing - bb.minY);
+      yLevels.add(pb.minY - spacing - bb.maxY);
+      yLevels.add((pb.minY + pb.maxY) / 2 - (bb.minY + bb.maxY) / 2);
+    }
+
+    for (const cy of Array.from(yLevels).sort((a, b) => a - b)) {
+      if (cy + bb.minY < spacing || cy + bb.maxY > this.config.fabricHeight) continue;
+
+      const xPositions = this.findValidXPositionsForPiece(poly, piece.pieceId, cy);
+      
+      for (const cx of xPositions) {
+        const testPoly = poly.translate(cx, cy);
+        
+        if (!this.isValidPlacement(testPoly, piece.pieceId, spacing)) continue;
+
+        const testBb = testPoly.getBoundingBox();
+        const score = this.evaluatePositionScore(testBb, cx, cy, currentHeight);
+        
+        if (score < bestScore) {
+          bestScore = score;
+          bestPos = { x: cx, y: cy };
+        }
+      }
+    }
+
+    return bestPos;
+  }
+
+  private findValidXPositionsForPiece(polygon: Polygon, pieceId: string, cy: number): number[] {
+    const spacing = this.config.spacing;
+    const fw = this.config.fabricWidth;
+    const b = polygon.getBoundingBox();
+
+    const xCands = new Set<number>();
+    xCands.add(spacing - b.minX);
+
+    for (const placed of this.placedPieces) {
+      if (placed.pieceId === pieceId) continue;
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      
+      if (!(cy + b.maxY < pb.minY - spacing || cy + b.minY > pb.maxY + spacing)) {
+        xCands.add(pb.maxX + spacing - b.minX);
+        xCands.add(pb.minX - spacing - b.maxX);
+      }
+      
+      const midX = (pb.minX + pb.maxX) / 2;
+      xCands.add(midX - (b.minX + b.maxX) / 2);
+    }
+
+    const validPositions: number[] = [];
+    for (const cx of xCands) {
+      if (cx + b.minX < spacing || cx + b.maxX > fw - spacing) continue;
+      
+      const testPoly = polygon.translate(cx, cy);
+      if (this.isValidPlacement(testPoly, pieceId, spacing)) {
+        validPositions.push(cx);
+      }
+    }
+
+    return validPositions.sort((a, b) => a - b);
+  }
+
+  private evaluatePositionScore(bb: BoundingBox, x: number, y: number, currentHeight: number): number {
+    let maxY = bb.maxY;
+    for (const placed of this.placedPieces) {
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      maxY = Math.max(maxY, pb.maxY);
+    }
+
+    const heightIncrease = Math.max(0, maxY - currentHeight);
+    const rightSpace = (this.config.fabricWidth / 10) - bb.maxX;
+    
+    let score = heightIncrease * 1000;
+    score += y * 2;
+    score += rightSpace * 0.5;
+    
+    let neighborDist = 0;
+    let neighborCount = 0;
+    for (const placed of this.placedPieces) {
+      const dist = Math.abs(placed.x - x) + Math.abs(placed.y - y);
+      if (dist < 80) {
+        neighborDist += dist;
+        neighborCount++;
+      }
+    }
+    
+    if (neighborCount > 0) {
+      score -= neighborCount * 10;
+    }
+
+    return score;
+  }
+
+  private isPositionBetter(newPos: { x: number; y: number }, oldX: number, oldY: number): boolean {
+    const threshold = 0.5;
+    
+    if (newPos.y < oldY - threshold) return true;
+    if (Math.abs(newPos.y - oldY) < threshold && newPos.x < oldX - threshold) return true;
+    
+    return false;
   }
 
   private calculateResult(): NestResult {

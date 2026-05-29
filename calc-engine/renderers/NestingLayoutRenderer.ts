@@ -123,15 +123,43 @@ export class NestingLayoutRenderer {
       showPieceLabels?: boolean;
     }
   ): string {
-    const colors: Record<string, { fill: string; stroke: string }> = {
-      '前片': { fill: 'rgba(255, 165, 0, 0.4)', stroke: '#FF8C00' },
-      '后片': { fill: 'rgba(100, 149, 237, 0.4)', stroke: '#4169E1' },
-      '袖子': { fill: 'rgba(50, 205, 50, 0.4)', stroke: '#228B22' },
-      '领口罗纹': { fill: 'rgba(255, 105, 180, 0.4)', stroke: '#FF69B4' },
-      '口袋': { fill: 'rgba(204, 204, 153, 0.4)', stroke: '#999966' },
-      '帽子': { fill: 'rgba(204, 153, 255, 0.4)', stroke: '#CC99FF' },
-      'default': { fill: 'rgba(169, 169, 169, 0.4)', stroke: '#696969' }
+    const colorPalette = [
+      { fill: 'rgba(255, 99, 132, 0.35)', stroke: '#FF6384' },
+      { fill: 'rgba(54, 162, 235, 0.35)', stroke: '#36A2EB' },
+      { fill: 'rgba(255, 206, 86, 0.35)', stroke: '#FFCE56' },
+      { fill: 'rgba(75, 192, 192, 0.35)', stroke: '#4BC0C0' },
+      { fill: 'rgba(153, 102, 255, 0.35)', stroke: '#9966FF' },
+      { fill: 'rgba(255, 159, 64, 0.35)', stroke: '#FF9F40' },
+      { fill: 'rgba(199, 199, 199, 0.35)', stroke: '#C7C7C7' },
+      { fill: 'rgba(83, 102, 255, 0.35)', stroke: '#5366FF' },
+      { fill: 'rgba(255, 99, 255, 0.35)', stroke: '#FF63FF' },
+      { fill: 'rgba(99, 255, 132, 0.35)', stroke: '#63FF84' },
+      { fill: 'rgba(255, 165, 0, 0.35)', stroke: '#FFA500' },
+      { fill: 'rgba(100, 149, 237, 0.35)', stroke: '#6495ED' },
+      { fill: 'rgba(50, 205, 50, 0.35)', stroke: '#32CD32' },
+      { fill: 'rgba(255, 105, 180, 0.35)', stroke: '#FF69B4' },
+      { fill: 'rgba(204, 153, 255, 0.35)', stroke: '#CC99FF' }
+    ];
+
+    const pieceColorMap = new Map<string, { fill: string; stroke: string }>();
+    let colorIndex = 0;
+
+    const getPieceBaseName = (pieceName: string): string => {
+      return pieceName.replace(/\(\d+缝\)$/, '').replace(/_\d+$/, '');
     };
+
+    const getConsistentColor = (pieceName: string): { fill: string; stroke: string } => {
+      const baseName = getPieceBaseName(pieceName);
+      
+      if (!pieceColorMap.has(baseName)) {
+        pieceColorMap.set(baseName, colorPalette[colorIndex % colorPalette.length]);
+        colorIndex++;
+      }
+      
+      return pieceColorMap.get(baseName)!;
+    };
+
+    const showLabels = options?.showPieceLabels !== false;
 
     let svgContent = '';
 
@@ -140,7 +168,7 @@ export class NestingLayoutRenderer {
     }
 
     for (const piece of placedPieces) {
-      const color = colors[piece.name] || colors.default;
+      const color = getConsistentColor(piece.name);
 
       svgContent += `  <g transform="translate(${piece.x}, ${piece.y})">\n`;
 
@@ -152,27 +180,39 @@ export class NestingLayoutRenderer {
       if (piece.pathOps && piece.pathOps.length > 0) {
         svgContent += this.pathOpsToSVGPath(piece.pathOps, color);
       } else {
-        svgContent += `    <rect x="0" y="0" width="${piece.width}" height="${piece.height}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="0.8" />\n`;
+        svgContent += `    <rect x="0" y="0" width="${piece.width}" height="${piece.height}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="0.8" rx="1" ry="1" />\n`;
       }
 
-      if (options?.showPieceLabels) {
+      if (showLabels) {
+        const displayName = piece.name.replace(/\(\d+缝\)$/, '');
         const centerX = piece.width / 2;
         const centerY = piece.height / 2;
+        
+        const fontSize = Math.min(piece.width, piece.height) > 20 ? 8 : 6;
+        const textFillColor = this.getContrastColor(color.stroke);
 
-        svgContent += `    <text x="${centerX}" y="${centerY - 4}" text-anchor="middle" font-size="7" font-weight="bold" fill="#333">${piece.name}</text>\n`;
-        svgContent += `    <text x="${centerX}" y="${centerY + 7}" text-anchor="middle" font-size="6" fill="#666">${piece.width.toFixed(1)}×${piece.height.toFixed(1)}</text>\n`;
+        svgContent += `    <text x="${centerX}" y="${centerY + fontSize/3}" text-anchor="middle" font-size="${fontSize}" font-weight="600" fill="${textFillColor}" style="pointer-events:none;">${displayName}</text>\n`;
       }
 
       svgContent += `  </g>\n`;
     }
 
     if (options?.showUtilization) {
-      svgContent += this.generateUtilizationInfo(utilization, fabricWidth, fabricHeight);
+      svgContent += this.generateUtilizationInfo(utilization, fabricWidth, fabricHeight, pieceColorMap);
     }
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fabricWidth} ${fabricHeight}">
   <rect x="0" y="0" width="${fabricWidth}" height="${fabricHeight}" fill="#fffef8" stroke="#333" stroke-width="1"/>
 ${svgContent}</svg>`;
+  }
+
+  private static getContrastColor(hexColor: string): string {
+    const r = parseInt(hexColor.slice(1, 3), 16);
+    const g = parseInt(hexColor.slice(3, 5), 16);
+    const b = parseInt(hexColor.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    return luminance > 0.5 ? '#333333' : '#FFFFFF';
   }
 
   private static generateGrid(width: number, height: number): string {
@@ -228,22 +268,32 @@ ${svgContent}</svg>`;
   private static generateUtilizationInfo(
     utilization: number,
     fabricWidth: number,
-    fabricHeight: number
+    fabricHeight: number,
+    pieceColorMap: Map<string, { fill: string; stroke: string }>
   ): string {
-    const boxX = fabricWidth - 120;
+    const boxX = fabricWidth - 130;
     const boxY = 10;
+    
+    const legendItems = Array.from(pieceColorMap.entries());
+    const legendHeight = Math.max(70, 20 + legendItems.length * 14);
+
+    let legendContent = '';
+    legendItems.forEach(([name, color], index) => {
+      const y = 25 + index * 13;
+      legendContent += `
+    <rect x="10" y="${y - 6}" width="12" height="8" fill="${color.fill}" stroke="${color.stroke}" stroke-width="0.5" rx="1" />
+    <text x="26" y="${y + 1}" font-size="7" fill="#333">${name}</text>`;
+    });
 
     return `
   <g transform="translate(${boxX}, ${boxY})">
-    <rect x="0" y="0" width="110" height="70" fill="white" fill-opacity="0.9" stroke="#999" stroke-width="0.3" rx="3" />
-    <text x="55" y="15" text-anchor="middle" font-size="9" font-weight="bold" fill="#333">排料统计</text>
-    <line x1="10" y1="20" x2="100" y2="20" stroke="#ddd" />
-    <text x="10" y="35" font-size="8" fill="#666">利用率:</text>
-    <text x="100" y="35" text-anchor="end" font-size="9" font-weight="bold" fill="${utilization >= 75 ? '#228B22' : utilization >= 60 ? '#FF8C00' : '#ff0000'}">${utilization.toFixed(1)}%</text>
-    <text x="10" y="48" font-size="8" fill="#666">门幅:</text>
-    <text x="100" y="48" text-anchor="end" font-size="8" fill="#333">${fabricWidth.toFixed(1)} cm</text>
-    <text x="10" y="61" font-size="8" fill="#666">用料长:</text>
-    <text x="100" y="61" text-anchor="end" font-size="8" fill="#333">${fabricHeight.toFixed(1)} cm</text>
+    <rect x="0" y="0" width="120" height="${legendHeight}" fill="white" fill-opacity="0.92" stroke="#999" stroke-width="0.3" rx="3" />
+    <text x="60" y="13" text-anchor="middle" font-size="9" font-weight="bold" fill="#333">排料统计</text>
+    <line x1="5" y1="18" x2="115" y2="18" stroke="#ddd" />
+    ${legendContent}
+    <line x1="5" y2="${legendHeight - 22}" x2="115" y2="${legendHeight - 22}" stroke="#ddd" />
+    <text x="10" y="${legendHeight - 9}" font-size="7" fill="#666">利用率:</text>
+    <text x="110" y="${legendHeight - 9}" text-anchor="end" font-size="8" font-weight="bold" fill="${utilization >= 80 ? '#228B22' : utilization >= 70 ? '#FF8C00' : '#ff0000'}">${utilization.toFixed(1)}%</text>
   </g>`;
   }
 }
