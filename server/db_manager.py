@@ -315,7 +315,9 @@ class DatabaseManager:
             # 2. 写裁片明细（先删后插，包含 user_id）
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record['id'],))
-                pieces = record.get('input_data', {}).get('pieces', [])
+                input_data = record.get('input_data', {})
+                pieces = (input_data.get('pieces', []) or
+                          input_data.get('measurements', {}).get('pieces', []))
                 for p in pieces:
                     length_val = p.get('length') or p.get('height')
                     width_val = p.get('width')
@@ -672,9 +674,11 @@ class DatabaseManager:
         nesting_images = []
         seam_images = []
         for r in rows:
+            raw_path = r['image_path']
+            file_path = raw_path if raw_path.startswith('/') else f'/static/{raw_path}'
             img_info = {
                 "name": r['image_name'],
-                "file_path": r['image_path'],
+                "file_path": file_path,
             }
             if r['image_type'] == 'piece':
                 piece_images.append(img_info)

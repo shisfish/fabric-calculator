@@ -327,7 +327,7 @@ def get_history():
     # 获取查询参数
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('pageSize', 20))
-    record_type = request.args.get('type')  # 可选: quick/precise/curved/polygon/cad
+    record_type = request.args.get('type')  # 可选: precise/curved/polygon/cad
 
     # 参数校验
     if page < 1:
@@ -367,8 +367,6 @@ def get_history_detail(record_id):
 
                 if record_type == "curved":
                     full_result = curved_calculator.calculate_consumption_curved(record["input_data"])
-                elif record_type == "quick":
-                    full_result = calculator.quick_estimate(record["input_data"])
                 elif record_type in ["precise", "cad"]:
                     # ✅ 精确计算/CAD排料：优先使用数据库中的 full_result
                     full_result = record.get("full_result")
@@ -1250,7 +1248,7 @@ def calc_all():
                 import os
                 import traceback
 
-                upload_dir = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+                upload_dir = os.path.join(_FRONTEND_DIR, 'static', 'uploads')
                 os.makedirs(upload_dir, exist_ok=True)
 
                 print(f"\n[Calc-Engine] 📦 准备保存计算结果到数据库...")

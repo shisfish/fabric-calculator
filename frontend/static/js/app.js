@@ -326,10 +326,10 @@ function loadPieceTemplate() {
     tbody.innerHTML = categoryDetail.pieces.map((piece, idx) => `
         <tr data-piece-id="${piece.id}">
             <td><input type="text" class="inline-input" value="${piece.name}" data-field="name"></td>
-            <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="length" step="0.5" min="0"></td>
-            <td><input type="number" class="inline-input inline-input-sm" value="" placeholder="测量值" data-field="width" step="0.5" min="0"></td>
+            <td><input type="number" class="inline-input inline-input-sm" value="${piece.default_length || ''}" placeholder="测量值" data-field="length" step="0.5" min="0"></td>
+            <td><input type="number" class="inline-input inline-input-sm" value="${piece.default_width || ''}" placeholder="测量值" data-field="width" step="0.5" min="0"></td>
             <td>
-                <input type="number" class="inline-input inline-input-sm" value="${getDefaultCount(piece.id)}" data-field="count" min="1" step="1">
+                <input type="number" class="inline-input inline-input-sm" value="${piece.default_count || getDefaultCount(piece.id)}" data-field="count" min="1" step="1">
             </td>
             <td>
                 <select class="inline-input" data-field="shape">

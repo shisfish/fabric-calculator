@@ -46,7 +46,7 @@ function renderDetail(record) {
     const isCad = record.type === 'cad';
     currentRecordType = record.type || 'precise';
     
-    let typeLabel = '快速估算';
+    let typeLabel = '精确计算';
     if (isCurved) typeLabel = '曲线计算';
     else if (isPrecise) typeLabel = '精确计算';
     else if (isPolygon) typeLabel = '多边形排料';
@@ -72,7 +72,7 @@ function renderDetail(record) {
     } else if (isCad) {
         renderCadResult(record);
     } else {
-        renderQuickResult(record);
+        renderPreciseResult(record);
     }
 }
 
