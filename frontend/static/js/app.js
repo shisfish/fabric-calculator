@@ -398,6 +398,9 @@ function getDefaultCount(pieceId) {
         'shell_fabric': 2, 'filling_fabric_single': 2,
         'filling_fabric_double': 4, 'down_filling': 1,
         'cotton_filling': 1, 'other': 1,
+        'big_sleeve': 2, 'small_sleeve': 2,
+        'turtle_patch': 1, 'facing': 2,
+        'pocket_welt': 2, 'sleeve_tab': 2,
     };
     return countMap[pieceId] || 1;
 }
