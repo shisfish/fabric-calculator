@@ -290,29 +290,10 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
     shrinkage_rate = options.get("shrinkage_rate", options.get("shrinkRate"))
     shrinkage_config = options.get("shrinkage") or options.get("fabricShrinkage")
 
-    # 🔧 【关键修复】将用户填写的裁片数据转换为 customPieces 格式
-    # 前端格式: {name, length(长), width(宽), count} 
-    # cad_runner期望: {name, width, height, count}
-    raw_pieces = measurements.get("pieces", [])
-    custom_pieces = []
-    for p in raw_pieces:
-        if not p.get("name"):
-            continue
-        piece_length = float(p.get("length") or 0)
-        piece_width = float(p.get("width") or 0)
-        if piece_length <= 0 or piece_width <= 0:
-            continue
-        custom_pieces.append({
-            "name": p.get("name", ""),
-            "width": piece_width,
-            "height": piece_length,
-            "count": int(p.get("count", 1)),
-        })
-
     input_data = json.dumps({
         "mode": "all",
         "category": measurements.get("category", "tshirt"),
-        "customPieces": custom_pieces,
+        "pieces": measurements.get("pieces", []),
         "seamAllowance": seam_allowance,
         "fabricWidth": fabric_width,
         "shrinkage_rate": shrinkage_rate,

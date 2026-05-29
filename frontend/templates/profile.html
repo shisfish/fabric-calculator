@@ -6,86 +6,261 @@
     <title>个人中心 - 面料用量快速计算系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
-        .profile-container {
-            max-width: 900px;
-            margin: 24px auto;
-            padding: 0 20px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        .page-header {
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: #FAF8F5;
+            min-height: 100vh;
+        }
+
+        /* ========== 导航栏增强 ========== */
+        .navbar {
             background: white;
-            border-radius: 12px;
-            padding: 32px;
-            margin-bottom: 24px;
-            box-shadow: var(--shadow);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .user-info {
+        /* ========== 主容器 ========== */
+        .profile-wrapper {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* ========== 用户信息头部区域 ========== */
+        .profile-hero {
+            background: linear-gradient(135deg, #fef3e2 0%, #fce7f3 50%, #dbeafe 100%);
+            border-radius: 24px;
+            padding: 48px;
+            margin-bottom: 32px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(37, 99, 235, 0.08);
+        }
+
+        /* 布料纹理 */
+        .hero-fabric-texture {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.06;
+            background-image:
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(139, 69, 19, 0.03) 2px,
+                    rgba(139, 69, 19, 0.03) 4px
+                ),
+                repeating-linear-gradient(
+                    0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(139, 69, 19, 0.03) 2px,
+                    rgba(139, 69, 19, 0.03) 4px
+                );
+            pointer-events: none;
+        }
+
+        /* 装饰圆圈 */
+        .hero-decoration {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, transparent 70%);
+        }
+
+        .hero-decoration.top-right {
+            top: -120px;
+            right: -80px;
+            animation: float-gentle 10s ease-in-out infinite;
+        }
+
+        .hero-decoration.bottom-left {
+            bottom: -150px;
+            left: -100px;
+            animation: float-gentle 12s ease-in-out infinite reverse;
+        }
+
+        @keyframes float-gentle {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-20px) scale(1.05); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 10;
             display: flex;
             align-items: center;
-            gap: 24px;
+            gap: 40px;
         }
 
-        .avatar {
-            width: 96px;
-            height: 96px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        /* 头像 */
+        .avatar-large {
+            width: 140px;
+            height: 140px;
+            border-radius: 28px;
+            background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 42px;
+            font-size: 64px;
             color: white;
             flex-shrink: 0;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+            box-shadow: 0 16px 40px rgba(37, 99, 235, 0.25);
+            position: relative;
+            overflow: hidden;
         }
 
-        .user-details h2 {
-            font-size: 26px;
-            font-weight: 700;
-            color: #1e293b;
-            margin-bottom: 6px;
+        .avatar-large::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(255,255,255,0.15) 50%,
+                transparent 70%
+            );
+            animation: avatar-shine 4s infinite;
         }
 
-        .user-details p {
-            color: #64748b;
-            font-size: 15px;
+        @keyframes avatar-shine {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+
+        /* 用户信息 */
+        .user-info-main {
+            flex: 1;
+        }
+
+        .user-name-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
             margin-bottom: 12px;
         }
 
-        .user-meta {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
+        .user-name {
+            font-size: 36px;
+            font-weight: 800;
+            color: #1e293b;
+            letter-spacing: -0.5px;
         }
 
-        .meta-item {
-            background: #f1f5f9;
-            padding: 6px 14px;
+        .user-handle {
+            font-size: 18px;
+            color: #64748b;
+            font-weight: 400;
+        }
+
+        .user-badges {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            padding: 7px 16px;
             border-radius: 20px;
             font-size: 13px;
-            color: #475569;
-            font-weight: 500;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .badge.admin {
+            background: rgba(139, 92, 246, 0.15);
+            color: #7c3aed;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .badge.user {
+            background: rgba(59, 130, 246, 0.15);
+            color: #2563eb;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .badge.status {
+            background: rgba(34, 197, 94, 0.15);
+            color: #15803d;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .user-desc {
+            font-size: 15px;
+            color: #64748b;
+            line-height: 1.6;
+            max-width: 600px;
+        }
+
+        /* ========== 统计数据网格 ========== */
+        .stats-section {
+            margin-bottom: 32px;
         }
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
         }
 
         .stat-card {
             background: white;
-            border-radius: 12px;
-            padding: 24px;
-            text-align: center;
-            box-shadow: var(--shadow);
-            transition: transform 0.2s ease;
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #f1f5f9;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--card-color), var(--card-color-light));
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
         .stat-card:hover {
-            transform: translateY(-4px);
+            transform: translateY(-6px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-card.blue { --card-color: #2563eb; --card-color-light: #60a5fa; }
+        .stat-card.green { --card-color: #059669; --card-color-light: #34d399; }
+        .stat-card.purple { --card-color: #7c3aed; --card-color-light: #a78bfa; }
+        .stat-card.orange { --card-color: #d97706; --card-color-light: #fbbf24; }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
         }
 
         .stat-icon {
@@ -95,118 +270,257 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 14px;
             font-size: 28px;
         }
 
-        .stat-icon.blue { background: #dbeafe; }
-        .stat-icon.green { background: #dcfce7; }
-        .stat-icon.purple { background: #ede9fe; }
-        .stat-icon.orange { background: #fef3c7; }
+        .stat-card.blue .stat-icon { background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
+        .stat-card.green .stat-icon { background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+        .stat-card.purple .stat-icon { background: linear-gradient(135deg, #ede9fe, #ddd6fe); }
+        .stat-card.orange .stat-icon { background: linear-gradient(135deg, #fef3c7, #fde68a); }
+
+        .stat-trend {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 12px;
+        }
+
+        .stat-trend.up {
+            background: #d1fae5;
+            color: #059669;
+        }
 
         .stat-value {
-            font-size: 32px;
-            font-weight: 700;
+            font-size: 42px;
+            font-weight: 800;
             color: #1e293b;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+            letter-spacing: -1px;
+            line-height: 1;
         }
 
         .stat-label {
             font-size: 14px;
             color: #64748b;
+            font-weight: 500;
         }
 
-        .section {
+        /* ========== 内容区域 ========== */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        /* 卡片通用样式 */
+        .section-card {
             background: white;
-            border-radius: 12px;
-            padding: 28px;
-            margin-bottom: 24px;
-            box-shadow: var(--shadow);
+            border-radius: 18px;
+            padding: 32px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+            border: 1px solid #f1f5f9;
         }
 
         .section-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid #f1f5f9;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f8fafc;
         }
 
         .section-title {
-            font-size: 18px;
-            font-weight: 600;
+            font-size: 20px;
+            font-weight: 700;
             color: #1e293b;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
         .section-title::before {
             content: '';
             width: 4px;
-            height: 22px;
-            background: linear-gradient(180deg, #3b82f6, #60a5fa);
+            height: 24px;
+            background: linear-gradient(180deg, #2563eb, #60a5fa);
             border-radius: 2px;
         }
 
-        .btn-outline-sm {
-            padding: 7px 16px;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 8px;
-            background: white;
-            color: #475569;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-
-        .btn-outline-sm:hover {
-            border-color: #3b82f6;
-            color: #2563eb;
-            background: #eff6ff;
-        }
-
-        .btn-danger {
-            padding: 8px 18px;
-            border: none;
-            border-radius: 8px;
-            background: #fee2e2;
-            color: #dc2626;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-
-        .btn-danger:hover {
-            background: #fecaca;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        /* 账号信息列表 */
+        .info-list {
+            display: flex;
+            flex-direction: column;
             gap: 16px;
         }
 
         .info-item {
-            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 22px;
             background: #f8fafc;
+            border-radius: 12px;
+            border-left: 4px solid #3b82f6;
+            transition: all 0.2s ease;
+        }
+
+        .info-item:hover {
+            background: #f1f5f9;
+            transform: translateX(4px);
+        }
+
+        .info-label-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .info-icon-small {
+            width: 38px;
+            height: 38px;
             border-radius: 10px;
-            border-left: 3px solid #3b82f6;
+            background: #dbeafe;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
         }
 
         .info-label {
-            font-size: 13px;
+            font-size: 14px;
             color: #64748b;
-            margin-bottom: 6px;
+            font-weight: 500;
         }
 
         .info-value {
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
             color: #1e293b;
+        }
+
+        /* 操作按钮区 */
+        .actions-card {
+            background: white;
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .btn-action {
+            width: 100%;
+            padding: 16px 24px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: white;
+            color: #475569;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: left;
+        }
+
+        .btn-action:hover {
+            border-color: #3b82f6;
+            color: #2563eb;
+            background: #eff6ff;
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn-action.danger {
+            border-color: #fecaca;
+            color: #dc2626;
+        }
+
+        .btn-action.danger:hover {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            color: #dc2626;
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+        }
+
+        .btn-action-icon {
+            font-size: 20px;
+            width: 32px;
+            text-align: center;
+        }
+
+        /* 快捷操作提示 */
+        .quick-tips {
+            margin-top: 24px;
+            padding: 20px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-radius: 12px;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .quick-tips h4 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #78350f;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .quick-tips p {
+            font-size: 13px;
+            color: #92400e;
+            line-height: 1.6;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 1024px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-content {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .user-badges {
+                justify-content: center;
+            }
+
+            .user-desc {
+                margin: 0 auto;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .profile-hero {
+                padding: 32px 24px;
+            }
+
+            .user-name {
+                font-size: 28px;
+            }
+
+            .avatar-large {
+                width: 110px;
+                height: 110px;
+                font-size: 48px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+
+            .stat-value {
+                font-size: 32px;
+            }
         }
     </style>
 </head>
@@ -227,83 +541,143 @@
         </div>
     </nav>
 
-    <div class="profile-container">
-        <!-- 用户信息卡片 -->
-        <div class="page-header">
-            <div class="user-info">
-                <div class="avatar" id="user-avatar">👤</div>
-                <div class="user-details">
-                    <h2 id="user-nickname">加载中...</h2>
-                    <p id="user-username">@username</p>
-                    <div class="user-meta">
-                        <span class="meta-item" id="user-role-badge">普通用户</span>
-                        <span class="meta-item" id="user-status">账号正常</span>
+    <div class="profile-wrapper">
+        <!-- 用户信息头部 -->
+        <div class="profile-hero">
+            <div class="hero-fabric-texture"></div>
+            <div class="hero-decoration top-right"></div>
+            <div class="hero-decoration bottom-left"></div>
+
+            <div class="hero-content">
+                <div class="avatar-large" id="user-avatar">👤</div>
+                <div class="user-info-main">
+                    <div class="user-name-row">
+                        <h1 class="user-name" id="user-nickname">加载中...</h1>
+                        <span class="user-handle" id="user-username">@username</span>
                     </div>
+                    <div class="user-badges">
+                        <span class="badge user" id="user-role-badge">普通用户</span>
+                        <span class="badge status" id="user-status">账号正常</span>
+                    </div>
+                    <p class="user-desc">
+                        欢迎使用面料用量快速计算系统！这里是您的个人工作台，可以查看使用统计、管理账户信息。
+                    </p>
                 </div>
             </div>
         </div>
 
         <!-- 统计数据 -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon blue">📊</div>
-                <div class="stat-value" id="total-calculations">-</div>
-                <div class="stat-label">总计算次数</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon green">✂️</div>
-                <div class="stat-value" id="precise-count">-</div>
-                <div class="stat-label">精确计算</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon purple">🎨</div>
-                <div class="stat-value" id="cad-count">-</div>
-                <div class="stat-label">CAD排料</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon orange">📅</div>
-                <div class="stat-value" id="last-login">-</div>
-                <div class="stat-label">最后登录</div>
-            </div>
-        </div>
-
-        <!-- 账号信息 -->
-        <div class="section">
-            <div class="section-header">
-                <h3 class="section-title">账号信息</h3>
-            </div>
-            <div class="info-grid">
-                <div class="info-item">
-                    <div class="info-label">用户ID</div>
-                    <div class="info-value" id="info-user-id">-</div>
+        <div class="stats-section">
+            <div class="stats-grid">
+                <div class="stat-card blue">
+                    <div class="stat-header">
+                        <div class="stat-icon">📊</div>
+                        <span class="stat-trend up">↑ 活跃</span>
+                    </div>
+                    <div class="stat-value" id="total-calculations">-</div>
+                    <div class="stat-label">总计算次数</div>
                 </div>
-                <div class="info-item">
-                    <div class="info-label">用户名</div>
-                    <div class="info-value" id="info-username">-</div>
+                <div class="stat-card green">
+                    <div class="stat-header">
+                        <div class="stat-icon">✂️</div>
+                        <span class="stat-trend up">↑ 精准</span>
+                    </div>
+                    <div class="stat-value" id="precise-count">-</div>
+                    <div class="stat-label">精确计算</div>
                 </div>
-                <div class="info-item">
-                    <div class="info-label">昵称</div>
-                    <div class="info-value" id="info-nickname">-</div>
+                <div class="stat-card purple">
+                    <div class="stat-header">
+                        <div class="stat-icon">🎨</div>
+                        <span class="stat-trend up">↑ 高效</span>
+                    </div>
+                    <div class="stat-value" id="cad-count">-</div>
+                    <div class="stat-label">CAD排料</div>
                 </div>
-                <div class="info-item">
-                    <div class="info-label">角色权限</div>
-                    <div class="info-value" id="info-role">-</div>
+                <div class="stat-card orange">
+                    <div class="stat-header">
+                        <div class="stat-icon">📅</div>
+                        <span class="stat-trend up">今日</span>
+                    </div>
+                    <div class="stat-value" id="last-login">-</div>
+                    <div class="stat-label">最后活跃</div>
                 </div>
             </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="section">
-            <div class="section-header">
-                <h3 class="section-title">账户操作</h3>
+        <!-- 内容区域：左侧账号信息 + 右侧操作按钮 -->
+        <div class="content-grid">
+            <!-- 账号详细信息 -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">账号详情</h3>
+                </div>
+                <div class="info-list">
+                    <div class="info-item">
+                        <div class="info-label-group">
+                            <div class="info-icon-small">🆔</div>
+                            <span class="info-label">用户ID</span>
+                        </div>
+                        <span class="info-value" id="info-user-id">-</span>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label-group">
+                            <div class="info-icon-small">👤</div>
+                            <span class="info-label">用户名</span>
+                        </div>
+                        <span class="info-value" id="info-username">-</span>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label-group">
+                            <div class="info-icon-small">✏️</div>
+                            <span class="info-label">昵称</span>
+                        </div>
+                        <span class="info-value" id="info-nickname">-</span>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label-group">
+                            <div class="info-icon-small">🛡️</div>
+                            <span class="info-label">角色权限</span>
+                        </div>
+                        <span class="info-value" id="info-role">-</span>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label-group">
+                            <div class="info-icon-small">⏰</div>
+                            <span class="info-label">注册时间</span>
+                        </div>
+                        <span class="info-value" id="info-created">-</span>
+                    </div>
+                </div>
             </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <button onclick="window.location.href='/history'" class="btn-outline-sm">
-                    📜 查看我的历史记录
-                </button>
-                <button onclick="handleLogout()" class="btn-danger">
-                    🚪 退出登录
-                </button>
+
+            <!-- 操作按钮区 -->
+            <div class="section-card actions-card">
+                <div class="section-header">
+                    <h3 class="section-title">快捷操作</h3>
+                </div>
+                <div class="action-buttons">
+                    <button onclick="window.location.href='/history'" class="btn-action">
+                        <span class="btn-action-icon">📜</span>
+                        <span>查看历史记录</span>
+                    </button>
+                    <button onclick="window.location.href='/'" class="btn-action">
+                        <span class="btn-action-icon">🧮</span>
+                        <span>开始新计算</span>
+                    </button>
+                    <button onclick="window.location.href='/cad'" class="btn-action">
+                        <span class="btn-action-icon">🎯</span>
+                        <span>CAD排料功能</span>
+                    </button>
+                    <button onclick="handleLogout()" class="btn-action danger">
+                        <span class="btn-action-icon">🚪</span>
+                        <span>退出登录</span>
+                    </button>
+                </div>
+
+                <div class="quick-tips">
+                    <h4>💡 使用小贴士</h4>
+                    <p>您可以随时在历史记录中查看之前的计算结果，也可以导出数据用于生产排料。如有问题请联系管理员。</p>
+                </div>
             </div>
         </div>
     </div>
@@ -323,25 +697,32 @@
                 
                 if (data.success && data.data) {
                     currentUser = data.data;
-                    
-                    // 更新用户信息显示
+
                     document.getElementById('user-nickname').textContent = currentUser.nickname || '未设置昵称';
                     document.getElementById('user-username').textContent = '@' + currentUser.username;
-                    document.getElementById('user-avatar').textContent = (currentUser.nickname || '用').charAt(0).toUpperCase();
                     
-                    // 角色显示
+                    const firstChar = (currentUser.nickname || currentUser.username || '用').charAt(0).toUpperCase();
+                    document.getElementById('user-avatar').textContent = firstChar;
+
                     const roleMap = { admin: '管理员', user: '普通用户' };
-                    document.getElementById('user-role-badge').textContent = roleMap[currentUser.role] || '普通用户';
-                    if (currentUser.role === 'admin') {
-                        document.getElementById('user-role-badge').style.background = '#ede9fe';
-                        document.getElementById('user-role-badge').color = '#7c3aed';
-                    }
+                    const roleBadge = document.getElementById('user-role-badge');
+                    roleBadge.textContent = roleMap[currentUser.role] || '普通用户';
                     
-                    // 账号信息
-                    document.getElementById('info-user-id').textContent = currentUser.user_id;
-                    document.getElementById('info-username').textContent = currentUser.username;
+                    if (currentUser.role === 'admin') {
+                        roleBadge.className = 'badge admin';
+                    }
+
+                    document.getElementById('info-user-id').textContent = currentUser.user_id || '-';
+                    document.getElementById('info-username').textContent = currentUser.username || '-';
                     document.getElementById('info-nickname').textContent = currentUser.nickname || '未设置';
                     document.getElementById('info-role').textContent = roleMap[currentUser.role] || '普通用户';
+
+                    if (currentUser.created_at) {
+                        const createdDate = new Date(currentUser.created_at).toLocaleDateString('zh-CN');
+                        document.getElementById('info-created').textContent = createdDate;
+                    } else {
+                        document.getElementById('info-created').textContent = '-';
+                    }
                 } else {
                     window.location.href = '/login';
                 }
@@ -359,19 +740,16 @@
                 if (data.success && data.data) {
                     const records = data.data.records || [];
                     
-                    // 统计各类型数量
                     let total = records.length;
                     let preciseCount = records.filter(r => r.type === 'precise').length;
                     let cadCount = records.filter(r => r.type === 'cad').length;
                     
-                    // 更新统计数字（带动画效果）
                     animateNumber('total-calculations', total);
                     animateNumber('precise-count', preciseCount);
                     animateNumber('cad-count', cadCount);
                 }
                 
-                // 显示最后登录时间（从session或本地存储）
-                const lastLogin = localStorage.getItem('last_login_time') || new Date().toLocaleString();
+                const lastLogin = localStorage.getItem('last_login_time') || new Date().toLocaleDateString('zh-CN');
                 document.getElementById('last-login').textContent = lastLogin.split(' ')[0];
                 
             } catch (error) {
