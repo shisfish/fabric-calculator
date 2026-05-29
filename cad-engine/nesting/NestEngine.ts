@@ -120,13 +120,23 @@ export class NestEngine {
         }));
 
         const bb = normalized.getBoundingBox();
-        const isSmallFiller = bb.width * bb.height < 1000;
+        const area = bb.width * bb.height;
+        
+        const isSmallFiller = area < 1000;
+        
+        const aspectRatio = Math.max(bb.width, bb.height) / Math.min(bb.width, bb.height);
+        const isLongNarrowPiece = aspectRatio > 8;
+        
+        if (isLongNarrowPiece) {
+          logger.info(`   📏 裁片"${piece.name}" 长宽比=${aspectRatio.toFixed(1)} (${bb.width.toFixed(1)}×${bb.height.toFixed(1)}), 标记为配件`);
+        }
+        
         this.pieces.push({
           id: piece.name,
           polygon: normalized,
           quantity: piece.cutCount,
           rotations,
-          isAccessory: !!(piece as any).isAccessory || isSmallFiller ||
+          isAccessory: !!(piece as any).isAccessory || isSmallFiller || isLongNarrowPiece ||
             piece.name.includes('口袋') || piece.name.includes('领') ||
             piece.name.includes('袖口') || piece.name.includes('罗纹') ||
             piece.name === '配件' || piece.name === '其他配件',

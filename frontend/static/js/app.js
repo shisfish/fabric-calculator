@@ -500,7 +500,7 @@ async function calculate() {
 
     const pieces = collectPieces();
     if (pieces.length === 0) {
-        alert('请至少填写一个裁片的尺寸数据（长度和宽度都必须大于0）');
+        alert('请至少填写一个裁片的尺寸数据（高度和宽度都必须大于0）');
         return;
     }
 
@@ -529,11 +529,11 @@ async function calculate() {
             return;
         }
         if (p.length <= 0 || p.width <= 0) {
-            alert(`裁片"${p.name}"的长度和宽度必须大于0`);
+            alert(`裁片"${p.name}"的高度和宽度必须大于0`);
             return;
         }
         if (p.length > 500 || p.width > 500) {
-            alert(`裁片"${p.name}"的尺寸异常（长度或宽度超过500cm），请检查`);
+            alert(`裁片"${p.name}"的尺寸异常（高度或宽度超过500cm），请检查`);
             return;
         }
         if (!p.count || p.count < 1) {
