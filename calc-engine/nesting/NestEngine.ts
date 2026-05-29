@@ -220,10 +220,14 @@ export class NestEngine {
   }
 
   private getAccessoryPriority(piece: NestingPiece): number {
-    if (piece.id.includes('领')) return 0;
-    if (piece.id.includes('袖口') || piece.id.includes('口袋')) return 1;
-    if (piece.id.includes('罗纹')) return 2;
-    return 3;
+    const bb = piece.polygon.getBoundingBox();
+    const aspectRatio = Math.max(bb.width, bb.height) / Math.min(bb.width, bb.height);
+    
+    if (aspectRatio > 8) return 0;
+    if (piece.id.includes('领')) return 1;
+    if (piece.id.includes('袖口') || piece.id.includes('口袋')) return 2;
+    if (piece.id.includes('罗纹')) return 3;
+    return 4;
   }
 
   private placePiece(nestingPiece: NestingPiece, index: number, preferBottom: boolean = false): boolean {
