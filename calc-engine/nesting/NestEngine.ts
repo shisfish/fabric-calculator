@@ -277,10 +277,12 @@ export class NestEngine {
     let bestPos: { x: number; y: number; rotation: number } | null = null;
     let bestScore = Infinity;
 
-    // ===== 交错旋转策略：多实例时交替使用不同旋转角度以利用形状互补嵌套 =====
+    const bb = nestingPiece.polygon.getBoundingBox();
+    const aspectRatio = Math.max(bb.width, bb.height) / Math.min(bb.width, bb.height);
+    const isLongNarrow = aspectRatio > 6;
+
     const rotationOrder: number[] = [];
     if (nestingPiece.quantity >= 2 && nestingPiece.rotations.length >= 2 && !this.config.fabricNap) {
-      // 偶数实例优先0度，奇数实例优先180度
       const preferredRi = index % nestingPiece.rotations.length;
       rotationOrder.push(preferredRi);
       for (let ri = 0; ri < nestingPiece.rotations.length; ri++) {
@@ -294,10 +296,15 @@ export class NestEngine {
       const rotationOption = nestingPiece.rotations[ri];
       const poly = rotationOption.polygon;
       const rotation = rotationOption.angle;
-      const pos = this.findBLPosition(poly, pieceId);
+      
+      let pos;
+      if (isLongNarrow) {
+        pos = this.findBestFitPosition(poly, pieceId);
+      } else {
+        pos = this.findBLPosition(poly, pieceId);
+      }
 
       if (pos) {
-        // 评分：总长度(maxY) × 门幅 + 宽度占用(maxX) - 紧凑性奖励
         const testPoly = poly.translate(pos.x, pos.y);
         const testBb = testPoly.getBoundingBox();
 
@@ -309,30 +316,28 @@ export class NestEngine {
           currentMaxX = Math.max(currentMaxX, pb.maxX);
         }
 
-        // 紧凑性指标：与已放置裁片的平均SAT距离（越小越紧凑）
         let compactness = 0;
         let neighborCount = 0;
         for (const placed of this.placedPieces) {
           const op = placed.polygon.translate(placed.x, placed.y);
           const dist = SATCollision.getDistance(testPoly, op);
-          if (dist < 100) { // 只考虑附近的裁片
+          if (dist < 100) {
             compactness += dist;
             neighborCount++;
           }
         }
         const avgDist = neighborCount > 0 ? compactness / neighborCount : 50;
-        // 紧凑性奖励：平均距离越小越好，用负值作为奖励
         const compactBonus = -avgDist * 0.3;
 
         const fw = this.config.fabricWidth;
         
-        // 底部优先模式：配件优先选择Y更大的位置（填充下部空白）
-        // 使用负的Y值作为奖励，让底部位置得分更低（更好）
+        const boundingBoxIncrease = this.calculateBoundingBoxIncrease(testBb);
+        
         let score: number;
-        if (preferBottom) {
-          score = currentMaxY * fw + currentMaxX + compactBonus - pos.y * 2; // Y越大，减分越多
+        if (preferBottom || isLongNarrow) {
+          score = boundingBoxIncrease * fw + currentMaxX * 0.5 + compactBonus - (neighborCount > 0 ? neighborCount * 5 : 0);
         } else {
-          score = currentMaxY * fw + currentMaxX + compactBonus;
+          score = boundingBoxIncrease * fw + currentMaxX + compactBonus;
         }
 
         if (score < bestScore) {
@@ -349,6 +354,132 @@ export class NestEngine {
       return true;
     }
     return false;
+  }
+
+  private calculateBoundingBoxIncrease(newBb: BoundingBox): number {
+    let currentMaxY = 0;
+    for (const placed of this.placedPieces) {
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      currentMaxY = Math.max(currentMaxY, pb.maxY);
+    }
+    
+    if (newBb.maxY > currentMaxY) {
+      return newBb.maxY - currentMaxY;
+    }
+    return 0;
+  }
+
+  private findBestFitPosition(polygon: Polygon, pieceId: string): Point | null {
+    const spacing = this.config.spacing;
+    const fw = this.config.fabricWidth;
+    const b = polygon.getBoundingBox();
+
+    logger.info(`   🔍 Best-Fit搜索: ${pieceId}, 尺寸=${b.width.toFixed(1)}×${b.height.toFixed(1)}`);
+
+    const candidates: Array<{ pos: Point; waste: number; yLevel: number }> = [];
+
+    const yLevels = new Set<number>();
+    yLevels.add(spacing - b.minY);
+
+    for (const placed of this.placedPieces) {
+      if (placed.pieceId === pieceId) continue;
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      yLevels.add(pb.maxY + spacing - b.minY);
+      yLevels.add(pb.minY - spacing - b.maxY);
+    }
+
+    for (const cy of yLevels) {
+      if (cy + b.minY < spacing || cy + b.maxY > this.config.fabricHeight - spacing) continue;
+
+      const xPositions = this.findValidXPositions(polygon, pieceId, cy);
+      
+      for (const cx of xPositions) {
+        const testPoly = polygon.translate(cx, cy);
+        if (!this.isValidPlacement(testPoly, pieceId, spacing)) continue;
+
+        const waste = this.calculateWaste(testPoly, cx, cy);
+        candidates.push({ 
+          pos: new Point(cx, cy), 
+          waste,
+          yLevel: cy
+        });
+      }
+    }
+
+    if (candidates.length === 0) {
+      return this.findBLPosition(polygon, pieceId);
+    }
+
+    candidates.sort((a, b) => {
+      if (Math.abs(a.waste - b.waste) > 10) return a.waste - b.waste;
+      return a.yLevel - b.yLevel;
+    });
+
+    const best = candidates[0];
+    logger.info(`   ✅ Best-Fit结果: ${pieceId} → (${best.pos.x.toFixed(1)}, ${best.pos.y.toFixed(1)}) waste=${best.waste.toFixed(1)}`);
+    return best.pos;
+  }
+
+  private findValidXPositions(polygon: Polygon, pieceId: string, cy: number): number[] {
+    const spacing = this.config.spacing;
+    const fw = this.config.fabricWidth;
+    const b = polygon.getBoundingBox();
+
+    const xCands = new Set<number>();
+    xCands.add(spacing - b.minX);
+
+    for (const placed of this.placedPieces) {
+      if (placed.pieceId === pieceId) continue;
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      
+      if (!(cy + b.maxY < pb.minY - spacing || cy + b.minY > pb.maxY + spacing)) {
+        xCands.add(pb.maxX + spacing - b.minX);
+        xCands.add(pb.minX - spacing - b.maxX);
+      }
+    }
+
+    const validPositions: number[] = [];
+    for (const cx of xCands) {
+      if (cx + b.minX < spacing || cx + b.maxX > fw - spacing) continue;
+      
+      const testPoly = polygon.translate(cx, cy);
+      if (this.isValidPlacement(testPoly, pieceId, spacing)) {
+        validPositions.push(cx);
+      }
+    }
+
+    return validPositions.sort((a, b) => a - b);
+  }
+
+  private calculateWaste(poly: Polygon, x: number, y: number): number {
+    const b = poly.getBoundingBox();
+    let waste = 0;
+    
+    const placedBoxes = this.placedPieces
+      .filter(p => p.pieceId !== poly.id)
+      .map(p => ({
+        box: p.polygon.translate(p.x, p.y).getBoundingBox(),
+        id: p.pieceId
+      }));
+
+    for (const pb of placedBoxes) {
+      if (b.maxX <= pb.box.minX || b.minX >= pb.box.maxX ||
+          b.maxY <= pb.box.minY || b.minY >= pb.box.maxY) {
+        continue;
+      }
+
+      const overlapX = Math.min(b.maxX, pb.box.maxX) - Math.max(b.minX, pb.box.minX);
+      const overlapY = Math.min(b.maxY, pb.box.maxY) - Math.max(b.minY, pb.box.minY);
+      waste += overlapX * overlapY;
+    }
+
+    const rightSpace = (this.config.fabricWidth / 10) - b.maxX;
+    const bottomSpace = this.config.fabricHeight - b.maxY;
+    
+    waste += rightSpace * b.height * 0.3;
+    waste += bottomSpace * b.width * 0.5;
+
+    return waste;
   }
 
   /**
