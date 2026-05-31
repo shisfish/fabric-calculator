@@ -898,8 +898,41 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 f'{ff}>'
                 f'{nest_h:.1f}cm'
                 f'</text>')
+5
+    piece_colors = [
+        {'fill': 'rgba(255, 99, 132, 0.25)', 'stroke': '#FF6384'},
+        {'fill': 'rgba(54, 162, 235, 0.25)', 'stroke': '#36A2EB'},
+        {'fill': 'rgba(255, 206, 86, 0.25)', 'stroke': '#FFCE56'},
+        {'fill': 'rgba(75, 192, 192, 0.25)', 'stroke': '#4BC0C0'},
+        {'fill': 'rgba(153, 102, 255, 0.25)', 'stroke': '#9966FF'},
+        {'fill': 'rgba(255, 159, 64, 0.25)', 'stroke': '#FF9F40'},
+        {'fill': 'rgba(199, 199, 199, 0.25)', 'stroke': '#C7C7C7'},
+        {'fill': 'rgba(83, 102, 255, 0.25)', 'stroke': '#5366FF'},
+        {'fill': 'rgba(255, 99, 255, 0.25)', 'stroke': '#FF63FF'},
+        {'fill': 'rgba(99, 255, 132, 0.25)', 'stroke': '#63FF84'},
+        {'fill': 'rgba(255, 165, 0, 0.25)', 'stroke': '#FFA500'},
+        {'fill': 'rgba(100, 149, 237, 0.25)', 'stroke': '#6495ED'},
+        {'fill': 'rgba(50, 205, 50, 0.25)', 'stroke': '#32CD32'},
+        {'fill': 'rgba(255, 105, 180, 0.25)', 'stroke': '#FF69B4'},
+        {'fill': 'rgba(204, 153, 255, 0.25)', 'stroke': '#CC99FF'}
+    ]
 
-    piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+    def get_piece_base_name(piece_name):
+        import re
+        base = re.sub(r'\s*\(\d+缝\)$', '', piece_name)
+        base = re.sub(r'_\d+$', '', base)
+        return base
+
+    piece_color_map = {}
+    color_idx = 0
+
+    def get_consistent_color(piece_name):
+        nonlocal color_idx
+        base_name = get_piece_base_name(piece_name)
+        if base_name not in piece_color_map:
+            piece_color_map[base_name] = piece_colors[color_idx % len(piece_colors)]
+            color_idx += 1
+        return piece_color_map[base_name]
 
     # 构建路径映射：净样(缝合线) + 毛样(裁剪线含缝份)
     piece_path_map = {}
@@ -930,7 +963,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
         path_ops = piece_path_map.get(name, [])
         onfold = piece_onfold_map.get(name, False)
-        color = piece_colors[i % len(piece_colors)]
+        color = get_consistent_color(name)
 
         if path_ops:
             pts_list = _extract_polygon_points(path_ops)
@@ -970,9 +1003,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 screen_pts = _transform_pts(full_pts)
                 points_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in screen_pts)
                 if has_seam:
-                    lines.append(f'<polygon points="{points_str}" fill="none" stroke="{color}" stroke-dasharray="4,3" stroke-width="1" opacity="0.6"/>')
+                    lines.append(f'<polygon points="{points_str}" fill="{color["fill"]}" stroke="{color["stroke"]}" stroke-dasharray="4,3" stroke-width="1" opacity="0.7"/>')
                 else:
-                    lines.append(f'<polygon points="{points_str}" fill="none" stroke="{color}" stroke-width="1.5"/>')
+                    lines.append(f'<polygon points="{points_str}" fill="{color["fill"]}" stroke="{color["stroke"]}" stroke-width="1.5"/>')
 
                 # 第二步：绘制毛样（裁剪线，含缝份）— 实线
                 if has_seam:
@@ -985,17 +1018,15 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                     if seam_full_pts and len(seam_full_pts) >= 3:
                         seam_screen = _transform_pts(seam_full_pts)
                         seam_str = " ".join(f"{x:.2f},{y:.2f}" for x, y in seam_screen)
-                        lines.append(f'<polygon points="{seam_str}" fill="none" stroke="{color}" stroke-width="1.5"/>')
+                        lines.append(f'<polygon points="{seam_str}" fill="none" stroke="{color["stroke"]}" stroke-width="1.5"/>')
 
-                # 标签：仅首个实例显示名称，避免视觉混乱
-                if name not in labeled_names:
-                    labeled_names.add(name)
-                    scx = sum(p[0] for p in screen_pts) / len(screen_pts)
-                    scy = sum(p[1] for p in screen_pts) / len(screen_pts)
-                    label_text = name
-                    if seam_value > 0:
-                        label_text += f" ({seam_value}缝)"
-                    lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color}" {ff}>{label_text}</text>')
+                # 标签：每个实例都显示名称
+                scx = sum(p[0] for p in screen_pts) / len(screen_pts)
+                scy = sum(p[1] for p in screen_pts) / len(screen_pts)
+                label_text = name
+                if seam_value > 0:
+                    label_text += f" ({seam_value}缝)"
+                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color["stroke"]}" {ff}>{label_text}</text>')
             else:
                 # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
@@ -1005,8 +1036,8 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 sx = pos_y * scale + padding
                 sy = pos_x * scale + padding + label_height
                 lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{bh:.1f}" height="{bw:.1f}" '
-                            f'fill="none" stroke="{color}" stroke-width="1.5" stroke-dasharray="3,2"/>')
-                lines.append(f'<text x="{sx + bh/2:.1f}" y="{sy + bw/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}" {ff}>{name}(简化)</text>')
+                            f'fill="{color["fill"]}" stroke="{color["stroke"]}" stroke-width="1.5" stroke-dasharray="3,2"/>')
+                lines.append(f'<text x="{sx + bh/2:.1f}" y="{sy + bw/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color["stroke"]}" {ff}>{name}(简化)</text>')
         else:
             # 无路径fallback
             w = 50 * scale
@@ -1014,8 +1045,8 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
             sx = pos_y * scale + padding
             sy = pos_x * scale + padding + label_height
             lines.append(f'<rect x="{sx:.1f}" y="{sy:.1f}" width="{w:.1f}" height="{h:.1f}" '
-                        f'fill="none" stroke="{color}" stroke-width="1.5" stroke-dasharray="3,2"/>')
-            lines.append(f'<text x="{sx + w/2:.1f}" y="{sy + h/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color}" {ff}>{name}(无路径)</text>')
+                        f'fill="{color["fill"]}" stroke="{color["stroke"]}" stroke-width="1.5" stroke-dasharray="3,2"/>')
+            lines.append(f'<text x="{sx + w/2:.1f}" y="{sy + h/2:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="{color["stroke"]}" {ff}>{name}(无路径)</text>')
 
     lines.append('</svg>')
     return "\n".join(lines)
