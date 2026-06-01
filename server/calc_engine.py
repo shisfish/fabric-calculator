@@ -11,6 +11,8 @@
 import subprocess
 import json
 import os
+import hashlib
+from copy import deepcopy
 
 # 导入CAD的排料图生成方法（确保与CAD完全一致）
 from piece_generator import _generate_nesting_svg, _svg_to_data_uri
@@ -28,6 +30,136 @@ def _find_npx():
 def _get_calc_engine_dir():
     """获取calc-engine目录路径"""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
+
+
+NESTING_ALGORITHM_VERSION = "nfp-contact-v1"
+NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
+
+
+def _json_safe(value):
+    return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
+
+
+def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options):
+    key_payload = {
+        "algorithm": NESTING_ALGORITHM_VERSION,
+        "measurements": _json_safe(measurements),
+        "fabric_width": round(float(fabric_width), 4),
+        "seam_allowance": round(float(seam_allowance), 4),
+        "shrinkage_rate": options.get("shrinkage_rate", options.get("shrinkRate")),
+        "shrinkage": options.get("shrinkage") or options.get("fabricShrinkage"),
+        "fabricNap": options.get("fabricNap", options.get("fabric_nap")),
+    }
+    raw = json.dumps(key_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_nesting_cache():
+    try:
+        if not os.path.exists(NESTING_CACHE_FILE):
+            return {}
+        with open(NESTING_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[Calc-Engine] nesting best cache load failed: {e}")
+        return {}
+
+
+def _save_nesting_cache(cache):
+    try:
+        with open(NESTING_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[Calc-Engine] nesting best cache save failed: {e}")
+
+
+def _nesting_length(nesting_data):
+    bounds = nesting_data.get("bounds") or {}
+    fabric_info = nesting_data.get("fabricInfo") or {}
+    return float(
+        bounds.get("height")
+        or fabric_info.get("height")
+        or (fabric_info.get("bounds") or {}).get("height")
+        or 0
+    )
+
+
+def _nesting_utilization(nesting_data):
+    fabric_info = nesting_data.get("fabricInfo") or {}
+    return float(
+        nesting_data.get("utilization")
+        or nesting_data.get("utilization_rate")
+        or fabric_info.get("utilization")
+        or 0
+    )
+
+
+def _strip_render_payload(nesting_data):
+    cleaned = deepcopy(nesting_data)
+    cleaned.pop("nesting_svg", None)
+    cleaned.pop("nesting_png_base64", None)
+    return cleaned
+
+
+def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_allowance, options):
+    if not nesting_data or nesting_data.get("error"):
+        return nesting_data
+
+    current_length = _nesting_length(nesting_data)
+    pieces = nesting_data.get("pieces") or []
+    positions = nesting_data.get("positions") or nesting_data.get("nestPositions") or []
+    if current_length <= 0 or not pieces or not positions:
+        return nesting_data
+
+    key = _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options)
+    cache = _load_nesting_cache()
+    best = cache.get(key)
+    tolerance_cm = 0.01
+
+    if best and current_length > float(best.get("bestLengthCm", 0)) + tolerance_cm:
+        reused = deepcopy(best["nesting"])
+        reused["historyBest"] = {
+            "key": key,
+            "reused": True,
+            "algorithmVersion": best.get("algorithmVersion"),
+            "bestLengthCm": best.get("bestLengthCm"),
+            "bestUtilization": best.get("bestUtilization"),
+            "currentLengthCm": current_length,
+            "currentUtilization": _nesting_utilization(nesting_data)
+        }
+        print(
+            f"[Calc-Engine] Reusing best nesting: current={current_length:.2f}cm, "
+            f"best={float(best.get('bestLengthCm', 0)):.2f}cm"
+        )
+        return reused
+
+    if not best or current_length < float(best.get("bestLengthCm", 0)) - tolerance_cm:
+        cache[key] = {
+            "algorithmVersion": NESTING_ALGORITHM_VERSION,
+            "bestLengthCm": current_length,
+            "bestUtilization": _nesting_utilization(nesting_data),
+            "nesting": _strip_render_payload(nesting_data)
+        }
+        _save_nesting_cache(cache)
+        nesting_data = deepcopy(nesting_data)
+        nesting_data["historyBest"] = {
+            "key": key,
+            "reused": False,
+            "updated": True,
+            "bestLengthCm": current_length,
+            "bestUtilization": _nesting_utilization(nesting_data)
+        }
+    elif best:
+        nesting_data = deepcopy(nesting_data)
+        nesting_data["historyBest"] = {
+            "key": key,
+            "reused": False,
+            "updated": False,
+            "bestLengthCm": best.get("bestLengthCm"),
+            "bestUtilization": best.get("bestUtilization")
+        }
+
+    return nesting_data
 
 
 def generate_pattern_pieces(measurements, options=None):
@@ -203,6 +335,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         
         # ✅ 【关键】直接使用calc-engine返回的nesting数据（不做任何转换！）
         nesting_data = data.get("nesting", {})
+        nesting_data = _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_allowance, options)
         
         pieces = nesting_data.get("pieces", [])
         positions = nesting_data.get("positions", [])
@@ -253,6 +386,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
                 "fabricInfo": fabric_info,
                 "shrinkage": nesting_data.get("shrinkage"),
                 "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
+                "historyBest": nesting_data.get("historyBest"),
                 
                 # 元数据
                 "mode": "nesting",
@@ -329,6 +463,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
         pattern_data = data.get("pattern", {})
         seam_data = data.get("seam", {})
         nesting_data = data.get("nesting", {})
+        nesting_data = _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_allowance, options)
         
         # ✅ 【关键】直接使用calc-engine返回的nesting数据（不做任何转换！）
         if nesting_data:
@@ -377,6 +512,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "fabricInfo": fabric_info,
                 "shrinkage": nesting_data.get("shrinkage"),
                 "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
+                "historyBest": nesting_data.get("historyBest"),
                 # ✅ 【关键】保留完整的statistics字段供前端使用
                 "statistics": nesting_data.get("statistics", {
                     "totalPieces": len(pieces),

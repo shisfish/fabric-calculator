@@ -51,6 +51,16 @@ interface PieceClassification {
   placementPriority: number;
 }
 
+type BoundingBox = ReturnType<Polygon['getBoundingBox']>;
+
+type PlacedPiece = {
+  pieceId: string;
+  polygon: Polygon;
+  x: number;
+  y: number;
+  rotation: number;
+};
+
 export const DEFAULT_NEST_CONFIG: NestConfig = {
   fabricWidth: 1500,
   fabricHeight: 3000,
@@ -653,6 +663,9 @@ export class NestEngine {
       }
     }
 
+    const nfpContactCandidates = this.generateNFPContactCandidates(polygon, pieceId);
+    logger.info(`   NFP接触候选: pieceId=${pieceId}, candidates=${nfpContactCandidates.length}`);
+
     let best: Point | null = null;
     let bestScore = Infinity;
     const evaluateCandidate = (candidate: Point): void => {
@@ -700,9 +713,124 @@ export class NestEngine {
       evaluateCandidate(gc);
     }
 
+    for (const nfpCandidate of nfpContactCandidates) {
+      evaluateCandidate(nfpCandidate);
+    }
+
     const selected = best as Point | null;
     logger.info(`   ✅ findBLPosition结果: ${pieceId} → ${selected ? `(${selected.x.toFixed(1)}, ${selected.y.toFixed(1)}) score=${bestScore.toFixed(0)}` : 'NULL'}`);
     return selected;
+  }
+
+  /**
+   * NFP-style contact candidates.
+   *
+   * A full NFP solver builds the complete forbidden-position polygon for every
+   * placed/active pair. This lighter version samples the most valuable points on
+   * that boundary: vertex-to-vertex contacts and bbox/edge contacts against
+   * already placed polygons. Every candidate is still validated by SAT, so these
+   * points can only improve search coverage; they cannot introduce overlaps.
+   */
+  private generateNFPContactCandidates(polygon: Polygon, pieceId: string): Point[] {
+    if (this.placedPieces.length === 0) return [];
+
+    const spacing = this.config.spacing;
+    const fw = this.config.fabricWidth;
+    const fh = this.config.fabricHeight;
+    const localBb = polygon.getBoundingBox();
+    const candidates: Point[] = [];
+
+    const addCandidate = (x: number, y: number): void => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+      const testPoly = polygon.translate(x, y);
+      const bb = testPoly.getBoundingBox();
+      if (bb.minX < spacing || bb.maxX > fw - spacing) return;
+      if (bb.minY < spacing || bb.maxY > fh - spacing) return;
+      if (!this.isValidPlacement(testPoly, pieceId, spacing)) return;
+
+      candidates.push(new Point(x, y));
+    };
+
+    for (const placed of this.placedPieces) {
+      if (placed.pieceId === pieceId) continue;
+
+      const placedPoly = placed.polygon.translate(placed.x, placed.y);
+      const placedBb = placedPoly.getBoundingBox();
+
+      // Classical left/right/top/bottom contact lines are cheap and often hit
+      // useful no-fit boundary points for rectangular and near-rectangular parts.
+      const xContacts = [
+        placedBb.maxX + spacing - localBb.minX,
+        placedBb.minX - spacing - localBb.maxX,
+        placedBb.minX - localBb.minX,
+        placedBb.maxX - localBb.maxX,
+        (placedBb.minX + placedBb.maxX) / 2 - (localBb.minX + localBb.maxX) / 2,
+      ];
+      const yContacts = [
+        placedBb.maxY + spacing - localBb.minY,
+        placedBb.minY - spacing - localBb.maxY,
+        placedBb.minY - localBb.minY,
+        placedBb.maxY - localBb.maxY,
+        (placedBb.minY + placedBb.maxY) / 2 - (localBb.minY + localBb.maxY) / 2,
+      ];
+
+      for (const x of xContacts) {
+        for (const y of yContacts) {
+          addCandidate(x, y);
+        }
+      }
+
+      // Vertex-to-vertex contacts approximate the outer NFP boundary for
+      // irregular polygons and unlock placements missed by x-only BL dropping.
+      for (const placedVertex of placedPoly.points) {
+        for (const activeVertex of polygon.points) {
+          addCandidate(
+            placedVertex.x + spacing - activeVertex.x,
+            placedVertex.y - activeVertex.y
+          );
+          addCandidate(
+            placedVertex.x - spacing - activeVertex.x,
+            placedVertex.y - activeVertex.y
+          );
+          addCandidate(
+            placedVertex.x - activeVertex.x,
+            placedVertex.y + spacing - activeVertex.y
+          );
+          addCandidate(
+            placedVertex.x - activeVertex.x,
+            placedVertex.y - spacing - activeVertex.y
+          );
+        }
+      }
+    }
+
+    const unique = new Map<string, Point>();
+    for (const candidate of candidates) {
+      const key = `${Math.round(candidate.x * 10)},${Math.round(candidate.y * 10)}`;
+      const old = unique.get(key);
+      if (!old || this.scoreCandidateForCompaction(candidate, polygon) < this.scoreCandidateForCompaction(old, polygon)) {
+        unique.set(key, candidate);
+      }
+    }
+
+    return Array.from(unique.values())
+      .sort((a, b) => this.scoreCandidateForCompaction(a, polygon) - this.scoreCandidateForCompaction(b, polygon))
+      .slice(0, 80);
+  }
+
+  private scoreCandidateForCompaction(candidate: Point, polygon: Polygon): number {
+    const bb = polygon.translate(candidate.x, candidate.y).getBoundingBox();
+    let maxY = bb.maxY;
+    let maxX = bb.maxX;
+
+    for (const placed of this.placedPieces) {
+      const pb = placed.polygon.translate(placed.x, placed.y).getBoundingBox();
+      maxY = Math.max(maxY, pb.maxY);
+      maxX = Math.max(maxX, pb.maxX);
+    }
+
+    return maxY * this.config.fabricWidth + maxX + candidate.y * 0.1 + candidate.x * 0.01;
   }
 
   /**
@@ -1112,6 +1240,19 @@ export class NestEngine {
           bestScore = score;
           bestPos = { x: cx, y: cy };
         }
+      }
+    }
+
+    for (const candidate of this.generateNFPContactCandidates(poly, piece.pieceId)) {
+      const testPoly = poly.translate(candidate.x, candidate.y);
+      if (!this.isValidPlacement(testPoly, piece.pieceId, spacing)) continue;
+
+      const testBb = testPoly.getBoundingBox();
+      const score = this.evaluatePositionScore(testBb, candidate.x, candidate.y, currentHeight);
+
+      if (score < bestScore) {
+        bestScore = score;
+        bestPos = { x: candidate.x, y: candidate.y };
       }
     }
 

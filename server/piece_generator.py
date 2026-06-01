@@ -898,7 +898,6 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 f'{ff}>'
                 f'{nest_h:.1f}cm'
                 f'</text>')
-5
     piece_colors = [
         {'fill': 'rgba(255, 99, 132, 0.25)', 'stroke': '#FF6384'},
         {'fill': 'rgba(54, 162, 235, 0.25)', 'stroke': '#36A2EB'},
