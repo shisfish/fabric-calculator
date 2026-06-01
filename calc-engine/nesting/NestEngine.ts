@@ -20,6 +20,7 @@ export interface NestConfig {
   iterations: number;
   placementGap: number;
   fabricNap?: boolean;
+  nfpCandidates?: boolean;
 }
 
 export interface NestResult {
@@ -71,6 +72,7 @@ export const DEFAULT_NEST_CONFIG: NestConfig = {
   iterations: 100,
   placementGap: 10,
   fabricNap: false,
+  nfpCandidates: true,
 };
 
 export class NestEngine {
@@ -85,6 +87,7 @@ export class NestEngine {
   }> = [];
   private polygonOffsets: Map<string, Point> = new Map();
   private pieceOnFold = new Map<string, boolean>();
+  private useNfpCandidates = true;
 
   constructor(config: Partial<NestConfig> = {}) {
     this.config = { ...DEFAULT_NEST_CONFIG, ...config };
@@ -185,12 +188,13 @@ export class NestEngine {
     
     let bestResult: NestResult | null = null;
     let bestHeight = Infinity;
-    const results: Array<{ attempt: number; height: number; utilization: number }> = [];
+    const results: Array<{ attempt: number; height: number; utilization: number; mode: string }> = [];
 
     for (let attempt = 0; attempt < numRestarts; attempt++) {
       logger.info(`\n   🔄 尝试 ${attempt + 1}/${numRestarts}`);
       
       this.placedPieces = [];
+      this.useNfpCandidates = this.config.nfpCandidates !== false && attempt > 0 && attempt % 2 === 0;
       
       let result: NestResult;
       if (attempt === 0) {
@@ -205,7 +209,8 @@ export class NestEngine {
       results.push({
         attempt: attempt + 1,
         height: currentHeight,
-        utilization: currentUtilization
+        utilization: currentUtilization,
+        mode: this.useNfpCandidates ? 'nfp' : 'baseline'
       });
 
       logger.info(`   📊 结果 ${attempt + 1}: 长度=${currentHeight.toFixed(1)}cm, 利用率=${(currentUtilization * 100).toFixed(1)}%`);
@@ -230,6 +235,7 @@ export class NestEngine {
       logger.info(`     ${marker} 尝试${r.attempt}: ${r.height.toFixed(1)}cm (${(r.utilization * 100).toFixed(1)}%)`);
     }
 
+    this.useNfpCandidates = this.config.nfpCandidates !== false;
     return bestResult!;
   }
 
@@ -663,7 +669,9 @@ export class NestEngine {
       }
     }
 
-    const nfpContactCandidates = this.generateNFPContactCandidates(polygon, pieceId);
+    const nfpContactCandidates = this.useNfpCandidates
+      ? this.generateNFPContactCandidates(polygon, pieceId)
+      : [];
     logger.info(`   NFP接触候选: pieceId=${pieceId}, candidates=${nfpContactCandidates.length}`);
 
     let best: Point | null = null;
@@ -1243,7 +1251,10 @@ export class NestEngine {
       }
     }
 
-    for (const candidate of this.generateNFPContactCandidates(poly, piece.pieceId)) {
+    const nfpContactCandidates = this.useNfpCandidates
+      ? this.generateNFPContactCandidates(poly, piece.pieceId)
+      : [];
+    for (const candidate of nfpContactCandidates) {
       const testPoly = poly.translate(candidate.x, candidate.y);
       if (!this.isValidPlacement(testPoly, piece.pieceId, spacing)) continue;
 

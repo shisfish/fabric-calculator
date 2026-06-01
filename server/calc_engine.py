@@ -32,7 +32,7 @@ def _get_calc_engine_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
 
 
-NESTING_ALGORITHM_VERSION = "nfp-contact-v3-spacing-0.5-engine-bounds"
+NESTING_ALGORITHM_VERSION = "hybrid-baseline-nfp-v4"
 NESTING_SPACING_CM = 0.5
 NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
 
