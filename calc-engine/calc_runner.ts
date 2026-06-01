@@ -48,103 +48,6 @@ function resolveShrinkageConfig(input: CalcInput): ShrinkageConfig | undefined {
   };
 }
 
-function pathOpsToPoints(ops: any[], stepsPerCurve: number = 50): Point[] {
-  const path = new Path();
-
-  for (const op of ops || []) {
-    switch (op.type) {
-      case 'move':
-        if (op.to) path.move(new Point(op.to.x, op.to.y));
-        break;
-      case 'line':
-        if (op.to) path.line(new Point(op.to.x, op.to.y));
-        break;
-      case 'quad':
-        if (op.to && op.cp1) {
-          path.quad(new Point(op.cp1.x, op.cp1.y), new Point(op.to.x, op.to.y));
-        }
-        break;
-      case 'curve':
-        if (op.to && op.cp1 && op.cp2) {
-          path.curve(
-            new Point(op.cp1.x, op.cp1.y),
-            new Point(op.cp2.x, op.cp2.y),
-            new Point(op.to.x, op.to.y)
-          );
-        }
-        break;
-      case 'close':
-        path.close();
-        break;
-    }
-  }
-
-  return path.toPoints(stepsPerCurve);
-}
-
-function calculatePointsCentroid(points: Point[]): Point {
-  if (points.length === 0) return new Point(0, 0);
-
-  let signedArea = 0;
-  let cx = 0;
-  let cy = 0;
-
-  for (let i = 0; i < points.length; i++) {
-    const current = points[i];
-    const next = points[(i + 1) % points.length];
-    const factor = current.x * next.y - next.x * current.y;
-    signedArea += factor;
-    cx += (current.x + next.x) * factor;
-    cy += (current.y + next.y) * factor;
-  }
-
-  signedArea /= 2;
-  if (Math.abs(signedArea) < 0.0001) {
-    return new Point(
-      points.reduce((sum, p) => sum + p.x, 0) / points.length,
-      points.reduce((sum, p) => sum + p.y, 0) / points.length
-    );
-  }
-
-  return new Point(cx / (6 * signedArea), cy / (6 * signedArea));
-}
-
-function calculateRenderedBounds(
-  piecesData: any[],
-  fabricWidth: number,
-  spacing: number
-): { width: number; height: number } {
-  let maxX = 0;
-  let maxY = 0;
-
-  for (const piece of piecesData) {
-    const ops = (piece.seamAllowancePathOps && piece.seamAllowancePathOps.length > 0)
-      ? piece.seamAllowancePathOps
-      : piece.pathOps;
-    const points = pathOpsToPoints(ops || []);
-    if (points.length < 3) continue;
-
-    const centroid = calculatePointsCentroid(points);
-    const rad = (piece.rotation || 0) * Math.PI / 180;
-    const cos = Math.cos(rad);
-    const sin = Math.sin(rad);
-
-    for (const point of points) {
-      const dx = point.x - centroid.x;
-      const dy = point.y - centroid.y;
-      const x = piece.x + dx * cos - dy * sin + centroid.x;
-      const y = piece.y + dx * sin + dy * cos + centroid.y;
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-
-  return {
-    width: Math.max(fabricWidth, maxX + spacing),
-    height: maxY + spacing
-  };
-}
-
 function main() {
   const input: CalcInput = JSON.parse(process.argv[2]);
 
@@ -487,11 +390,7 @@ function main() {
         rotation: p.rotation
       }));
 
-      const renderedBounds = calculateRenderedBounds(piecesData, fabricWidth, nestingSpacing);
-      const bounds = {
-        width: Math.max(nestResult.bounds.width, renderedBounds.width),
-        height: Math.max(nestResult.bounds.height, renderedBounds.height)
-      };
+      const bounds = nestResult.bounds;
       const fabricArea = fabricWidth * bounds.height;
       const renderedUtilization = fabricArea > 0 ? ((nestResult.usedArea || 0) / fabricArea) * 100 : 0;
 

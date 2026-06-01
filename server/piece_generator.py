@@ -1032,13 +1032,19 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 if _is_rectangular_piece(full_pts) and is_large_enough_for_dims:
                     screen_xs = [p[0] for p in screen_pts]
                     screen_ys = [p[1] for p in screen_pts]
-                    left_x = min(screen_xs) + 5
-                    right_x = max(screen_xs) - 5
-                    mid_y_for_dim = (min(screen_ys) + max(screen_ys)) / 2
-                    length_text = _format_cm_value(piece_length)
+                    min_sx = min(screen_xs)
+                    max_sx = max(screen_xs)
+                    min_sy = min(screen_ys)
+                    max_sy = max(screen_ys)
+                    mid_sx = (min_sx + max_sx) / 2
+                    mid_sy = (min_sy + max_sy) / 2
+                    # 排料图是横向展示：screen X = 裁片Y(排料长度方向)，screen Y = 裁片X(门幅方向)。
+                    # 0/180度翻转不会交换两个方向，因此上边标排料方向尺寸，左边标门幅方向尺寸。
+                    marker_length_text = _format_cm_value(piece_length)
+                    marker_width_text = _format_cm_value(piece_width)
                     dim_style = f'font-size="8" fill="{color["stroke"]}" opacity="0.85" {ff}'
-                    lines.append(f'<text x="{left_x:.1f}" y="{mid_y_for_dim:.1f}" text-anchor="start" dominant-baseline="middle" {dim_style}>{length_text}</text>')
-                    lines.append(f'<text x="{right_x:.1f}" y="{mid_y_for_dim:.1f}" text-anchor="end" dominant-baseline="middle" {dim_style}>{length_text}</text>')
+                    lines.append(f'<text x="{mid_sx:.1f}" y="{min_sy + 10:.1f}" text-anchor="middle" dominant-baseline="middle" {dim_style}>{marker_length_text}</text>')
+                    lines.append(f'<text x="{min_sx + 10:.1f}" y="{mid_sy:.1f}" text-anchor="middle" dominant-baseline="middle" transform="rotate(-90 {min_sx + 10:.1f} {mid_sy:.1f})" {dim_style}>{marker_width_text}</text>')
             else:
                 # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
