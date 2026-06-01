@@ -32,7 +32,7 @@ def _get_calc_engine_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
 
 
-NESTING_ALGORITHM_VERSION = "hybrid-baseline-nfp-v4"
+NESTING_ALGORITHM_VERSION = "baseline-bounds-v5"
 NESTING_SPACING_CM = 0.5
 NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
 
@@ -51,6 +51,7 @@ def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options)
         "shrinkage": options.get("shrinkage") or options.get("fabricShrinkage"),
         "fabricNap": options.get("fabricNap", options.get("fabric_nap")),
         "spacing": NESTING_SPACING_CM,
+        "nfpCandidates": options.get("nfpCandidates") is True,
     }
     raw = json.dumps(key_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -314,7 +315,8 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         "options": {
             "showGrid": options.get("showGrid", True),
             "showUtilization": options.get("showUtilization", True),
-            "showPieceLabels": options.get("showPieceLabels", True)
+            "showPieceLabels": options.get("showPieceLabels", True),
+            "nfpCandidates": options.get("nfpCandidates") is True
         }
     })
 
@@ -440,7 +442,8 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             "showGrid": options.get("showGrid", True),
             "showUtilization": options.get("showUtilization", True),
             "showPieceLabels": options.get("showPieceLabels", True),
-            "showSeamLabels": options.get("showSeamLabels", True)
+            "showSeamLabels": options.get("showSeamLabels", True),
+            "nfpCandidates": options.get("nfpCandidates") is True
         }
     })
 

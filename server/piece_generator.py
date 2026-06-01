@@ -849,6 +849,18 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
 
+    piece_queues_for_bounds = {}
+    for piece in pieces:
+        piece_queues_for_bounds.setdefault(piece.get('name', ''), []).append(piece)
+    render_max_y = nest_h
+    for pos in positions:
+        queue = piece_queues_for_bounds.get(pos.get('name', ''), [])
+        piece = queue.pop(0) if queue else None
+        if not piece:
+            continue
+        render_max_y = max(render_max_y, pos.get('y', 0) + piece.get('height', 0))
+    nest_h = render_max_y
+
     base_scale = 2.25
     target_max_h_px = 780
     max_scale_by_h = (target_max_h_px - padding * 2 - label_height) / max(fabric_width, 1)

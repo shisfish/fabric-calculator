@@ -28,6 +28,7 @@ interface CalcInput {
     showGrid?: boolean;
     showUtilization?: boolean;
     showPieceLabels?: boolean;
+    nfpCandidates?: boolean;
   };
 }
 
@@ -258,7 +259,8 @@ function main() {
         spacing: nestingSpacing,
         rotations: [0, 180],
         fabricNap,
-        fabricHeight: 1600
+        fabricHeight: 1600,
+        nfpCandidates: input.options?.nfpCandidates === true
       });
 
       for (const piece of nestPieces) {
@@ -390,7 +392,28 @@ function main() {
         rotation: p.rotation
       }));
 
-      const bounds = nestResult.bounds;
+      const outputBounds = placedPolygons.reduce(
+        (acc, inst) => {
+          const bb = inst.polygon.translate(inst.x, inst.y).getBoundingBox();
+          return {
+            minX: Math.min(acc.minX, bb.minX),
+            minY: Math.min(acc.minY, bb.minY),
+            maxX: Math.max(acc.maxX, bb.maxX),
+            maxY: Math.max(acc.maxY, bb.maxY)
+          };
+        },
+        { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+      );
+      const renderedMaxY = piecesData.reduce(
+        (maxY, piece) => Math.max(maxY, (piece.y || 0) + (piece.height || 0)),
+        0
+      );
+      const bounds = Number.isFinite(outputBounds.maxY)
+        ? {
+            width: Math.min(fabricWidth, Math.max(nestResult.bounds.width, outputBounds.maxX + nestingSpacing)),
+            height: Math.max(nestResult.bounds.height, outputBounds.maxY + nestingSpacing, renderedMaxY + nestingSpacing)
+          }
+        : nestResult.bounds;
       const fabricArea = fabricWidth * bounds.height;
       const renderedUtilization = fabricArea > 0 ? ((nestResult.usedArea || 0) / fabricArea) * 100 : 0;
 
