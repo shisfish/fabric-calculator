@@ -54,7 +54,13 @@ const SHAPE_OPTIONS = [
 document.addEventListener('DOMContentLoaded', () => {
     loadCategories().then(() => {
         // 品类列表加载完成后，检查是否是编辑模式
-        const editId = new URLSearchParams(window.location.search).get('edit');
+        const urlParams = new URLSearchParams(window.location.search);
+        const isNewCalculation = urlParams.get('new') === '1';
+        const editId = urlParams.get('edit');
+        if (isNewCalculation) {
+            startNewPrecisionCalculation();
+            return;
+        }
         if (editId) {
             loadEditRecord(editId);
         } else {
@@ -65,6 +71,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('input', handlePrecisionDraftChange);
     document.addEventListener('change', handlePrecisionDraftChange);
 });
+
+function startNewPrecisionCalculation() {
+    clearPrecisionDraft();
+    lastCalcResult = null;
+    currentCategory = null;
+    categoryDetail = null;
+    pieceTemplateLoaded = false;
+    window.history.replaceState(null, '', '/');
+    goStep(1, true);
+}
 
 // 加载品类列表
 async function loadCategories() {
@@ -107,22 +123,55 @@ async function loadEditRecord(recordId) {
         }
 
         const record = result.data;
-        const data = record.input_data || record.full_result?.params || {};
-        const pieces = data.pieces || record.pieces || record.full_result?.pieces_detail || [];
-        if (!data.category && !record.category && pieces.length === 0) {
+        const editData = normalizeEditRecord(record);
+        if (!editData.category && editData.pieces.length === 0) {
             alert('历史记录缺少可编辑的输入数据');
             return;
         }
 
-        await fillEditData({
-            ...data,
-            category: data.category || record.category || 'custom',
-            pieces,
-        });
+        await fillEditData(editData);
     } catch (e) {
         console.error('加载历史记录失败:', e);
         alert('加载历史记录失败');
     }
+}
+
+function normalizeEditRecord(record) {
+    const input = record.input_data || {};
+    const measurements = input.measurements || {};
+    const params = record.params || record.full_result?.params || {};
+    const rawPieces =
+        input.pieces ||
+        measurements.pieces ||
+        record.pieces ||
+        record.full_result?.pieces_detail ||
+        record.full_result?.pattern?.pieces ||
+        [];
+
+    return {
+        category: input.category || measurements.category || params.category || record.category || 'custom',
+        fabric_width: input.fabric_width ?? input.fabricWidth ?? measurements.fabricWidth ?? params.fabric_width,
+        fabric_type: input.fabric_type ?? input.fabricType ?? params.fabric_type,
+        fabric_weight_gsm: input.fabric_weight_gsm ?? input.fabricWeight ?? params.fabric_weight_gsm,
+        shrinkage_rate: input.shrinkage_rate ?? input.shrinkRate ?? input.fabricShrinkage ?? params.shrinkage_rate,
+        quantity: input.quantity ?? params.quantity,
+        seam_allowance: input.seam_allowance ?? input.seamAllowance ?? measurements.seamAllowance ?? params.seam_allowance,
+        pieces: rawPieces.map(normalizeEditPiece),
+    };
+}
+
+function normalizeEditPiece(piece) {
+    const seamAllowance = piece.seam_allowance ?? piece.seamAllowance;
+    return {
+        id: piece.id || piece.piece_id || '',
+        name: piece.name || piece.piece_name || '',
+        length: piece.length ?? piece.height ?? piece.original_length ?? piece.originalSize?.height ?? '',
+        width: piece.width ?? piece.original_width ?? piece.originalSize?.width ?? '',
+        count: piece.count ?? piece.quantity ?? piece.cutCount ?? piece.piece_count ?? 1,
+        shape: piece.shape || 'rectangle',
+        material: piece.material || 'main',
+        seam_allowance: seamAllowance ?? 1.5,
+    };
 }
 
 async function fillEditData(data) {
@@ -139,16 +188,7 @@ async function fillEditData(data) {
             quantity: data.quantity,
         });
 
-        const pieces = (data.pieces || []).map(piece => ({
-            id: piece.id || piece.piece_id || '',
-            name: piece.name || piece.piece_name || '',
-            length: piece.length ?? piece.original_length ?? '',
-            width: piece.width ?? piece.original_width ?? '',
-            count: piece.count ?? piece.piece_count ?? 1,
-            shape: piece.shape || 'rectangle',
-            material: piece.material || 'main',
-            seam_allowance: piece.seam_allowance ?? 1.5,
-        }));
+        const pieces = (data.pieces || []).map(normalizeEditPiece);
 
         if (pieces.length > 0) {
             renderPieceRows(pieces);
@@ -628,6 +668,9 @@ function renderCalcEngineResult(result, inputData) {
     const seam = result.seam || {};
     const nesting = result.nesting || {};
     const stats = nesting.statistics || {};
+    const orderQuantity = parseInt(inputData.quantity) || 1;
+    const perPieceLengthCm = stats.fabricLength || 0;
+    const totalOrderLengthM = (perPieceLengthCm * orderQuantity) / 100;
 
     // 计算利用率
     const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
@@ -653,7 +696,11 @@ function renderCalcEngineResult(result, inputData) {
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">用料长度</span>
-            <strong style="font-size:14px;">${(stats.fabricLength || 0).toFixed(2)} cm</strong>
+            <strong style="font-size:14px;">${(perPieceLengthCm / 100).toFixed(3)} m / 件</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+            <span style="color:var(--text-secondary);font-size:13px;">总用料长度</span>
+            <strong style="font-size:14px;color:#16a34a;">${totalOrderLengthM.toFixed(3)} m</strong>
         </div>
         ${inputData.fabric_weight_gsm ? `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
@@ -666,8 +713,9 @@ function renderCalcEngineResult(result, inputData) {
     // 2. 材料分类汇总
     const matCards = document.getElementById('result-material-cards');
     if (pattern.pieces && pattern.pieces.length > 0) {
-        const totalArea = pattern.pieces.reduce((sum, p) => sum + (p.area * p.quantity), 0);
-        const totalLengthM = (stats.fabricLength || 0) / 100;
+        const perPieceArea = pattern.pieces.reduce((sum, p) => sum + (p.area * p.quantity), 0);
+        const totalArea = perPieceArea * orderQuantity;
+        const totalLengthM = totalOrderLengthM;
         const weightKg = inputData.fabric_weight_gsm ? (totalArea / 10000 * inputData.fabric_weight_gsm / 1000) : 0;
 
         matCards.style.display = 'block';

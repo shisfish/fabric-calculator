@@ -203,36 +203,42 @@ def profile():
 # ============================================================
 
 @app.route('/')
+@login_required
 def index():
     """首页 - 计算器"""
     return render_template('index.html')
 
 
 @app.route('/test-nesting')
+@login_required
 def test_nesting():
     """排料图诊断测试页面"""
     return render_template('test_nesting.html')
 
 
 @app.route('/curves')
+@login_required
 def curves():
     """曲线模型计算页面"""
     return render_template('curves.html')
 
 
 @app.route('/quotation')
+@login_required
 def quotation():
     """报价单页面"""
     return render_template('quotation.html')
 
 
 @app.route('/history')
+@login_required
 def history():
     """历史记录页面"""
     return render_template('history.html')
 
 
 @app.route('/history/<record_id>')
+@login_required
 def history_detail(record_id):
     """历史记录详情页面"""
     return render_template('detail.html', record_id=record_id)
@@ -300,6 +306,7 @@ def get_fabric_types():
 
 
 @app.route('/api/quotation', methods=['POST'])
+@login_required
 def calculate_quotation():
     """计算报价"""
     try:
@@ -319,6 +326,7 @@ def calculate_quotation():
 
 
 @app.route('/api/history', methods=['GET'])
+@login_required
 def get_history():
     """获取历史记录（支持分页和类型筛选，只返回当前用户的数据）"""
     # 获取当前用户ID
@@ -345,6 +353,7 @@ def get_history():
 
 
 @app.route('/api/history/<record_id>', methods=['GET'])
+@login_required
 def get_history_detail(record_id):
     """获取单条历史记录详情（含重新计算的完整结果）"""
     try:
@@ -419,6 +428,7 @@ def get_history_detail(record_id):
 
 
 @app.route('/api/history/<record_id>', methods=['DELETE'])
+@login_required
 def delete_history(record_id):
     """删除历史记录"""
     db_manager.delete_record(record_id)
@@ -426,6 +436,7 @@ def delete_history(record_id):
 
 
 @app.route('/api/history/clear', methods=['POST'])
+@login_required
 def clear_history():
     """清空历史记录"""
     db_manager.clear_history()
@@ -437,6 +448,7 @@ def clear_history():
 # ============================================================
 
 @app.route('/api/image/upload', methods=['POST'])
+@login_required
 def image_upload():
     """上传图片"""
     try:
@@ -459,6 +471,7 @@ def image_upload():
 
 
 @app.route('/api/image/calibrate', methods=['POST'])
+@login_required
 def image_calibrate():
     """标定参照物"""
     try:
@@ -478,6 +491,7 @@ def image_calibrate():
 
 
 @app.route('/api/image/measure', methods=['POST'])
+@login_required
 def image_measure():
     """测量裁片区域"""
     try:
@@ -496,6 +510,7 @@ def image_measure():
 
 
 @app.route('/api/image/annotate', methods=['POST'])
+@login_required
 def image_annotate():
     """获取标注后的图片"""
     try:
@@ -509,6 +524,7 @@ def image_annotate():
 
 
 @app.route('/api/image/session/<session_id>', methods=['GET'])
+@login_required
 def image_session(session_id):
     """获取会话状态"""
     from image_engine import measurement_engine
@@ -540,6 +556,7 @@ def _attach_pieces_to_rows(rows, piece_details):
 # ============================================================
 
 @app.route('/api/calculate-curved', methods=['POST'])
+@login_required
 def calculate_curved():
     """曲线模型精确计算面料用量"""
     try:
@@ -661,11 +678,13 @@ def health_check():
 # ============================================================
 
 @app.route('/polygon-nesting')
+@login_required
 def polygon_nesting_page():
     """多边形排料页面"""
     return render_template('polygon_nesting.html')
 
 @app.route('/api/polygon-nesting', methods=['POST'])
+@login_required
 def api_polygon_nesting():
     """多边形排料API"""
     import time
@@ -922,12 +941,14 @@ def api_polygon_nesting():
 # ============================================================
 
 @app.route('/cad')
+@login_required
 def cad_page():
     """CAD排料页面"""
     return render_template('cad.html')
 
 
 @app.route('/api/cad-preview', methods=['POST'])
+@login_required
 def cad_preview():
     """CAD裁片预览API"""
     try:
@@ -959,6 +980,7 @@ def cad_preview():
 
 
 @app.route('/api/cad-nesting', methods=['POST'])
+@login_required
 def cad_nesting():
     """CAD排料计算API"""
     import time
@@ -1063,6 +1085,7 @@ def serve_upload(filename):
 # ============================================================
 
 @app.route('/api/calc/pattern', methods=['POST'])
+@login_required
 def calc_pattern():
     """独立计算模块 - 裁片图API"""
     try:
@@ -1089,6 +1112,7 @@ def calc_pattern():
 
 
 @app.route('/api/calc/seam', methods=['POST'])
+@login_required
 def calc_seam():
     """独立计算模块 - 裁片+缝份图API"""
     try:
@@ -1116,6 +1140,7 @@ def calc_seam():
 
 
 @app.route('/api/calc/nesting', methods=['POST'])
+@login_required
 def calc_nesting():
     """独立计算模块 - 排料图API"""
     try:
@@ -1151,6 +1176,7 @@ def calc_nesting():
 
 
 @app.route('/api/calc/all', methods=['POST'])
+@login_required
 def calc_all():
     """独立计算模块 - 一次性生成所有三个模块API"""
     import time
@@ -1177,6 +1203,7 @@ def calc_all():
         if result["success"]:
             # ✅ 【新增】保存精确计算结果到数据库
             record_id = datetime.now().strftime("%Y%m%d%H%M%S")
+            quantity = int(data.get("quantity", 1) or 1)
             
             # 构建图片数据（用于保存到数据库）
             pattern_data = result.get("pattern", {})
@@ -1204,6 +1231,20 @@ def calc_all():
                     "file_path": f"/static/uploads/calc_{record_id}_nesting.png"
                 })
 
+            per_piece_length_m = nesting_data.get("per_piece_length_m", 0) or 0
+            per_piece_area_m2 = nesting_data.get("total_area_m2", 0) or 0
+            normalized_input_data = {
+                **data,
+                "category": measurements.get("category", "tshirt"),
+                "fabric_width": fabric_width,
+                "seam_allowance": seam_allowance,
+                "fabric_type": data.get("fabricType", "woven"),
+                "fabric_weight_gsm": data.get("fabricWeight", 0),
+                "shrinkage_rate": data.get("shrinkRate", 3),
+                "quantity": quantity,
+                "pieces": measurements.get("pieces", []),
+            }
+
             record = {
                 "id": record_id,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1215,19 +1256,20 @@ def calc_all():
                     "fabric_type": data.get("fabricType", "woven"),
                     "fabric_weight_gsm": data.get("fabricWeight", 0),
                     "shrinkage_rate": data.get("shrinkRate", 3),
-                    "quantity": data.get("quantity", 1),
+                    "quantity": quantity,
                     **measurements
                 },
                 "result": {
-                    "per_piece_length_m": nesting_data.get("per_piece_length_m", 0),
-                    "total_area_m2": nesting_data.get("total_area_m2", 0),
+                    "per_piece_length_m": per_piece_length_m,
+                    "total_length_m": round(per_piece_length_m * quantity, 3),
+                    "total_area_m2": round(per_piece_area_m2 * quantity, 4),
                     "utilization_rate": nesting_data.get("utilization_rate", 0),
-                    "fabric_weight_kg": (nesting_data.get("total_area_m2", 0) * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0,
-                    "main_fabric_per_piece_m": nesting_data.get("per_piece_length_m", 0),
+                    "fabric_weight_kg": (per_piece_area_m2 * quantity * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0,
+                    "main_fabric_per_piece_m": per_piece_length_m,
                     "lining_per_piece_m": 0,
                     "calculated_wastage_rate": round((100 - (nesting_data.get("utilization_rate", 0) or 0)), 1) if nesting_data.get("utilization_rate", 0) > 0 else 8,
                 },
-                "input_data": data,
+                "input_data": normalized_input_data,
                 "full_result": {
                     **result,
                     # ✅ 智能构建 material_breakdown（支持多种材料：主面料、罗纹、里布等）

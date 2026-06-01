@@ -1022,10 +1022,23 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 # 标签：每个实例都显示名称
                 scx = sum(p[0] for p in screen_pts) / len(screen_pts)
                 scy = sum(p[1] for p in screen_pts) / len(screen_pts)
-                label_text = name
-                if seam_value > 0:
-                    label_text += f" ({seam_value}缝)"
-                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color["stroke"]}" {ff}>{label_text}</text>')
+                lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color["stroke"]}" {ff}>{name}</text>')
+
+                local_xs = [p[0] for p in full_pts]
+                local_ys = [p[1] for p in full_pts]
+                piece_width = max(local_xs) - min(local_xs)
+                piece_length = max(local_ys) - min(local_ys)
+                is_large_enough_for_dims = min(piece_width, piece_length) >= 18 and max(piece_width, piece_length) >= 35
+                if _is_rectangular_piece(full_pts) and is_large_enough_for_dims:
+                    screen_xs = [p[0] for p in screen_pts]
+                    screen_ys = [p[1] for p in screen_pts]
+                    left_x = min(screen_xs) + 5
+                    right_x = max(screen_xs) - 5
+                    mid_y_for_dim = (min(screen_ys) + max(screen_ys)) / 2
+                    length_text = _format_cm_value(piece_length)
+                    dim_style = f'font-size="8" fill="{color["stroke"]}" opacity="0.85" {ff}'
+                    lines.append(f'<text x="{left_x:.1f}" y="{mid_y_for_dim:.1f}" text-anchor="start" dominant-baseline="middle" {dim_style}>{length_text}</text>')
+                    lines.append(f'<text x="{right_x:.1f}" y="{mid_y_for_dim:.1f}" text-anchor="end" dominant-baseline="middle" {dim_style}>{length_text}</text>')
             else:
                 # fallback: 用bounding box
                 bbox = _get_path_ops_bbox(path_ops)
@@ -1097,6 +1110,37 @@ def _extract_polygon_points(ops, steps_per_curve=50):
                     points.append((px, py))
                 current = (to['x'], to['y'])
     return points
+
+
+def _polygon_area_from_xy(points):
+    if len(points) < 3:
+        return 0
+    area = 0
+    for i, (x1, y1) in enumerate(points):
+        x2, y2 = points[(i + 1) % len(points)]
+        area += x1 * y2 - x2 * y1
+    return abs(area) / 2
+
+
+def _is_rectangular_piece(points, tolerance=0.02):
+    if len(points) < 4:
+        return False
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    width = max(xs) - min(xs)
+    height = max(ys) - min(ys)
+    if width <= 0 or height <= 0:
+        return False
+    bbox_area = width * height
+    poly_area = _polygon_area_from_xy(points)
+    return abs(poly_area - bbox_area) / bbox_area <= tolerance
+
+
+def _format_cm_value(value):
+    rounded = round(value, 1)
+    if abs(rounded - round(rounded)) < 0.05:
+        return f"{int(round(rounded))}cm"
+    return f"{rounded:.1f}cm"
 
 
 def _generate_onfold_full_path(half_ops, scale=1):

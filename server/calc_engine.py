@@ -32,7 +32,8 @@ def _get_calc_engine_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
 
 
-NESTING_ALGORITHM_VERSION = "nfp-contact-v1"
+NESTING_ALGORITHM_VERSION = "nfp-contact-v2-spacing-0.5-render-bounds"
+NESTING_SPACING_CM = 0.5
 NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
 
 
@@ -49,6 +50,7 @@ def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options)
         "shrinkage_rate": options.get("shrinkage_rate", options.get("shrinkRate")),
         "shrinkage": options.get("shrinkage") or options.get("fabricShrinkage"),
         "fabricNap": options.get("fabricNap", options.get("fabric_nap")),
+        "spacing": NESTING_SPACING_CM,
     }
     raw = json.dumps(key_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
