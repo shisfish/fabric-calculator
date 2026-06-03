@@ -730,9 +730,35 @@ function renderCalcEngineResult(result, inputData) {
         ` : ''}
     `;
     if (hasMultipleMaterials) {
-        infoGrid.innerHTML += `
+        infoGrid.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                <span style="color:var(--text-secondary);font-size:13px;">服装品类</span>
+                <strong style="font-size:14px;">${CATEGORY_NAMES[inputData.category] || inputData.category}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                <span style="color:var(--text-secondary);font-size:13px;">面料门幅</span>
+                <strong style="font-size:14px;">${inputData.fabric_width} cm</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                <span style="color:var(--text-secondary);font-size:13px;">订单数量</span>
+                <strong style="font-size:14px;">${inputData.quantity} 件</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                <span style="color:var(--text-secondary);font-size:13px;">面料种类</span>
+                <strong style="font-size:14px;color:#1976d2;">${nestingGroups.length} 种</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                <span style="color:var(--text-secondary);font-size:13px;">排料图</span>
+                <strong style="font-size:14px;color:#16a34a;">${nestingGroups.length} 张</strong>
+            </div>
+            ${inputData.fabric_weight_gsm ? `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
+                <span style="color:var(--text-secondary);font-size:13px;">面料克重</span>
+                <strong style="font-size:14px;">${inputData.fabric_weight_gsm} g/m²</strong>
+            </div>
+            ` : ''}
             <div style="grid-column:1/-1;padding:8px 0;color:var(--text-secondary);font-size:12px;">
-                多面料已拆分排料，长度和利用率请查看下方每种面料的独立数据。
+                多面料已拆分排料，每种面料的长度、面积、利用率和排料图在下方单独展示。
             </div>
         `;
     }

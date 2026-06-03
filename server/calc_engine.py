@@ -425,7 +425,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
     shrinkage_config = options.get("shrinkage") or options.get("fabricShrinkage")
 
     input_data = json.dumps({
-        "mode": "nesting",
+        "mode": "all",
         "category": measurements.get("category", "tshirt"),
         "pieces": measurements.get("pieces", []),
         "seamAllowance": seam_allowance,
