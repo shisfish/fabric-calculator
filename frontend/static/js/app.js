@@ -155,13 +155,11 @@ function normalizeEditRecord(record) {
         fabric_weight_gsm: input.fabric_weight_gsm ?? input.fabricWeight ?? params.fabric_weight_gsm,
         shrinkage_rate: input.shrinkage_rate ?? input.shrinkRate ?? input.fabricShrinkage ?? params.shrinkage_rate,
         quantity: input.quantity ?? params.quantity,
-        seam_allowance: input.seam_allowance ?? input.seamAllowance ?? measurements.seamAllowance ?? params.seam_allowance,
         pieces: rawPieces.map(normalizeEditPiece),
     };
 }
 
 function normalizeEditPiece(piece) {
-    const seamAllowance = piece.seam_allowance ?? piece.seamAllowance;
     return {
         id: piece.id || piece.piece_id || '',
         name: piece.name || piece.piece_name || '',
@@ -170,7 +168,6 @@ function normalizeEditPiece(piece) {
         count: piece.count ?? piece.quantity ?? piece.cutCount ?? piece.piece_count ?? 1,
         shape: piece.shape || 'rectangle',
         material: piece.material || 'main',
-        seam_allowance: seamAllowance ?? 1.5,
     };
 }
 
@@ -357,7 +354,7 @@ function loadPieceTemplate() {
     if (!categoryDetail.pieces || categoryDetail.pieces.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="empty-row">自定义品类，请手动添加裁片</td>
+                <td colspan="7" class="empty-row">自定义品类，请手动添加裁片</td>
             </tr>
         `;
         return;
@@ -381,7 +378,6 @@ function loadPieceTemplate() {
                     ${getDefaultMaterial(piece.id, MATERIAL_OPTIONS)}
                 </select>
             </td>
-            <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0"></td>
             <td>
                 <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
             </td>
@@ -408,7 +404,6 @@ function renderPieceRows(pieces) {
                     ${MATERIAL_OPTIONS.map(o => `<option value="${o.value}" ${o.value === (piece.material || 'main') ? 'selected' : ''}>${o.label}</option>`).join('')}
                 </select>
             </td>
-            <td><input type="number" class="inline-input inline-input-sm" value="${piece.seam_allowance || 1.5}" data-field="seam_allowance" step="0.5" min="0"></td>
             <td>
                 <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
             </td>
@@ -479,7 +474,6 @@ function addPiece() {
                 ${MATERIAL_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
             </select>
         </td>
-        <td><input type="number" class="inline-input inline-input-sm" value="1.5" data-field="seam_allowance" step="0.5" min="0"></td>
         <td>
             <button class="btn-delete" onclick="removePiece(this)" title="删除">✕</button>
         </td>
@@ -526,7 +520,6 @@ function collectPieceRows(options = {}) {
             count: parseInt(row.querySelector('[data-field="count"]')?.value) || 1,
             shape: row.querySelector('[data-field="shape"]')?.value || 'rectangle',
             material: row.querySelector('[data-field="material"]')?.value || 'main',
-            seam_allowance: parseFloat(row.querySelector('[data-field="seam_allowance"]')?.value) || 1.5,
         });
     });
     return pieces;

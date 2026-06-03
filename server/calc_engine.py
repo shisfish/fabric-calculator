@@ -12,6 +12,7 @@ import subprocess
 import json
 import os
 import hashlib
+from collections import Counter
 from copy import deepcopy
 
 # 导入CAD的排料图生成方法（确保与CAD完全一致）
@@ -32,7 +33,7 @@ def _get_calc_engine_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
 
 
-NESTING_ALGORITHM_VERSION = "maxrects-display-length-v8"
+NESTING_ALGORITHM_VERSION = "cutting-line-length-v9"
 NESTING_SPACING_CM = 0.5
 NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
 
@@ -41,7 +42,7 @@ def _json_safe(value):
     return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
 
 
-def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options, include_algorithm=False):
+def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options, include_algorithm=True):
     key_payload = {
         "measurements": _json_safe(measurements),
         "fabric_width": round(float(fabric_width), 4),
@@ -56,6 +57,36 @@ def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options,
         key_payload["algorithm"] = NESTING_ALGORITHM_VERSION
     raw = json.dumps(key_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _piece_counts_from_measurements(measurements):
+    counts = Counter()
+    for piece in measurements.get("pieces", []) or []:
+        name = str(piece.get("name") or "").strip()
+        if not name:
+            continue
+        quantity = piece.get("quantity", piece.get("count", piece.get("cutCount", 1)))
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            quantity = 1
+        counts[name] += max(quantity, 1)
+    return counts
+
+
+def _piece_counts_from_nesting(nesting_data):
+    counts = Counter()
+    for piece in nesting_data.get("pieces", []) or []:
+        name = str(piece.get("name") or "").strip()
+        if name:
+            counts[name] += 1
+    return counts
+
+
+def _cache_matches_current_pieces(cached_nesting, measurements):
+    current_counts = _piece_counts_from_measurements(measurements)
+    cached_counts = _piece_counts_from_nesting(cached_nesting or {})
+    return bool(current_counts) and current_counts == cached_counts
 
 
 def _load_nesting_cache():
@@ -152,20 +183,13 @@ def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_all
     key = _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options)
     cache = _load_nesting_cache()
     best = cache.get(key)
-    migrated_from_key = None
-    if not best:
-        legacy_key = _make_nesting_cache_key(
-            measurements,
-            fabric_width,
-            seam_allowance,
-            options,
-            include_algorithm=True
+    if best and not _cache_matches_current_pieces(best.get("nesting", {}), measurements):
+        print(
+            "[Calc-Engine] Ignoring cached nesting: piece signature mismatch, "
+            f"current={dict(_piece_counts_from_measurements(measurements))}, "
+            f"cached={dict(_piece_counts_from_nesting(best.get('nesting', {})))}"
         )
-        best = cache.get(legacy_key)
-        if best:
-            migrated_from_key = legacy_key
-            cache[key] = deepcopy(best)
-            _save_nesting_cache(cache)
+        best = None
     tolerance_cm = 0.01
 
     if best and current_length > float(best.get("bestLengthCm", 0)) + tolerance_cm:
@@ -179,8 +203,6 @@ def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_all
             "currentLengthCm": current_length,
             "currentUtilization": _nesting_utilization(nesting_data)
         }
-        if migrated_from_key:
-            reused["historyBest"]["migratedFromKey"] = migrated_from_key
         print(
             f"[Calc-Engine] Reusing best nesting: current={current_length:.2f}cm, "
             f"best={float(best.get('bestLengthCm', 0)):.2f}cm"
@@ -192,6 +214,7 @@ def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_all
             "algorithmVersion": NESTING_ALGORITHM_VERSION,
             "bestLengthCm": current_length,
             "bestUtilization": _nesting_utilization(nesting_data),
+            "pieceCounts": dict(_piece_counts_from_measurements(measurements)),
             "nesting": _strip_render_payload(nesting_data)
         }
         _save_nesting_cache(cache)

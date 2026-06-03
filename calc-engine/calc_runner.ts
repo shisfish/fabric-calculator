@@ -376,7 +376,7 @@ function main() {
               placed: true,
               pathOps: finalPathOps,
               expandedPathOps: null,
-              seamAllowance: piece.seamAllowance || 0,
+              seamAllowance: piece.seamAllowance ?? 0,
               seamAllowancePathOps: finalSeamOps,
               expandedSeamAllowancePathOps: null,
               _custom: true
