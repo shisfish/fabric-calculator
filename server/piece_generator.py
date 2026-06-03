@@ -847,6 +847,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
     padding = 50
     label_height = 48
+    frame_left_gap_px = 10
 
     if bounds:
         nest_w = bounds.get('width', fabric_width)
@@ -916,13 +917,15 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 f'<text x="{leg_x + 114}" y="{leg_y + 1}" font-size="9" fill="#666" {ff}>净样(缝合线)</text>')
 
     # 面料虚线框（横向：宽=排料长度，高=门幅）
-    lines.append(f'<rect x="{padding}" y="{padding + label_height}" '
-                f'width="{frame_nest_h * scale}" height="{fabric_width * scale}" '
+    frame_x = padding - frame_left_gap_px
+    frame_width_px = frame_nest_h * scale + frame_left_gap_px
+    lines.append(f'<rect x="{frame_x}" y="{padding + label_height}" '
+                f'width="{frame_width_px}" height="{fabric_width * scale}" '
                 f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
 
     # 门幅标注（左侧竖向）
     mid_y = padding + label_height + fabric_width * scale / 2
-    lines.append(f'<text x="{padding - 6}" y="{mid_y}" '
+    lines.append(f'<text x="{frame_x - 6}" y="{mid_y}" '
                 f'text-anchor="end" font-size="10" fill="#999" '
                 f'{ff}>'
                 f'{float(fabric_width):.1f}cm'
@@ -1360,6 +1363,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     scale = 3.0
     padding = 40
     label_height = 64
+    frame_left_gap_px = 12
 
     if bounds:
         nest_w = bounds.get('width', fabric_width)
@@ -1396,7 +1400,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     draw = ImageDraw.Draw(img)
 
     # 绘制面料虚线框（横向：宽=排料长度，高=门幅）
-    bx1 = int(padding)
+    bx1 = int(padding - frame_left_gap_px)
     by1 = int(padding + label_height)
     bx2 = int(padding + frame_nest_h * scale)
     by2 = int(padding + label_height + fabric_width * scale)
@@ -1423,7 +1427,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     # 门幅标注（左侧竖向）
     font_dim = _get_font(12)
     mid_y = padding + label_height + fabric_width * scale / 2
-    draw.text((padding - 5, mid_y), f"{float(fabric_width):.1f}cm", fill='#999999', font=font_dim, anchor='rm')
+    draw.text((bx1 - 5, mid_y), f"{float(fabric_width):.1f}cm", fill='#999999', font=font_dim, anchor='rm')
 
     # 排料长度标注（底部横向）
     mid_x = padding + frame_nest_h * scale / 2
