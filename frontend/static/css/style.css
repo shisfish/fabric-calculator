@@ -1005,6 +1005,145 @@ body {
     display: block;
 }
 
+/* 历史记录详情页 */
+.detail-page {
+    padding-top: 24px;
+}
+
+.detail-actions {
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.detail-header {
+    margin-bottom: 20px;
+}
+
+.detail-state {
+    text-align: center;
+    padding: 60px 0;
+}
+
+.detail-state .loading-spinner {
+    margin: 0 auto;
+}
+
+.detail-card {
+    margin-bottom: 20px;
+}
+
+.detail-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px 24px;
+}
+
+.detail-info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--border);
+}
+
+.detail-info-item span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.detail-info-item strong {
+    font-size: 14px;
+    text-align: right;
+}
+
+.detail-material-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-material-card {
+    border-left: 4px solid var(--primary);
+}
+
+.detail-material-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.detail-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.detail-metric {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+.detail-metric div {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.detail-metric strong {
+    display: block;
+    margin-top: 2px;
+    font-size: 15px;
+}
+
+.detail-subtitle {
+    margin: 14px 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.detail-image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.detail-image-grid .nesting-image-card {
+    grid-column: 1 / -1;
+}
+
+.detail-image-grid img {
+    max-height: 560px;
+    object-fit: contain;
+    background: white;
+}
+
+@media (max-width: 640px) {
+    .detail-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .detail-info-item {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .detail-info-item strong {
+        text-align: left;
+    }
+}
+
 /* 图片预览弹窗 */
 .image-preview-overlay {
     position: fixed;

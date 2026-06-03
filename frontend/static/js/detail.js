@@ -1,22 +1,14 @@
 /**
- * 面料用量快速计算系统 - 详情页面
+ * 历史记录详情页
+ * 渲染保存时的计算结果快照，避免从旧历史字段反推详情。
  */
 
-// 当前记录数据（用于导出和报价）
 let currentRecord = null;
 let currentRecordType = 'precise';
 
 document.addEventListener('DOMContentLoaded', () => {
     loadDetail();
 });
-
-function formatUtilization(value) {
-    if (value === undefined || value === null || value === '') return '-';
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return '-';
-    const percent = numeric > 1 ? numeric : numeric * 100;
-    return `${percent.toFixed(1)}%`;
-}
 
 async function loadDetail() {
     try {
@@ -29,631 +21,460 @@ async function loadDetail() {
         }
 
         renderDetail(data.data);
-    } catch (e) {
-        showError('加载失败: ' + e.message);
+    } catch (error) {
+        showError(`加载失败: ${error.message}`);
     }
 }
 
-function showError(msg) {
+function showError(message) {
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('error-state').style.display = 'block';
-    document.getElementById('error-msg').textContent = msg;
+    document.getElementById('error-msg').textContent = message;
 }
 
 function renderDetail(record) {
     currentRecord = record;
+    currentRecordType = record.type || 'precise';
+
     document.getElementById('loading-state').style.display = 'none';
     document.getElementById('detail-content').style.display = 'block';
-
-    const topActions = document.getElementById('top-actions');
-    topActions.style.display = 'flex';
-
-    const isPrecise = record.type === 'precise';
-    const isCurved = record.type === 'curved';
-    const isPolygon = record.type === 'polygon';
-    const isCad = record.type === 'cad';
-    currentRecordType = record.type || 'precise';
-    
-    let typeLabel = '精确计算';
-    if (isCurved) typeLabel = '曲线计算';
-    else if (isPrecise) typeLabel = '精确计算';
-    else if (isPolygon) typeLabel = '多边形排料';
-    else if (isCad) typeLabel = 'CAD排料';
-    
-    const categoryName = DictManager.getCategoryName(record.category, record.category);
-
-    document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
-    document.getElementById('detail-subtitle').textContent = `记录时间: ${record.timestamp}`;
-
-    if ((isPrecise || isCurved || isPolygon || isCad) && record.input_data) {
-        document.getElementById('btn-edit').style.display = '';
-    }
+    document.getElementById('top-actions').style.display = 'flex';
     document.getElementById('btn-export').style.display = '';
     document.getElementById('btn-quotation').style.display = '';
 
-    renderInfoCardCompact(record, isPrecise || isCurved || isPolygon || isCad, categoryName);
-
-    if (isCurved || isPrecise) {
-        renderPreciseResult(record);
-    } else if (isPolygon) {
-        renderPolygonResult(record);
-    } else if (isCad) {
-        renderCadResult(record);
-    } else {
-        renderPreciseResult(record);
+    if (record.input_data) {
+        document.getElementById('btn-edit').style.display = '';
     }
+
+    const full = getFullResult(record);
+    const params = getParams(record, full);
+    const categoryName = getCategoryName(record.category || params.category || params.category_id);
+    const typeLabel = getTypeLabel(currentRecordType);
+
+    document.getElementById('detail-title').textContent = `${typeLabel} - ${categoryName}`;
+    document.getElementById('detail-subtitle').textContent = `记录时间: ${record.timestamp || '-'}`;
+
+    renderInfo(record, params, categoryName, typeLabel);
+    renderSummary(record, full, params);
+    renderMaterials(full);
+    renderImages(record, full);
+    renderNestingData(full);
+    renderPieces(record, full);
 }
 
-function renderInfoCardCompact(record, isPrecise, categoryName) {
-    const grid = document.getElementById('info-grid');
-    const params = record.params || {};
+function getFullResult(record) {
+    return record.full_result || {};
+}
 
-    let html = `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">记录ID</span>
-            <strong style="font-size:14px;">${record.id}</strong>
+function getParams(record, full) {
+    return full.params || record.params || record.input_data || {};
+}
+
+function renderInfo(record, params, categoryName, typeLabel) {
+    const items = [
+        ['记录ID', record.id],
+        ['计算类型', typeLabel],
+        ['服装品类', categoryName],
+        ['记录时间', record.timestamp],
+        ['面料门幅', formatWithUnit(firstDefined(params.fabric_width, params.fabricWidth), 'cm')],
+        ['订单数量', formatWithUnit(firstDefined(params.quantity, record.result?.quantity), '件')],
+        ['面料克重', formatWithUnit(firstDefined(params.fabric_weight_gsm, params.fabricWeight), 'g/m²')],
+        ['缩水率', formatPercent(firstDefined(params.shrinkage_rate, params.shrinkRate), { alreadyPercent: true })],
+        ['缝份', formatWithUnit(firstDefined(params.seam_allowance, params.seamAllowance), 'cm')],
+        ['面料类型', firstDefined(params.fabric_type, params.fabricType)],
+    ].filter(([, value]) => value !== undefined && value !== null && value !== '');
+
+    document.getElementById('info-grid').innerHTML = items.map(([label, value]) => `
+        <div class="detail-info-item">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(String(value))}</strong>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">计算类型</span>
-            <strong style="font-size:14px;">${isPrecise ? (record.type === 'curved' ? '曲线计算' : '精确计算') : '快速估算'}</strong>
+    `).join('');
+}
+
+function renderSummary(record, full, params) {
+    const quantity = Number(firstDefined(params.quantity, record.result?.quantity, 1)) || 1;
+    const materials = getMaterials(full);
+    const totalLength = sum(materials.map(item => toNumber(firstDefined(item.total_length_m, item.length_m * quantity))));
+    const materialPerPieceLength = sum(materials.map(item => toNumber(item.length_m)));
+    const rawPerPieceLength = firstDefined(
+        full.per_piece_length_m,
+        full.nesting?.per_piece_length_m,
+        record.result?.per_piece_length_m
+    );
+    const perPieceLength = toNumber(rawPerPieceLength) > 0 ? rawPerPieceLength : materialPerPieceLength;
+    const totalArea = firstDefined(
+        full.total_area_m2,
+        record.result?.total_area_m2,
+        sum(materials.map(item => toNumber(item.area_m2) * quantity))
+    );
+    const weight = firstDefined(
+        full.fabric_weight_kg,
+        record.result?.fabric_weight_kg,
+        sum(materials.map(item => toNumber(item.weight_kg) * quantity))
+    );
+    const utilization = firstDefined(
+        full.utilization_rate,
+        full.nesting?.utilization_rate,
+        record.result?.utilization_rate,
+        average(materials.map(item => normalizePercentValue(item.width_utilization)).filter(value => value > 0))
+    );
+
+    const cards = [
+        ['单件用料', formatWithUnit(perPieceLength, 'm')],
+        ['订单总长度', formatWithUnit(totalLength || (toNumber(perPieceLength) * quantity), 'm')],
+        ['总面积', formatWithUnit(totalArea, 'm²')],
+        ['门幅利用率', formatPercent(utilization)],
+        ['材料种类', `${materials.length || 0} 种`],
+        ['总重量', formatWithUnit(weight, 'kg')],
+    ];
+
+    document.getElementById('summary-cards').innerHTML = cards.map(([label, value], index) => `
+        <div class="result-card ${index === 0 ? 'highlight' : ''}">
+            <div class="result-value">${escapeHtml(String(value || '-'))}</div>
+            <div class="result-label">${escapeHtml(label)}</div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">服装品类</span>
-            <strong style="font-size:14px;">${categoryName}</strong>
+    `).join('');
+}
+
+function renderMaterials(full) {
+    const materials = getMaterials(full);
+    const section = document.getElementById('materials-section');
+    const container = document.getElementById('material-cards');
+
+    if (!materials.length) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+    container.innerHTML = materials.map(item => `
+        <div class="card detail-material-card">
+            <div class="detail-material-title">${escapeHtml(item.name || item.material || '未命名材料')}</div>
+            <div class="detail-metric-grid">
+                ${metricCell('用料长度', formatWithUnit(item.length_m, 'm'))}
+                ${metricCell('面积', formatWithUnit(item.area_m2, 'm²'))}
+                ${metricCell('重量', formatWithUnit(item.weight_kg, 'kg'))}
+                ${metricCell('门幅利用率', formatPercent(item.width_utilization))}
+            </div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">记录时间</span>
-            <strong style="font-size:14px;">${record.timestamp}</strong>
+    `).join('');
+}
+
+function renderImages(record, full) {
+    const pieceImages = normalizeImages(full.piece_images || record.piece_images || [], '裁片图');
+    const seamImages = normalizeImages(full.seam_images || record.seam_images || [], '缝份图');
+    const nestingImages = normalizeImages(full.nesting_images || record.nesting_images || [], '排料图');
+    const hasImages = pieceImages.length || seamImages.length || nestingImages.length;
+
+    document.getElementById('images-section').style.display = hasImages ? '' : 'none';
+    renderImageGroup('piece-images', '裁片图', pieceImages, 'piece-image-card');
+    renderImageGroup('seam-images', '缝份图', seamImages, 'piece-image-card');
+    renderImageGroup('nesting-images', '排料图', nestingImages, 'nesting-image-card');
+}
+
+function renderImageGroup(containerId, title, images, cardClass) {
+    const container = document.getElementById(containerId);
+    if (!images.length) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = '';
+    container.innerHTML = `
+        <h4 class="detail-subtitle">${escapeHtml(title)}</h4>
+        <div class="detail-image-grid">
+            ${images.map(image => {
+                const src = normalizePath(image.file_path);
+                const name = image.material_name || image.name || title;
+                return `
+                    <div class="${cardClass}">
+                        <div class="${cardClass === 'nesting-image-card' ? 'nesting-image-header' : 'piece-image-footer'}">
+                            <span class="${cardClass === 'nesting-image-card' ? 'material-name' : 'piece-name'}">${escapeHtml(name)}</span>
+                            <a class="btn-download" href="${escapeAttr(src)}" download>下载</a>
+                        </div>
+                        <img src="${escapeAttr(src)}" alt="${escapeAttr(name)}" onclick="window.open('${escapeJs(src)}', '_blank')">
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
+}
 
-    if (params.fabric_width) {
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">面料门幅</span>
-            <strong style="font-size:14px;">${params.fabric_width} cm</strong>
-        </div>`;
-    }
-    if (params.quantity) {
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">订单数量</span>
-            <strong style="font-size:14px;">${params.quantity} 件</strong>
-        </div>`;
-    }
-    if (params.fabric_weight_gsm) {
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">面料克重</span>
-            <strong style="font-size:14px;">${params.fabric_weight_gsm} g/m²</strong>
-        </div>`;
-    }
-    if (params.shrinkage_rate !== undefined) {
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">缩水率</span>
-            <strong style="font-size:14px;">${params.shrinkage_rate}%</strong>
-        </div>`;
-    }
-    if (params.wastage_rate !== undefined || record.result && record.result.calculated_wastage_rate !== undefined) {
-        const wastageValue = (record.result && record.result.calculated_wastage_rate !== undefined) ? record.result.calculated_wastage_rate : params.wastage_rate;
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">计算损耗率</span>
-            <strong style="font-size:14px;">${typeof wastageValue === 'number' ? wastageValue.toFixed(1) + '%' : wastageValue + '%'}</strong>
-        </div>`;
-    }
-    if (params.garment_length) {
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">衣长</span>
-            <strong style="font-size:14px;">${params.garment_length} cm</strong>
-        </div>`;
-    }
-    if (params.chest) {
-        html += `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
-            <span style="color:var(--text-secondary);font-size:13px;">胸围</span>
-            <strong style="font-size:14px;">${params.chest} cm</strong>
-        </div>`;
+function renderNestingData(full) {
+    const rows = getNestingRows(full);
+    const section = document.getElementById('nesting-data-section');
+    const tbody = document.getElementById('nesting-data-tbody');
+
+    if (!rows.length) {
+        section.style.display = 'none';
+        return;
     }
 
-    grid.innerHTML = html;
+    section.style.display = '';
+    tbody.innerHTML = rows.map(row => `
+        <tr>
+            <td>${escapeHtml(row.material_name || row.name || row.material || '未命名材料')}</td>
+            <td>${escapeHtml(formatWithUnit(firstDefined(row.per_piece_length_m, row.length_m, row.production_length_m), 'm'))}</td>
+            <td>${escapeHtml(formatWithUnit(firstDefined(row.net_length_m, row.marker_length_m), 'm'))}</td>
+            <td>${escapeHtml(formatWithUnit(firstDefined(row.total_area_m2, row.area_m2), 'm²'))}</td>
+            <td>${escapeHtml(formatPercent(firstDefined(row.utilization_rate, row.width_utilization)))}</td>
+            <td>${escapeHtml(String(getPieceCount(row)))}</td>
+        </tr>
+    `).join('');
+}
+
+function renderPieces(record, full) {
+    const pieces = getPieces(record, full);
+    const section = document.getElementById('pieces-section');
+    const tbody = document.getElementById('pieces-tbody');
+
+    if (!pieces.length) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+    tbody.innerHTML = pieces.map(piece => `
+        <tr>
+            <td>${escapeHtml(piece.name || '-')}</td>
+            <td>${escapeHtml(formatSize(firstDefined(piece.original_length, piece.length, piece.originalSize?.height), firstDefined(piece.original_width, piece.width, piece.originalSize?.width)))}</td>
+            <td>${escapeHtml(formatSize(piece.effective_length, piece.effective_width))}</td>
+            <td>${escapeHtml(String(firstDefined(piece.count, piece.quantity, piece.cutCount, 1)))}</td>
+            <td>${escapeHtml(formatNumber(firstDefined(piece.area_cm2, piece.area, piece.area_with_shrinkage_cm2)))}</td>
+            <td>${escapeHtml(getMaterialName(piece.material || 'main'))}</td>
+        </tr>
+    `).join('');
 }
 
 function editRecord() {
-    const type = currentRecordType;
-    let targetPage = '/';
-    
-    if (type === 'curved') {
-        targetPage = '/curves';
-    } else if (type === 'polygon') {
-        targetPage = '/polygon-nesting';
-    } else if (type === 'cad') {
-        targetPage = '/cad';
-    }
-    
-    window.location.href = `${targetPage}?edit=${RECORD_ID}`;
+    if (!currentRecord || !currentRecord.input_data) return;
+
+    const targets = {
+        curved: '/curves',
+        polygon: '/polygon-nesting',
+        cad: '/cad',
+        precise: '/',
+    };
+    window.location.href = `${targets[currentRecordType] || '/'}?edit=${RECORD_ID}`;
 }
 
 function exportDetailResult() {
-    if (!currentRecord || !currentRecord.full_result) {
-        alert('暂无结果可导出');
+    if (!currentRecord) {
+        alert('暂无可导出的结果');
         return;
     }
-    const data = currentRecord.full_result;
-    let text = '=== 面料用量计算结果 ===\n\n';
-    text += `品类: ${data.params.category}\n`;
-    text += `面料门幅: ${data.params.fabric_width}cm\n`;
-    text += `面料克重: ${data.params.fabric_weight_gsm} g/m²\n`;
-    text += `缩水率: ${data.params.shrinkage_rate}%\n`;
-    if (data.calculated_wastage_rate !== undefined) {
-        text += `计算损耗率: ${data.calculated_wastage_rate}%\n`;
-    } else if (data.params.wastage_rate !== undefined) {
-        text += `损耗率: ${data.params.wastage_rate}%\n`;
-    }
-    text += `订单数量: ${data.params.quantity}件\n`;
-    text += `面料利用率: ${data.utilization_rate}%\n\n`;
-    text += '--- 计算结果 ---\n';
-    text += `单件用料长度: ${data.per_piece_length_m} 米\n`;
-    text += `总用料长度: ${data.total_length_m} 米\n`;
-    text += `总面积: ${data.total_area_m2} m²\n`;
-    if (data.fabric_weight_kg > 0) {
-        text += `面料总重: ${data.fabric_weight_kg} kg\n`;
-    }
-    text += '\n--- 裁片明细 ---\n';
-    data.pieces_detail.forEach(p => {
-        text += `${p.name}: ${p.original_length}×${p.original_width}cm × ${p.count} = ${p.area_with_shrinkage_cm2}cm²\n`;
-    });
-    text += '\n--- 材料汇总 ---\n';
-    Object.entries(data.material_breakdown || {}).forEach(([key, val]) => {
-        text += `${val.name}: ${val.length_m}米`;
-        if (val.weight_kg > 0) text += ` / ${val.weight_kg}kg`;
-        text += '\n';
-    });
-    if (data.warnings && data.warnings.length > 0) {
-        text += '\n--- 注意事项 ---\n';
-        data.warnings.forEach(w => text += `⚠️ ${w}\n`);
-    }
 
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const full = getFullResult(currentRecord);
+    const materials = getMaterials(full);
+    const lines = [
+        '=== 面料用量计算结果 ===',
+        '',
+        `记录ID: ${currentRecord.id}`,
+        `记录时间: ${currentRecord.timestamp}`,
+        `计算类型: ${getTypeLabel(currentRecordType)}`,
+        `服装品类: ${getCategoryName(currentRecord.category)}`,
+        '',
+        '--- 材料汇总 ---',
+        ...materials.map(item => `${item.name || item.material}: ${formatWithUnit(item.length_m, 'm')} / ${formatWithUnit(item.area_m2, 'm²')} / ${formatPercent(item.width_utilization)}`),
+    ];
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `用量计算_${currentRecord.id}.txt`;
-    a.click();
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `用量计算_${currentRecord.id}.txt`;
+    link.click();
     URL.revokeObjectURL(url);
 }
 
 function goToQuotationFromDetail() {
-    if (currentRecord && currentRecord.full_result) {
-        sessionStorage.setItem('consumptionData', JSON.stringify(currentRecord.full_result));
+    if (currentRecord) {
+        sessionStorage.setItem('consumptionData', JSON.stringify(currentRecord.full_result || currentRecord.result || {}));
     }
     window.location.href = '/quotation';
 }
 
-function renderPreciseResult(record) {
-    const area = document.getElementById('precise-result-area');
-    area.style.display = 'block';
-
-    const fullResult = record.full_result;
-    if (!fullResult) {
-        area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
-        return;
+function getMaterials(full) {
+    const breakdown = full.material_breakdown || {};
+    if (Object.keys(breakdown).length) {
+        return Object.entries(breakdown).map(([material, value]) => ({
+            material,
+            name: value.name || value.material_name || getMaterialName(material),
+            length_m: firstDefined(value.length_m, value.per_piece_length_m, value.production_length_m),
+            area_m2: firstDefined(value.area_m2, value.per_piece_area_m2, value.total_area_m2),
+            weight_kg: value.weight_kg,
+            width_utilization: firstDefined(value.width_utilization, value.utilization_rate),
+            total_length_m: value.total_length_m,
+        }));
     }
 
-    const matCards = document.getElementById('result-material-cards');
-    const matBreakdown = fullResult.material_breakdown || {};
-    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
-        <div class="card" style="border-left:4px solid #3b82f6;">
-            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
-                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
-                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
-                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
-                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${formatUtilization(val.width_utilization)}</div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-
-    const warningsEl = document.getElementById('result-warnings');
-    if (fullResult.warnings && fullResult.warnings.length > 0) {
-        warningsEl.style.display = 'block';
-        warningsEl.innerHTML = fullResult.warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
-    } else {
-        warningsEl.style.display = 'none';
-    }
-
-    const piecesTbody = document.getElementById('result-pieces-tbody');
-    const pieces = fullResult.pieces_detail || [];
-
-    const hasShoulder = pieces.some(p => p.shoulder_width);
-    const hasBicep = pieces.some(p => p.bicep_width);
-    const hasCuff = pieces.some(p => p.cuff_width);
-    document.getElementById('th-shoulder').style.display = hasShoulder ? '' : 'none';
-    document.getElementById('th-bicep').style.display = hasBicep ? '' : 'none';
-    document.getElementById('th-cuff').style.display = hasCuff ? '' : 'none';
-
-    piecesTbody.innerHTML = pieces.map(p => {
-        let methodCell = '';
-        if (p.calc_method === 'curved') {
-            methodCell = `<span class="badge" style="background:#e8f5e9;color:#2e7d32;">曲线</span>`;
-            if (p.difference_cm2 !== undefined) {
-                const diff = p.difference_cm2;
-                const pct = p.difference_percent;
-                if (diff > 0) {
-                    methodCell += `<br><span style="font-size:11px;color:#2e7d32;">省${diff}cm² (${pct}%)</span>`;
-                } else if (diff < 0) {
-                    methodCell += `<br><span style="font-size:11px;color:#e65100;">增${Math.abs(diff)}cm² (${Math.abs(pct)}%)</span>`;
-                }
-            }
-        } else {
-            methodCell = `<span style="color:#999;font-size:12px;">${p.calc_method || '矩形'}</span>`;
-        }
-
-        return `
-        <tr>
-            <td>${p.name}</td>
-            <td>${p.original_length} × ${p.original_width}</td>
-            <td>${p.effective_length} × ${p.effective_width}</td>
-            <td>${p.count}</td>
-            <td>${methodCell}</td>
-            <td>${p.area_cm2}</td>
-            <td>${p.area_with_shrinkage_cm2}</td>
-            <td>${DictManager.getMaterialName(p.material, p.material)}</td>
-            <td style="${hasShoulder ? '' : 'display:none'}">${p.shoulder_width || '-'}</td>
-            <td style="${hasBicep ? '' : 'display:none'}">${p.bicep_width || '-'}</td>
-            <td style="${hasCuff ? '' : 'display:none'}">${p.cuff_width || '-'}</td>
-        </tr>`;
-    }).join('');
-
-    // ✅ 【新增】渲染精确计算的图片（裁片图、缝份图、排料图）
-    renderCalcImages(record);
+    const totals = full.material_totals || {};
+    return Object.entries(totals).map(([material, value]) => ({
+        material,
+        name: value.name || value.material_name || getMaterialName(material),
+        length_m: firstDefined(value.per_piece_length_m, value.production_length_m),
+        area_m2: firstDefined(value.per_piece_area_m2, value.total_area_m2),
+        weight_kg: value.weight_kg,
+        width_utilization: value.utilization_rate,
+        total_length_m: value.total_length_m,
+    }));
 }
 
-function renderCalcImages(record) {
-    const imagesSection = document.getElementById('calc-images-section');
-    const pieceImagesEl = document.getElementById('calc-piece-images');
-    const seamImagesEl = document.getElementById('calc-seam-images');
-    const nestingImagesEl = document.getElementById('calc-nesting-images');
-
-    // 获取图片数据（优先从record获取，如果没有则尝试full_result）
-    const piece_images = record.piece_images || [];
-    const seam_images = record.seam_images || [];
-    const nesting_images = record.nesting_images || [];
-
-    // 检查是否有任何图片
-    const hasImages = piece_images.length > 0 || seam_images.length > 0 || nesting_images.length > 0;
-
-    if (!hasImages) {
-        imagesSection.style.display = 'none';
-        return;
+function getNestingRows(full) {
+    if (Array.isArray(full.nesting_groups) && full.nesting_groups.length) {
+        return full.nesting_groups;
     }
-
-    imagesSection.style.display = 'block';
-
-    // 渲染裁片图
-    if (piece_images.length > 0) {
-        pieceImagesEl.style.display = 'flex';
-        pieceImagesEl.innerHTML = `
-            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#1976d2;">✂️ 裁片图</h4>
-            ${piece_images.map(img => `
-                <div class="card" style="padding:16px;">
-                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.name || '裁片图'}</div>
-                    <img src="${img.file_path}" alt="${img.name || '裁片图'}" 
-                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
-                         onclick="window.open('${img.file_path}', '_blank')">
-                </div>
-            `).join('')}
-        `;
-    } else {
-        pieceImagesEl.style.display = 'none';
+    if (full.nesting && (full.nesting.pieces || full.nesting.per_piece_length_m)) {
+        return [full.nesting];
     }
-
-    // 渲染缝份图
-    if (seam_images.length > 0) {
-        seamImagesEl.style.display = 'flex';
-        seamImagesEl.innerHTML = `
-            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#388e3c;">🧵 缝份图</h4>
-            ${seam_images.map(img => `
-                <div class="card" style="padding:16px;">
-                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.name || '缝份图'}</div>
-                    <img src="${img.file_path}" alt="${img.name || '缝份图'}" 
-                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
-                         onclick="window.open('${img.file_path}', '_blank')">
-                </div>
-            `).join('')}
-        `;
-    } else {
-        seamImagesEl.style.display = 'none';
-    }
-
-    // 渲染排料图
-    if (nesting_images.length > 0) {
-        nestingImagesEl.style.display = 'flex';
-        nestingImagesEl.innerHTML = `
-            <h4 style="font-size:15px;font-weight:600;margin-bottom:12px;color:#d32f2f;">📐 排料图</h4>
-            ${nesting_images.map(img => `
-                <div class="card" style="padding:16px;">
-                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.material_name || '排料图'}</div>
-                    <img src="${img.file_path}" alt="${img.material_name || '排料图'}" 
-                         style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;cursor:pointer;"
-                         onclick="window.open('${img.file_path}', '_blank')">
-                </div>
-            `).join('')}
-        `;
-    } else {
-        nestingImagesEl.style.display = 'none';
-    }
+    return getMaterials(full);
 }
 
-function renderQuickResult(record) {
-    const area = document.getElementById('quick-result-area');
-    area.style.display = 'block';
+function getPieces(record, full) {
+    if (Array.isArray(full.pieces_detail) && full.pieces_detail.length) return full.pieces_detail;
+    if (Array.isArray(full.pattern?.pieces) && full.pattern.pieces.length) return full.pattern.pieces;
+    if (Array.isArray(record.pieces) && record.pieces.length) return record.pieces;
+    if (Array.isArray(record.input_data?.pieces) && record.input_data.pieces.length) return record.input_data.pieces;
+    if (Array.isArray(record.input_data?.measurements?.pieces)) return record.input_data.measurements.pieces;
+    return [];
+}
 
-    const fullResult = record.full_result;
-    if (!fullResult) {
-        area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
-        return;
+function getPieceCount(row) {
+    if (Array.isArray(row.pieces)) {
+        return row.pieces.reduce((sum, piece) => sum + (Number(firstDefined(piece.quantity, piece.count, piece.cutCount, 1)) || 0), 0);
     }
+    return firstDefined(row.totalPieces, row.statistics?.totalPieces, '-');
+}
 
-    const mainFabric = fullResult.main_fabric || fullResult.main_fabric || {};
-    const lining = fullResult.lining || {};
+function normalizeImages(images, fallbackName) {
+    return (images || [])
+        .filter(image => image && image.file_path)
+        .map(image => ({
+            ...image,
+            name: image.name || image.image_name || fallbackName,
+            file_path: normalizePath(image.file_path),
+        }));
+}
 
-    const resultHtml = `
-        <div class="two-column">
-            <div class="column">
-                <div class="card">
-                    <h3>📊 估算结果概览</h3>
-                    <div class="result-summary">
-                        <div class="main-label">单件主面料用量</div>
-                        <div class="main-value">${mainFabric.per_piece_length_m} 米</div>
-                        <div class="sub-values">
-                            <div class="sub-item">
-                                <div class="sub-label">总用料长度</div>
-                                <div class="sub-value">${mainFabric.total_length_m} 米</div>
-                            </div>
-                            <div class="sub-item">
-                                <div class="sub-label">面料利用率</div>
-                                <div class="sub-value">${fullResult.utilization_rate}%</div>
-                            </div>
-                            ${fullResult.calculated_wastage_rate !== undefined ? `
-                            <div class="sub-item">
-                                <div class="sub-label">计算损耗率</div>
-                                <div class="sub-value">${fullResult.calculated_wastage_rate}%</div>
-                            </div>
-                            ` : (fullResult.wastage_rate !== undefined ? `
-                            <div class="sub-item">
-                                <div class="sub-label">损耗率</div>
-                                <div class="sub-value">${fullResult.wastage_rate}%</div>
-                            </div>
-                            ` : '')}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="column">
-                <div class="card">
-                    <h3>📐 材料用量明细</h3>
-                    <div style="display:flex;flex-direction:column;gap:8px;">
-                        <div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border-color);">
-                            <span>主面料</span>
-                            <strong>${mainFabric.per_piece_length_m} 米/件</strong>
-                        </div>
-                        ${lining.per_piece_length_m ? `
-                        <div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border-color);">
-                            <span>里布</span>
-                            <strong>${lining.per_piece_length_m} 米/件</strong>
-                        </div>
-                        ` : ''}
-                        <div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border-color);">
-                            <span>缩水率</span>
-                            <strong>${fullResult.shrinkage_rate}%</strong>
-                        </div>
-                    </div>
-                </div>
-            </div>
+function normalizePath(path) {
+    if (!path) return '';
+    const normalized = String(path).replaceAll('\\', '/');
+    if (normalized.startsWith('/static/')) return normalized;
+    if (normalized.startsWith('static/')) return `/${normalized}`;
+    if (normalized.startsWith('/')) return normalized;
+    return `/static/${normalized}`;
+}
+
+function getTypeLabel(type) {
+    return {
+        quick: '快速估算',
+        precise: '精确计算',
+        curved: '曲线计算',
+        polygon: '多边形排料',
+        cad: 'CAD排料',
+    }[type] || '精确计算';
+}
+
+function getCategoryName(category) {
+    if (!category) return '-';
+    if (window.DictManager?.getCategoryName) {
+        return DictManager.getCategoryName(category, category);
+    }
+    return category;
+}
+
+function getMaterialName(material) {
+    if (window.DictManager?.getMaterialName) {
+        return DictManager.getMaterialName(material, material);
+    }
+    return {
+        main: '主面料',
+        rib: '罗纹',
+        lining: '里布',
+        interlining: '衬布',
+        filling: '胆料',
+        cotton: '棉花/填充',
+    }[material] || material || '-';
+}
+
+function metricCell(label, value) {
+    return `
+        <div class="detail-metric">
+            <div>${escapeHtml(label)}</div>
+            <strong>${escapeHtml(String(value || '-'))}</strong>
         </div>
     `;
-    area.innerHTML = resultHtml;
 }
 
-function renderPolygonResult(record) {
-    const area = document.getElementById('polygon-result-area');
-    area.style.display = 'block';
-
-    const fullResult = record.full_result;
-    if (!fullResult) {
-        area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
-        return;
-    }
-
-    // 材料分类汇总
-    const matCards = document.getElementById('polygon-material-cards');
-    const matBreakdown = fullResult.material_breakdown || {};
-    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
-        <div class="card" style="border-left:4px solid #3b82f6;">
-            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
-                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
-                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
-                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
-                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${formatUtilization(val.width_utilization)}</div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-
-    // 警告信息
-    const warningsEl = document.getElementById('polygon-warnings');
-    if (fullResult.warnings && fullResult.warnings.length > 0) {
-        warningsEl.style.display = 'block';
-        warningsEl.innerHTML = fullResult.warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
-    } else {
-        warningsEl.style.display = 'none';
-    }
-
-    // 排料图
-    const nestingImagesEl = document.getElementById('polygon-nesting-images');
-    const nestingImages = fullResult.nesting_images || [];
-    if (nestingImages.length > 0) {
-        nestingImagesEl.innerHTML = nestingImages.map(img => `
-            <div class="card" style="padding:16px;">
-                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${img.material_name} 排料图</div>
-                <img src="${img.file_path}" alt="${img.material_name}排料图" style="max-width:100%;border:1px solid var(--border-color);border-radius:4px;">
-            </div>
-        `).join('');
-    } else {
-        nestingImagesEl.innerHTML = '<p style="color:var(--text-secondary);">暂无排料图</p>';
-    }
-
-    // 裁片明细
-    const piecesTbody = document.getElementById('polygon-pieces-tbody');
-    const pieces = fullResult.pieces_detail || [];
-    const materialNames = {
-        'main': '主面料',
-        'lining': '里布',
-        'interlining': '衬布',
-    };
-
-    piecesTbody.innerHTML = pieces.map(p => `
-        <tr>
-            <td>${p.name}</td>
-            <td>${p.original_length} × ${p.original_width}</td>
-            <td>${p.effective_length} × ${p.effective_width}</td>
-            <td>${p.count}</td>
-            <td>${p.area_cm2}</td>
-            <td>${p.area_with_shrinkage_cm2}</td>
-            <td>${DictManager.getMaterialName(p.material, p.material)}</td>
-        </tr>
-    `).join('');
+function firstDefined(...values) {
+    return values.find(value => value !== undefined && value !== null && value !== '');
 }
 
-function renderCadResult(record) {
-    const area = document.getElementById('cad-result-area');
-    area.style.display = 'block';
+function toNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+}
 
-    const fullResult = record.full_result;
-    if (!fullResult) {
-        area.innerHTML = `<div class="warnings"><div class="warning-item">⚠️ 无法重新计算完整结果: ${record.calc_error || '未知错误'}</div></div>`;
-        return;
-    }
+function sum(values) {
+    return values.reduce((total, value) => total + toNumber(value), 0);
+}
 
-    const params = fullResult.params || {};
-    const measurements = params.measurements || {};
-    const options = params.options || {};
+function average(values) {
+    if (!values.length) return 0;
+    return sum(values) / values.length;
+}
 
-    const measurementsGrid = document.getElementById('cad-measurements-grid');
-    const measurementLabels = {
-        chest: '胸围',
-        waist: '腰围',
-        hips: '臀围',
-        neck: '领围',
-        shoulderToShoulder: '肩宽',
-        shoulderSlope: '肩斜(°)',
-        biceps: '大臂围',
-        wrist: '手腕围',
-        hpsToWaistFront: '前颈点-腰',
-        hpsToWaistBack: '后颈点-腰',
-        waistToHips: '腰-臀',
-    };
-    
-    measurementsGrid.innerHTML = Object.entries(measurementLabels).map(([key, label]) => {
-        const value = measurements[key];
-        if (value === undefined || value === null) return '';
-        return `
-            <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                <div style="font-size:12px;color:var(--text-secondary);">${label}</div>
-                <div style="font-size:14px;font-weight:600;">${value} cm</div>
-            </div>
-        `;
-    }).join('');
+function normalizePercentValue(value) {
+    const number = toNumber(value);
+    if (!number) return 0;
+    return number > 1 ? number : number * 100;
+}
 
-    const optionsGrid = document.getElementById('cad-options-grid');
-    const optionLabels = {
-        chestEase: '胸围松量',
-        waistEase: '腰围松量',
-        bicepsEase: '袖肥松量',
-        collarEase: '领围松量',
-    };
-    
-    optionsGrid.innerHTML = Object.entries(optionLabels).map(([key, label]) => {
-        const value = options[key];
-        if (value === undefined || value === null) return '';
-        return `
-            <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                <div style="font-size:12px;color:var(--text-secondary);">${label}</div>
-                <div style="font-size:14px;font-weight:600;">${value}%</div>
-            </div>
-        `;
-    }).join('');
+function formatPercent(value, options = {}) {
+    if (value === undefined || value === null || value === '') return '-';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '-';
+    const percent = options.alreadyPercent ? number : normalizePercentValue(number);
+    return `${percent.toFixed(1)}%`;
+}
 
-    const matCards = document.getElementById('cad-material-cards');
-    const matBreakdown = fullResult.material_breakdown || {};
-    matCards.innerHTML = Object.entries(matBreakdown).map(([key, val]) => `
-        <div class="card" style="border-left:4px solid #3b82f6;">
-            <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${val.name}</div>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">面积</div>
-                    <div style="font-size:15px;font-weight:600;">${val.area_m2} m²</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
-                    <div style="font-size:15px;font-weight:600;">${val.length_m} m</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;${val.weight_kg > 0 ? '' : 'display:none;'}">
-                    <div style="font-size:12px;color:var(--text-secondary);">重量</div>
-                    <div style="font-size:15px;font-weight:600;">${val.weight_kg} kg</div>
-                </div>
-                <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                    <div style="font-size:12px;color:var(--text-secondary);">利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${formatUtilization(val.width_utilization)}</div>
-                </div>
-            </div>
-        </div>
-    `).join('');
+function formatWithUnit(value, unit) {
+    if (value === undefined || value === null || value === '') return '-';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return `${value} ${unit}`;
+    const digits = unit === 'm²' || unit === 'kg' ? 4 : 3;
+    return `${formatNumber(number, digits)} ${unit}`;
+}
 
-    const nestingSvg = document.getElementById('cad-nesting-svg');
-    if (fullResult.nesting_svg) {
-        nestingSvg.innerHTML = fullResult.nesting_svg;
-    } else {
-        nestingSvg.innerHTML = '<p style="color:var(--text-secondary);text-align:center;">暂无排料图</p>';
-    }
+function formatNumber(value, maxDigits = 2) {
+    if (value === undefined || value === null || value === '') return '-';
+    const number = Number(value);
+    if (!Number.isFinite(number)) return String(value);
+    return number.toLocaleString('zh-CN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: maxDigits,
+    });
+}
 
-    const piecesTbody = document.getElementById('cad-pieces-tbody');
-    const pieces = fullResult.pieces_detail || [];
-    piecesTbody.innerHTML = pieces.map(p => `
-        <tr>
-            <td>${p.name}</td>
-            <td>${p.original_length} × ${p.original_width}</td>
-            <td>${p.count}</td>
-            <td>${p.area_cm2}</td>
-            <td>${p.area_with_shrinkage_cm2}</td>
-            <td>${p.on_fold ? '是' : '否'}</td>
-        </tr>
-    `).join('');
+function formatSize(length, width) {
+    if (!length && !width) return '-';
+    return `${formatNumber(length)} × ${formatNumber(width)}`;
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value);
+}
+
+function escapeJs(value) {
+    return String(value).replaceAll('\\', '\\\\').replaceAll("'", "\\'");
 }

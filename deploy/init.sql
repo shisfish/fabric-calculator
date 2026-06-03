@@ -160,6 +160,19 @@ CREATE TABLE IF NOT EXISTS history_images (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计算历史图片路径表';
 
 -- ========================================
+-- 表: history_result_snapshots
+-- 描述: 计算结果快照表，详情页优先读取
+-- ========================================
+CREATE TABLE IF NOT EXISTS history_result_snapshots (
+    history_id VARCHAR(20) PRIMARY KEY COMMENT '关联 calculation_history.id',
+    params_json LONGTEXT COMMENT '计算参数快照',
+    result_json LONGTEXT COMMENT '结果摘要快照',
+    input_data_json LONGTEXT COMMENT '回填编辑输入快照',
+    full_result_json LONGTEXT COMMENT '完整计算结果快照（不含base64图片）',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计算结果快照表';
+
+-- ========================================
 -- 示例数据
 -- ========================================
 INSERT IGNORE INTO calculation_history (id, timestamp, type, category, category_name, fabric_width, fabric_type, fabric_weight_gsm, shrinkage_rate, wastage_rate, quantity, per_piece_length_m, total_area_m2, utilization_rate, fabric_weight_kg, main_fabric_per_piece_m, lining_per_piece_m, curved_pieces_count) VALUES ('20260501112023', '2026-05-01 11:20:23', 'precise', 'tshirt', 'T恤', '185.0', 'knit', '300.0', '3.0', '7.0', '100', '1.922', '1.8987', '76.0', '0.6095', NULL, NULL, NULL);

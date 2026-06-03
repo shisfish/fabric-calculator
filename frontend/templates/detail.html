@@ -10,230 +10,90 @@
     {% set active_page = 'history' %}
     {% include 'includes/navbar.html' %}
 
-    <main class="container">
-        <!-- 顶部操作按钮区 -->
-        <div class="result-actions-bar" id="top-actions" style="display:none;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
+    <main class="container detail-page">
+        <div class="result-actions-bar detail-actions" id="top-actions" style="display:none;">
             <a href="/history" class="btn btn-secondary" id="btn-back-history">← 返回历史记录</a>
-            <button class="btn btn-primary" id="btn-edit" style="display:none;" onclick="editRecord()">✏️ 返回修改</button>
-            <button class="btn btn-outline" id="btn-export" style="display:none;" onclick="exportDetailResult()">📥 导出结果</button>
-            <button class="btn btn-primary" id="btn-quotation" style="display:none;" onclick="goToQuotationFromDetail()">💰 生成报价单</button>
+            <button class="btn btn-primary" id="btn-edit" style="display:none;" onclick="editRecord()">✎ 返回修改</button>
+            <button class="btn btn-outline" id="btn-export" style="display:none;" onclick="exportDetailResult()">⇩ 导出结果</button>
+            <button class="btn btn-primary" id="btn-quotation" style="display:none;" onclick="goToQuotationFromDetail()">￥ 生成报价单</button>
         </div>
 
-        <!-- 标题 -->
-        <div class="page-header">
-            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                <h2 id="detail-title">计算详情</h2>
-            </div>
-            <p class="page-desc" id="detail-subtitle">加载中...</p>
+        <div class="page-header detail-header">
+            <h2 id="detail-title">计算详情</h2>
+            <p class="page-desc" id="detail-subtitle">正在加载...</p>
         </div>
 
-        <!-- 加载状态 -->
-        <div id="loading-state" style="text-align:center;padding:60px 0;">
-            <div class="loading-spinner" style="margin:0 auto 12px;"></div>
-            <div style="color:var(--text-secondary);">正在加载计算详情...</div>
+        <div id="loading-state" class="detail-state">
+            <div class="loading-spinner"></div>
+            <div style="color:var(--text-secondary);margin-top:12px;">正在加载计算详情...</div>
         </div>
 
-        <!-- 错误状态 -->
-        <div id="error-state" style="display:none;text-align:center;padding:60px 0;">
-            <div style="font-size:48px;margin-bottom:12px;">😕</div>
+        <div id="error-state" class="detail-state" style="display:none;">
+            <div style="font-size:40px;margin-bottom:12px;">!</div>
             <p style="color:var(--text-secondary);" id="error-msg">记录不存在或加载失败</p>
             <a href="/history" class="btn btn-primary" style="margin-top:16px;">返回历史记录</a>
         </div>
 
-        <!-- 详情内容 -->
         <div id="detail-content" style="display:none;">
-
-            <!-- 基本信息卡片（紧凑布局） -->
-            <div class="card" id="info-card" style="margin-bottom:20px;">
+            <div class="card detail-card">
                 <h3>📋 基本信息</h3>
-                <div class="info-grid-compact" id="info-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px 24px;">
-                    <!-- 动态生成 -->
+                <div class="detail-info-grid" id="info-grid"></div>
+            </div>
+
+            <div class="section" id="summary-section">
+                <h3>📊 结果概览</h3>
+                <div class="result-cards" id="summary-cards"></div>
+            </div>
+
+            <div class="section" id="materials-section">
+                <h3>📦 材料分类汇总</h3>
+                <div id="material-cards" class="detail-material-list"></div>
+            </div>
+
+            <div class="section" id="images-section">
+                <h3>🖼 图形展示</h3>
+                <div id="piece-images"></div>
+                <div id="seam-images"></div>
+                <div id="nesting-images"></div>
+            </div>
+
+            <div class="section" id="nesting-data-section">
+                <h3>📐 排料数据</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>材料</th>
+                                <th>单件用料</th>
+                                <th>净长度</th>
+                                <th>面积</th>
+                                <th>利用率</th>
+                                <th>裁片数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nesting-data-tbody"></tbody>
+                    </table>
                 </div>
             </div>
 
-            <!-- 精确计算结果区域 -->
-            <div id="precise-result-area" style="display:none;">
-                <!-- 材料分类汇总（卡片展示） -->
-                <div class="section">
-                    <h3>📦 材料分类汇总</h3>
-                    <div id="result-material-cards" style="display:flex;flex-direction:column;gap:12px;">
-                    <!-- 动态生成 -->
-                </div>
-                </div>
-
-                <!-- 警告信息 -->
-                <div class="warnings" id="result-warnings" style="display:none;">
-                    <!-- 动态生成 -->
-                </div>
-
-                <!-- ✅ 【新增】精确计算 - 裁片图、缝份图、排料图 -->
-                <div class="section" id="calc-images-section" style="display:none;">
-                    <h3>🖼️ 图形展示</h3>
-                    
-                    <!-- 裁片图 -->
-                    <div id="calc-piece-images" style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
-                        <!-- 动态生成 -->
-                    </div>
-                    
-                    <!-- 缝份图 -->
-                    <div id="calc-seam-images" style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
-                        <!-- 动态生成 -->
-                    </div>
-                    
-                    <!-- 排料图 -->
-                    <div id="calc-nesting-images" style="display:flex;flex-direction:column;gap:16px;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 裁片明细 -->
-                <div class="section">
-                    <h3>✂️ 裁片明细</h3>
-                    <div class="table-container">
-                        <table class="data-table" id="result-pieces-table">
-                            <thead id="pieces-thead">
-                                <tr>
-                                    <th>裁片名称</th>
-                                    <th>原始尺寸(cm)</th>
-                                    <th>含缝份(cm)</th>
-                                    <th>数量</th>
-                                    <th>计算方法</th>
-                                    <th>面积(cm²)</th>
-                                    <th>含缩水面积(cm²)</th>
-                                    <th>材料</th>
-                                    <th id="th-shoulder" style="display:none;">肩宽(cm)</th>
-                                    <th id="th-bicep" style="display:none;">袖肥(cm)</th>
-                                    <th id="th-cuff" style="display:none;">袖口(cm)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="result-pieces-tbody"></tbody>
-                        </table>
-                    </div>
+            <div class="section" id="pieces-section">
+                <h3>✂ 裁片明细</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>裁片名称</th>
+                                <th>原始尺寸(cm)</th>
+                                <th>含缝份尺寸(cm)</th>
+                                <th>数量</th>
+                                <th>面积(cm²)</th>
+                                <th>材料</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pieces-tbody"></tbody>
+                    </table>
                 </div>
             </div>
-
-            <!-- 快速估算结果区域 -->
-            <div id="quick-result-area" style="display:none;">
-                <div class="two-column">
-                    <div class="column">
-                        <div class="card">
-                            <h3>📊 估算结果概览</h3>
-                            <div class="result-summary" id="quick-result-summary">
-                                <!-- 动态生成 -->
-                            </div>
-                        </div>
-                    </div>
-                    <div class="column">
-                        <div class="card" id="quick-detail-card">
-                            <h3> 材料用量明细</h3>
-                            <div id="quick-detail-content">
-                                <!-- 动态生成 -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 多边形排料结果区域 -->
-            <div id="polygon-result-area" style="display:none;">
-                <!-- 材料分类汇总（卡片展示） -->
-                <div class="section">
-                    <h3>📦 材料分类汇总</h3>
-                    <div id="polygon-material-cards" style="display:flex;flex-direction:column;gap:12px;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 警告信息 -->
-                <div class="warnings" id="polygon-warnings" style="display:none;">
-                    <!-- 动态生成 -->
-                </div>
-
-                <!-- 排料图 -->
-                <div class="section">
-                    <h3>📐 排料图</h3>
-                    <div id="polygon-nesting-images" style="display:flex;flex-direction:column;gap:16px;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 裁片明细 -->
-                <div class="section">
-                    <h3>✂️ 裁片明细</h3>
-                    <div class="table-container">
-                        <table class="data-table" id="polygon-pieces-table">
-                            <thead>
-                                <tr>
-                                    <th>裁片名称</th>
-                                    <th>原始尺寸(cm)</th>
-                                    <th>含缝份(cm)</th>
-                                    <th>数量</th>
-                                    <th>面积(cm²)</th>
-                                    <th>含缩水面积(cm²)</th>
-                                    <th>材料</th>
-                                </tr>
-                            </thead>
-                            <tbody id="polygon-pieces-tbody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- CAD排料结果区域 -->
-            <div id="cad-result-area" style="display:none;">
-                <!-- 人体参数 -->
-                <div class="section">
-                    <h3>📐 人体参数</h3>
-                    <div id="cad-measurements-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 松量设置 -->
-                <div class="section">
-                    <h3>📊 松量设置</h3>
-                    <div id="cad-options-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 材料汇总 -->
-                <div class="section">
-                    <h3>📦 材料汇总</h3>
-                    <div id="cad-material-cards" style="display:flex;flex-direction:column;gap:12px;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 排料图 -->
-                <div class="section">
-                    <h3>📐 排料图</h3>
-                    <div id="cad-nesting-svg" class="nesting-svg-container" style="background:white;border:1px solid var(--border-color);border-radius:8px;padding:16px;overflow-x:auto;">
-                        <!-- 动态生成 -->
-                    </div>
-                </div>
-
-                <!-- 裁片明细 -->
-                <div class="section">
-                    <h3>✂️ 裁片明细</h3>
-                    <div class="table-container">
-                        <table class="data-table" id="cad-pieces-table">
-                            <thead>
-                                <tr>
-                                    <th>裁片名称</th>
-                                    <th>尺寸(cm)</th>
-                                    <th>数量</th>
-                                    <th>面积(cm²)</th>
-                                    <th>含缩水面积(cm²)</th>
-                                    <th>对折</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cad-pieces-tbody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
         </div>
     </main>
 
@@ -245,7 +105,8 @@
     <script>
         const RECORD_ID = '{{ record_id }}';
     </script>
-    <script src="/static/js/common.js"></script>
-    <script src="/static/js/detail.js"></script>
+    <script src="/static/js/auth.js?v=20260603a"></script>
+    <script src="/static/js/common.js?v=20260603a"></script>
+    <script src="/static/js/detail.js?v=20260603b"></script>
 </body>
 </html>

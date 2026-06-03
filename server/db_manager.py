@@ -4,6 +4,7 @@
 """
 
 import os
+import json
 import pymysql
 import time
 from pymysql import OperationalError
@@ -251,7 +252,7 @@ class DatabaseManager:
         # 组装 full_result（从各子表重建完整数据）
         full_result = self._build_full_result(conn, row, pieces, piece_images, nesting_images, seam_images)
 
-        return {
+        record = {
             "id": row['id'],
             "timestamp": self._fmt_time(row['timestamp']),
             "type": row['type'],
@@ -266,6 +267,18 @@ class DatabaseManager:
             "seam_images": seam_images,
             "full_result": full_result,  # ✅ 新增：完整计算结果
         }
+        snapshot = self._get_result_snapshot(conn, row['id'])
+        if snapshot:
+            record['params'] = snapshot.get('params') or record['params']
+            record['result'] = snapshot.get('result') or record['result']
+            record['input_data'] = snapshot.get('input_data') or record['input_data']
+            record['full_result'] = snapshot.get('full_result') or record['full_result']
+
+            full_snapshot = record.get('full_result') or {}
+            record['piece_images'] = full_snapshot.get('piece_images') or record['piece_images']
+            record['nesting_images'] = full_snapshot.get('nesting_images') or record['nesting_images']
+            record['seam_images'] = full_snapshot.get('seam_images') or record['seam_images']
+        return record
 
     # ============================================================
     # 保存记录
@@ -468,6 +481,7 @@ class DatabaseManager:
                 if image_count > 0:
                     print(f"[DB] 💾 保存 {image_count} 张图片")
 
+            self._save_result_snapshot(conn, record)
             print(f"[DB] ✅ 记录保存成功: {record.get('id', 'unknown')}")
 
         except OperationalError as e:
@@ -786,6 +800,94 @@ class DatabaseManager:
         
         return full_result
 
+    def _ensure_snapshot_table(self, conn):
+        """Create the result snapshot table used by the rewritten detail page."""
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS history_result_snapshots (
+                    history_id VARCHAR(20) PRIMARY KEY,
+                    params_json LONGTEXT,
+                    result_json LONGTEXT,
+                    input_data_json LONGTEXT,
+                    full_result_json LONGTEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
+
+    def _save_result_snapshot(self, conn, record):
+        """Persist the calculation result exactly as produced, without large base64 blobs."""
+        self._ensure_snapshot_table(conn)
+        snapshot = {
+            "params": self._strip_large_payloads(record.get("params") or {}),
+            "result": self._strip_large_payloads(record.get("result") or {}),
+            "input_data": self._strip_large_payloads(record.get("input_data") or {}),
+            "full_result": self._strip_large_payloads(record.get("full_result") or {}),
+        }
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO history_result_snapshots
+                (history_id, params_json, result_json, input_data_json, full_result_json)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    params_json = VALUES(params_json),
+                    result_json = VALUES(result_json),
+                    input_data_json = VALUES(input_data_json),
+                    full_result_json = VALUES(full_result_json),
+                    updated_at = CURRENT_TIMESTAMP
+            """, (
+                record["id"],
+                json.dumps(snapshot["params"], ensure_ascii=False, default=str),
+                json.dumps(snapshot["result"], ensure_ascii=False, default=str),
+                json.dumps(snapshot["input_data"], ensure_ascii=False, default=str),
+                json.dumps(snapshot["full_result"], ensure_ascii=False, default=str),
+            ))
+
+    def _get_result_snapshot(self, conn, history_id):
+        """Load the saved calculation snapshot. Missing tables are tolerated for old installs."""
+        try:
+            self._ensure_snapshot_table(conn)
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT params_json, result_json, input_data_json, full_result_json
+                    FROM history_result_snapshots
+                    WHERE history_id = %s
+                """, (history_id,))
+                row = cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "params": self._loads_json(row.get("params_json")),
+                "result": self._loads_json(row.get("result_json")),
+                "input_data": self._loads_json(row.get("input_data_json")),
+                "full_result": self._loads_json(row.get("full_result_json")),
+            }
+        except Exception as e:
+            print(f"[DB] ⚠️ 读取结果快照失败: {e}")
+            return None
+
+    def _strip_large_payloads(self, value):
+        """Remove inline image payloads before saving JSON snapshots."""
+        if isinstance(value, dict):
+            result = {}
+            for key, item in value.items():
+                lower_key = str(key).lower()
+                if lower_key.endswith("_png_base64") or lower_key in {"image_base64", "base64"}:
+                    continue
+                result[key] = self._strip_large_payloads(item)
+            return result
+        if isinstance(value, list):
+            return [self._strip_large_payloads(item) for item in value]
+        return value
+
+    @staticmethod
+    def _loads_json(value):
+        if not value:
+            return {}
+        try:
+            return json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+
     @staticmethod
     def _safe_float(value):
         """安全转换为 float，处理 None 和非法值"""
@@ -899,6 +1001,8 @@ class DatabaseManager:
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM history_quick_params WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record_id,))
+                self._ensure_snapshot_table(conn)
+                cursor.execute("DELETE FROM history_result_snapshots WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM calculation_history WHERE id = %s", (record_id,))
             conn.commit()
             return cursor.rowcount > 0
@@ -924,6 +1028,8 @@ class DatabaseManager:
                 cursor.execute("TRUNCATE TABLE history_pieces")
                 cursor.execute("TRUNCATE TABLE history_quick_params")
                 cursor.execute("TRUNCATE TABLE history_images")
+                self._ensure_snapshot_table(conn)
+                cursor.execute("TRUNCATE TABLE history_result_snapshots")
                 cursor.execute("TRUNCATE TABLE calculation_history")
             conn.commit()
 
