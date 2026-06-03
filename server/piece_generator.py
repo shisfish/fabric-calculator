@@ -852,10 +852,12 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         nest_w = bounds.get('width', fabric_width)
         nest_h = bounds.get('height', 0)
         production_nest_h = bounds.get('productionHeight')
+        spacing_cm = bounds.get('spacingCm')
     else:
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
         production_nest_h = None
+        spacing_cm = None
 
     piece_queues_for_bounds = {}
     for piece in pieces:
