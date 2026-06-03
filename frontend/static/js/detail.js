@@ -10,6 +10,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDetail();
 });
 
+function formatUtilization(value) {
+    if (value === undefined || value === null || value === '') return '-';
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '-';
+    const percent = numeric > 1 ? numeric : numeric * 100;
+    return `${percent.toFixed(1)}%`;
+}
+
 async function loadDetail() {
     try {
         const resp = await fetch(`/api/history/${RECORD_ID}`);
@@ -254,7 +262,7 @@ function renderPreciseResult(record) {
                 </div>
                 <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
                     <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
+                    <div style="font-size:15px;font-weight:600;">${formatUtilization(val.width_utilization)}</div>
                 </div>
             </div>
         </div>
@@ -493,7 +501,7 @@ function renderPolygonResult(record) {
                 </div>
                 <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
                     <div style="font-size:12px;color:var(--text-secondary);">门幅利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${val.width_utilization ? (val.width_utilization * 100).toFixed(1) + '%' : '-'}</div>
+                    <div style="font-size:15px;font-weight:600;">${formatUtilization(val.width_utilization)}</div>
                 </div>
             </div>
         </div>
@@ -623,7 +631,7 @@ function renderCadResult(record) {
                 </div>
                 <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
                     <div style="font-size:12px;color:var(--text-secondary);">利用率</div>
-                    <div style="font-size:15px;font-weight:600;">${(val.width_utilization * 100).toFixed(1)}%</div>
+                    <div style="font-size:15px;font-weight:600;">${formatUtilization(val.width_utilization)}</div>
                 </div>
             </div>
         </div>

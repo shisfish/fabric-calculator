@@ -378,16 +378,9 @@ class DatabaseManager:
                     cursor.execute("DELETE FROM history_materials WHERE history_id = %s", (record['id'],))
                     
                     for mat_key, mat_val in material_breakdown.items():
-                        raw_utilization = mat_val.get('width_utilization')
-                        if raw_utilization is None:
-                            safe_utilization = 0
-                        else:
-                            try:
-                                safe_utilization = float(raw_utilization)
-                                safe_utilization = max(0, min(safe_utilization, 999.9))
-                                safe_utilization = round(safe_utilization, 1)
-                            except (ValueError, TypeError):
-                                safe_utilization = 0
+                        safe_utilization = self._normalize_utilization_ratio(
+                            mat_val.get('width_utilization')
+                        )
 
                         cursor.execute("""
                             INSERT INTO history_materials
@@ -674,8 +667,8 @@ class DatabaseManager:
         nesting_images = []
         seam_images = []
         for r in rows:
-            raw_path = r['image_path']
-            file_path = raw_path if raw_path.startswith('/') else f'/static/{raw_path}'
+            raw_path = r['image_path'] or ''
+            file_path = self._normalize_static_path(raw_path)
             img_info = {
                 "name": r['image_name'],
                 "file_path": file_path,
@@ -688,7 +681,7 @@ class DatabaseManager:
                 nesting_images.append({
                     "material": r['image_name'],
                     "material_name": r['image_name'],
-                    "file_path": r['image_path'],
+                    "file_path": file_path,
                 })
         return piece_images, nesting_images, seam_images
 
@@ -727,7 +720,9 @@ class DatabaseManager:
                             length_m = self._safe_float(r.get('length_m'))
                             area_m2 = self._safe_float(r.get('area_m2'))
                             weight_kg = self._safe_float(r.get('weight_kg'))
-                            width_utilization = self._safe_float(r.get('width_utilization'))
+                            width_utilization = self._normalize_utilization_ratio(
+                                r.get('width_utilization')
+                            )
                             
                             full_result['material_breakdown'][mat_key] = {
                                 "name": mat_name,
@@ -800,6 +795,37 @@ class DatabaseManager:
             return float(value)
         except (ValueError, TypeError):
             return 0.0
+
+    @staticmethod
+    def _normalize_utilization_ratio(value):
+        """Normalize width utilization to a 0..1 ratio.
+
+        Older history rows may store 88.3 while newer calculation engines return
+        0.883. The frontend expects the ratio form and formats it as a percent.
+        """
+        if value is None:
+            return 0.0
+        try:
+            util = float(value)
+        except (ValueError, TypeError):
+            return 0.0
+        if util > 1:
+            util = util / 100
+        return round(max(0.0, min(util, 1.0)), 4)
+
+    @staticmethod
+    def _normalize_static_path(path):
+        """Return a browser URL under /static for stored image paths."""
+        if not path:
+            return ''
+        path = str(path).replace('\\', '/')
+        if path.startswith('/static/'):
+            return path
+        if path.startswith('static/'):
+            return '/' + path
+        if path.startswith('/'):
+            return path
+        return f'/static/{path}'
 
     # ============================================================
     # 辅助方法
