@@ -32,7 +32,7 @@ def _get_calc_engine_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
 
 
-NESTING_ALGORITHM_VERSION = "baseline-long-narrow-v6"
+NESTING_ALGORITHM_VERSION = "maxrects-restore-v7"
 NESTING_SPACING_CM = 0.5
 NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
 

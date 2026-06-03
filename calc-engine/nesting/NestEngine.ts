@@ -62,6 +62,15 @@ type PlacedPiece = {
   rotation: number;
 };
 
+type PackingRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type BoxSortMode = 'maxSide' | 'height' | 'area';
+
 export const DEFAULT_NEST_CONFIG: NestConfig = {
   fabricWidth: 1500,
   fabricHeight: 3000,
@@ -188,7 +197,31 @@ export class NestEngine {
     
     let bestResult: NestResult | null = null;
     let bestHeight = Infinity;
+    let bestPlacedPieces: typeof this.placedPieces | null = null;
     const results: Array<{ attempt: number; height: number; utilization: number; mode: string }> = [];
+
+    const boxSortModes: BoxSortMode[] = ['maxSide', 'height', 'area'];
+    for (const mode of boxSortModes) {
+      this.placedPieces = [];
+      this.useNfpCandidates = false;
+
+      const result = this.executeMaxRectsBoxPacking(mode);
+      if (!result) continue;
+
+      const currentHeight = result.bounds.height;
+      results.push({
+        attempt: 0,
+        height: currentHeight,
+        utilization: result.utilization,
+        mode: `maxrects-${mode}`
+      });
+
+      if (currentHeight < bestHeight) {
+        bestHeight = currentHeight;
+        bestResult = result;
+        bestPlacedPieces = this.clonePlacedPieces();
+      }
+    }
 
     for (let attempt = 0; attempt < numRestarts; attempt++) {
       logger.info(`\n   🔄 尝试 ${attempt + 1}/${numRestarts}`);
@@ -218,6 +251,7 @@ export class NestEngine {
       if (currentHeight < bestHeight) {
         bestHeight = currentHeight;
         bestResult = result;
+        bestPlacedPieces = this.clonePlacedPieces();
         
         if (attempt > 0) {
           logger.info(`   ✨ 发现更优解! 长度 ${bestHeight.toFixed(1)}cm`);
@@ -236,7 +270,211 @@ export class NestEngine {
     }
 
     this.useNfpCandidates = this.config.nfpCandidates !== false;
+    if (bestPlacedPieces) {
+      this.placedPieces = bestPlacedPieces;
+    }
     return bestResult!;
+  }
+
+  private clonePlacedPieces(): typeof this.placedPieces {
+    return this.placedPieces.map(piece => ({ ...piece }));
+  }
+
+  private executeMaxRectsBoxPacking(sortMode: BoxSortMode): NestResult | null {
+    const spacing = this.config.spacing;
+    const freeRects: PackingRect[] = [{
+      x: spacing,
+      y: spacing,
+      width: this.config.fabricWidth - spacing * 2,
+      height: this.config.fabricHeight - spacing * 2
+    }];
+
+    const items: Array<{ piece: NestingPiece; index: number }> = [];
+    for (const piece of this.pieces) {
+      for (let index = 0; index < piece.quantity; index++) {
+        items.push({ piece, index });
+      }
+    }
+
+    items.sort((a, b) => this.compareBoxItems(a.piece, b.piece, sortMode));
+
+    const placed: typeof this.placedPieces = [];
+    let currentHeight = spacing;
+
+    for (const item of items) {
+      const placement = this.findMaxRectsPlacement(item.piece, freeRects, currentHeight);
+      if (!placement) {
+        logger.warn(`   MaxRects(${sortMode}) failed to place ${item.piece.id}_${item.index}`);
+        return null;
+      }
+
+      placed.push({
+        pieceId: `${item.piece.id}_${item.index}`,
+        polygon: placement.polygon,
+        x: placement.x,
+        y: placement.y,
+        rotation: placement.rotation
+      });
+
+      currentHeight = Math.max(currentHeight, placement.used.y + placement.actualHeight + spacing);
+      this.splitFreeRects(freeRects, placement.used);
+      this.pruneFreeRects(freeRects);
+    }
+
+    this.placedPieces = placed;
+    this.compactLayout();
+    this.clampToBoundary();
+    return this.calculateResult();
+  }
+
+  private compareBoxItems(a: NestingPiece, b: NestingPiece, mode: BoxSortMode): number {
+    const ab = a.polygon.getBoundingBox();
+    const bb = b.polygon.getBoundingBox();
+    const areaA = ab.width * ab.height;
+    const areaB = bb.width * bb.height;
+    const maxA = Math.max(ab.width, ab.height);
+    const maxB = Math.max(bb.width, bb.height);
+
+    if (mode === 'height') {
+      if (bb.height !== ab.height) return bb.height - ab.height;
+      if (bb.width !== ab.width) return bb.width - ab.width;
+      return areaB - areaA;
+    }
+
+    if (mode === 'area') {
+      if (areaB !== areaA) return areaB - areaA;
+      return maxB - maxA;
+    }
+
+    if (maxB !== maxA) return maxB - maxA;
+    return areaB - areaA;
+  }
+
+  private findMaxRectsPlacement(
+    piece: NestingPiece,
+    freeRects: PackingRect[],
+    currentHeight: number
+  ): {
+    polygon: Polygon;
+    x: number;
+    y: number;
+    rotation: number;
+    used: PackingRect;
+    actualHeight: number;
+  } | null {
+    const spacing = this.config.spacing;
+    let best: {
+      polygon: Polygon;
+      x: number;
+      y: number;
+      rotation: number;
+      used: PackingRect;
+      actualHeight: number;
+      score: [number, number, number, number, number];
+    } | null = null;
+
+    for (const rotationOption of piece.rotations) {
+      const polygon = rotationOption.polygon;
+      const bb = polygon.getBoundingBox();
+      const actualWidth = bb.width;
+      const actualHeight = bb.height;
+      const reserveWidth = actualWidth + spacing;
+      const reserveHeight = actualHeight + spacing;
+
+      for (const free of freeRects) {
+        if (reserveWidth > free.width || reserveHeight > free.height) continue;
+
+        const x = free.x - bb.minX;
+        const y = free.y - bb.minY;
+        const newHeight = Math.max(currentHeight, free.y + actualHeight + spacing);
+        const shortSideFit = Math.min(free.width - reserveWidth, free.height - reserveHeight);
+        const longSideFit = Math.max(free.width - reserveWidth, free.height - reserveHeight);
+        const score: [number, number, number, number, number] = [
+          newHeight,
+          shortSideFit,
+          longSideFit,
+          free.y,
+          free.x
+        ];
+
+        if (!best || this.compareTuple(score, best.score) < 0) {
+          best = {
+            polygon,
+            x,
+            y,
+            rotation: rotationOption.angle,
+            used: {
+              x: free.x,
+              y: free.y,
+              width: reserveWidth,
+              height: reserveHeight
+            },
+            actualHeight,
+            score
+          };
+        }
+      }
+    }
+
+    return best;
+  }
+
+  private compareTuple(a: number[], b: number[]): number {
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+  }
+
+  private splitFreeRects(freeRects: PackingRect[], used: PackingRect): void {
+    for (let i = freeRects.length - 1; i >= 0; i--) {
+      const free = freeRects[i];
+      if (!this.rectsIntersect(free, used)) continue;
+
+      freeRects.splice(i, 1);
+
+      const right = free.x + free.width;
+      const bottom = free.y + free.height;
+      const usedRight = used.x + used.width;
+      const usedBottom = used.y + used.height;
+
+      this.pushFreeRect(freeRects, { x: free.x, y: free.y, width: used.x - free.x, height: free.height });
+      this.pushFreeRect(freeRects, { x: usedRight, y: free.y, width: right - usedRight, height: free.height });
+      this.pushFreeRect(freeRects, { x: free.x, y: free.y, width: free.width, height: used.y - free.y });
+      this.pushFreeRect(freeRects, { x: free.x, y: usedBottom, width: free.width, height: bottom - usedBottom });
+    }
+  }
+
+  private pushFreeRect(freeRects: PackingRect[], rect: PackingRect): void {
+    if (rect.width > 0.01 && rect.height > 0.01) {
+      freeRects.push(rect);
+    }
+  }
+
+  private pruneFreeRects(freeRects: PackingRect[]): void {
+    for (let i = freeRects.length - 1; i >= 0; i--) {
+      for (let j = freeRects.length - 1; j >= 0; j--) {
+        if (i === j) continue;
+        if (this.rectContains(freeRects[j], freeRects[i])) {
+          freeRects.splice(i, 1);
+          break;
+        }
+      }
+    }
+  }
+
+  private rectsIntersect(a: PackingRect, b: PackingRect): boolean {
+    return a.x < b.x + b.width &&
+      a.x + a.width > b.x &&
+      a.y < b.y + b.height &&
+      a.y + a.height > b.y;
+  }
+
+  private rectContains(outer: PackingRect, inner: PackingRect): boolean {
+    return inner.x >= outer.x &&
+      inner.y >= outer.y &&
+      inner.x + inner.width <= outer.x + outer.width &&
+      inner.y + inner.height <= outer.y + outer.height;
   }
 
   private executeNesting(sortByArea: boolean): NestResult {
