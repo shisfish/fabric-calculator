@@ -34,67 +34,7 @@
             <a href="/history" class="btn btn-primary" style="margin-top:16px;">返回历史记录</a>
         </div>
 
-        <div id="detail-content" style="display:none;">
-            <div class="card detail-card">
-                <h3>📋 基本信息</h3>
-                <div class="detail-info-grid" id="info-grid"></div>
-            </div>
-
-            <div class="section" id="summary-section">
-                <h3>📊 结果概览</h3>
-                <div class="result-cards" id="summary-cards"></div>
-            </div>
-
-            <div class="section" id="materials-section">
-                <h3>📦 材料分类汇总</h3>
-                <div id="material-cards" class="detail-material-list"></div>
-            </div>
-
-            <div class="section" id="images-section">
-                <h3>🖼 图形展示</h3>
-                <div id="piece-images"></div>
-                <div id="seam-images"></div>
-                <div id="nesting-images"></div>
-            </div>
-
-            <div class="section" id="nesting-data-section">
-                <h3>📐 排料数据</h3>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>材料</th>
-                                <th>单件用料</th>
-                                <th>净长度</th>
-                                <th>面积</th>
-                                <th>利用率</th>
-                                <th>裁片数</th>
-                            </tr>
-                        </thead>
-                        <tbody id="nesting-data-tbody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="section" id="pieces-section">
-                <h3>✂ 裁片明细</h3>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>裁片名称</th>
-                                <th>原始尺寸(cm)</th>
-                                <th>含缝份尺寸(cm)</th>
-                                <th>数量</th>
-                                <th>面积(cm²)</th>
-                                <th>材料</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pieces-tbody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+        <div id="detail-content" style="display:none;"></div>
     </main>
 
     <div class="loading-overlay" id="loading" style="display:none;">
@@ -107,6 +47,7 @@
     </script>
     <script src="/static/js/auth.js?v=20260603a"></script>
     <script src="/static/js/common.js?v=20260603a"></script>
-    <script src="/static/js/detail.js?v=20260603b"></script>
+    <script src="/static/js/result-view.js?v=20260603a"></script>
+    <script src="/static/js/detail.js?v=20260603c"></script>
 </body>
 </html>

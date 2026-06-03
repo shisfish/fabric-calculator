@@ -1311,6 +1311,14 @@ def calc_all():
                 },
                 "user_id": session.get('user_id'),  # 关联当前用户
             }
+
+            # 返回给计算页的数据也使用同一批服务器图片路径，保持与历史详情一致。
+            result["material_breakdown"] = record["full_result"]["material_breakdown"]
+            result["piece_images"] = piece_images
+            result["seam_images"] = seam_images
+            result["nesting_images"] = nesting_images
+            result["material_totals"] = material_totals
+            result["params"] = record["params"]
             
             try:
                 import base64

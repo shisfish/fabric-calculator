@@ -643,6 +643,31 @@ async function calculate() {
     }
 }
 
+function exportResult() {
+    if (!lastCalcResult) {
+        alert('暂无可导出的结果');
+        return;
+    }
+
+    const text = window.ResultView
+        ? ResultView.getExportText(lastCalcResult)
+        : JSON.stringify(lastCalcResult, null, 2);
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `用量计算_${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function goToQuotation() {
+    if (lastCalcResult) {
+        sessionStorage.setItem('consumptionData', JSON.stringify(lastCalcResult));
+    }
+    window.location.href = '/quotation';
+}
+
 // 材料名称映射
 const MATERIAL_NAMES = {
     main: '主面料', lining: '里布', interlining: '衬布',
@@ -666,6 +691,46 @@ function formatMeterValue(value, maximumFractionDigits = 3) {
     });
 }
 function renderCalcEngineResult(result, inputData) {
+    if (window.ResultView) {
+        const panel = document.getElementById('panel-4');
+        if (panel) {
+            Array.from(panel.children).forEach(child => {
+                if (!child.classList.contains('result-actions-bar') && child.tagName !== 'H2') {
+                    child.style.display = 'none';
+                }
+            });
+
+            let root = document.getElementById('live-result-view');
+            if (!root) {
+                root = document.createElement('div');
+                root.id = 'live-result-view';
+                panel.appendChild(root);
+            }
+            root.style.display = '';
+
+            const fullResult = ResultView.normalizeFullResult({
+                ...result,
+                params: {
+                    category: inputData.category,
+                    fabric_width: inputData.fabric_width,
+                    fabric_type: inputData.fabric_type,
+                    fabric_weight_gsm: inputData.fabric_weight_gsm,
+                    shrinkage_rate: inputData.shrinkage_rate,
+                    quantity: inputData.quantity,
+                },
+            });
+
+            ResultView.render({
+                root,
+                result: fullResult,
+                inputData,
+                type: 'precise',
+                mode: 'live',
+            });
+            return;
+        }
+    }
+
     const pattern = result.pattern || {};
     const seam = result.seam || {};
     const nesting = result.nesting || {};
