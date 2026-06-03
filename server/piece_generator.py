@@ -890,9 +890,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}px" height="{svg_h}px" style="max-width:100%;height:auto;">')
 
     # 顶部标注
-    summary_label = f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 利用率: {utilization:.1f}%'
+    summary_label = f'门幅: {float(fabric_width):.1f} cm (使用: {nest_w:.1f}cm) | 利用率: {utilization:.1f}%'
     if spacing_cm is not None:
-        summary_label += f' | 裁片间距: {float(spacing_cm):.2f} cm'
+        summary_label += f' | 裁片间距: {float(spacing_cm):.1f} cm'
     length_label = f'排料长度: {display_nest_h:.1f} cm'
     if False and abs(frame_nest_h - display_nest_h) >= 0.1:
         length_label += f' | 实裁(含缝/距/缩水): {frame_nest_h:.1f} cm'
@@ -925,7 +925,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<text x="{padding - 6}" y="{mid_y}" '
                 f'text-anchor="end" font-size="10" fill="#999" '
                 f'{ff}>'
-                f'{fabric_width}cm'
+                f'{float(fabric_width):.1f}cm'
                 f'</text>')
 
     # 排料长度标注（底部横向）
@@ -1183,10 +1183,7 @@ def _is_rectangular_piece(points, tolerance=0.02):
 
 
 def _format_cm_value(value):
-    rounded = round(value, 1)
-    if abs(rounded - round(rounded)) < 0.05:
-        return f"{int(round(rounded))}cm"
-    return f"{rounded:.1f}cm"
+    return f"{float(value):.1f}cm"
 
 
 def _generate_onfold_full_path(half_ops, scale=1):
@@ -1413,9 +1410,9 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
     # 顶部标注
-    summary_label = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 利用率: {utilization:.1f}%"
+    summary_label = f"门幅: {float(fabric_width):.1f} cm (使用: {nest_w:.1f}cm) | 利用率: {utilization:.1f}%"
     if spacing_cm is not None:
-        summary_label += f" | 裁片间距: {float(spacing_cm):.2f} cm"
+        summary_label += f" | 裁片间距: {float(spacing_cm):.1f} cm"
     length_label = f"排料长度: {display_nest_h:.1f} cm"
     if False and abs(frame_nest_h - display_nest_h) >= 0.1:
         length_label += f" | 实裁(含缝/距/缩水): {frame_nest_h:.1f} cm"
@@ -1426,7 +1423,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     # 门幅标注（左侧竖向）
     font_dim = _get_font(12)
     mid_y = padding + label_height + fabric_width * scale / 2
-    draw.text((padding - 5, mid_y), f"{fabric_width}cm", fill='#999999', font=font_dim, anchor='rm')
+    draw.text((padding - 5, mid_y), f"{float(fabric_width):.1f}cm", fill='#999999', font=font_dim, anchor='rm')
 
     # 排料长度标注（底部横向）
     mid_x = padding + frame_nest_h * scale / 2

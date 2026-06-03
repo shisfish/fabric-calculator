@@ -858,14 +858,14 @@ function renderCalcEngineResult(result, inputData) {
                         ` : ''}
                     </div>
                     <div style="display:none;margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid var(--border-color);border-radius:6px;font-size:12px;color:#334155;line-height:1.7;">
-                        <div><strong>净长公式:</strong> ${netEnd.toFixed(2)} - ${netStart.toFixed(2)} = ${netLengthCm.toFixed(2)} cm</div>
-                        <div><strong>实裁长度:</strong> ${productionLengthCm.toFixed(2)} cm；裁片间距: ${spacingCm.toFixed(2)} cm；缝份: ${seamAllowanceCm.toFixed(2)} cm</div>
+                        <div><strong>净长公式:</strong> ${netEnd.toFixed(1)} - ${netStart.toFixed(1)} = ${netLengthCm.toFixed(1)} cm</div>
+                        <div><strong>实裁长度:</strong> ${productionLengthCm.toFixed(1)} cm；裁片间距: ${spacingCm.toFixed(1)} cm；缝份: ${seamAllowanceCm.toFixed(1)} cm</div>
                         ${intervals.length ? `
                         <details style="margin-top:6px;">
                             <summary style="cursor:pointer;color:#2563eb;">查看裁片长度区间</summary>
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px;margin-top:6px;">
                                 ${intervals.map(item => `
-                                    <div>${item.pieceName}: ${Number(item.startCm).toFixed(2)} - ${Number(item.endCm).toFixed(2)} = ${Number(item.lengthCm).toFixed(2)} cm</div>
+                                    <div>${item.pieceName}: ${Number(item.startCm).toFixed(1)} - ${Number(item.endCm).toFixed(1)} = ${Number(item.lengthCm).toFixed(1)} cm</div>
                                 `).join('')}
                             </div>
                         </details>
@@ -1371,7 +1371,7 @@ function renderCalcNestingGroupsV4(groups, fabricWidth) {
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
                     <strong style="font-size:15px;">${materialName}</strong>
                     <span style="font-size:12px;color:var(--text-secondary);">
-                        实裁 ${formatMeterValue(productionLengthM, 3)} m · 裁片间距 ${spacingCm.toFixed(2)} cm · 缝份 ${seamAllowanceCm.toFixed(2)} cm · ${utilization.toFixed(1)}%
+                        实裁 ${formatMeterValue(productionLengthM, 3)} m · 裁片间距 ${spacingCm.toFixed(1)} cm · 缝份 ${seamAllowanceCm.toFixed(1)} cm · ${utilization.toFixed(1)}%
                     </span>
                 </div>
                 ${image ? `
@@ -1405,7 +1405,7 @@ function renderCalcNestingGroupsV3(groups, fabricWidth) {
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
                     <strong style="font-size:15px;">${materialName}</strong>
                     <span style="font-size:12px;color:var(--text-secondary);">
-                        实裁 ${formatMeterValue(productionLengthM, 3)} m · 裁片间距 ${spacingCm.toFixed(2)} cm · 缝份 ${seamAllowanceCm.toFixed(2)} cm · ${utilization.toFixed(1)}%
+                        实裁 ${formatMeterValue(productionLengthM, 3)} m · 裁片间距 ${spacingCm.toFixed(1)} cm · 缝份 ${seamAllowanceCm.toFixed(1)} cm · ${utilization.toFixed(1)}%
                     </span>
                 </div>
                 ${image ? `
@@ -1439,7 +1439,7 @@ function renderCalcNestingGroupsV2(groups, fabricWidth) {
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;">
                     <strong style="font-size:15px;">${materialName}</strong>
                     <span style="font-size:12px;color:var(--text-secondary);">
-                        净 ${formatMeterValue(netLengthM, 3)} m (${netEnd.toFixed(2)} - ${netStart.toFixed(2)} cm) · 实裁 ${formatMeterValue(productionLengthM, 3)} m · ${Number(group.utilization_rate || 0).toFixed(1)}%
+                        净 ${formatMeterValue(netLengthM, 3)} m (${netEnd.toFixed(1)} - ${netStart.toFixed(1)} cm) · 实裁 ${formatMeterValue(productionLengthM, 3)} m · ${Number(group.utilization_rate || 0).toFixed(1)}%
                     </span>
                 </div>
                 ${image ? `
