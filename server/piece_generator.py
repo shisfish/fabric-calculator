@@ -1040,6 +1040,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                     lines.append(f'<polygon points="{points_str}" fill="{color["fill"]}" stroke="{color["stroke"]}" stroke-width="1.5"/>')
 
                 # 第二步：绘制毛样（裁剪线，含缝份）— 实线
+                seam_full_pts = []
                 if has_seam:
                     seam_pts_list = _extract_polygon_points(seam_ops)
                     if onfold and seam_pts_list:
@@ -1057,14 +1058,16 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 scy = sum(p[1] for p in screen_pts) / len(screen_pts)
                 lines.append(f'<text x="{scx:.1f}" y="{scy:.1f}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="{color["stroke"]}" {ff}>{name}</text>')
 
-                local_xs = [p[0] for p in full_pts]
-                local_ys = [p[1] for p in full_pts]
+                dim_pts = seam_full_pts if has_seam and seam_full_pts else full_pts
+                dim_screen_pts = _transform_pts(dim_pts)
+                local_xs = [p[0] for p in dim_pts]
+                local_ys = [p[1] for p in dim_pts]
                 piece_width = max(local_xs) - min(local_xs)
                 piece_length = max(local_ys) - min(local_ys)
                 is_large_enough_for_dims = min(piece_width, piece_length) >= 18 and max(piece_width, piece_length) >= 35
-                if _is_rectangular_piece(full_pts) and is_large_enough_for_dims:
-                    screen_xs = [p[0] for p in screen_pts]
-                    screen_ys = [p[1] for p in screen_pts]
+                if _is_rectangular_piece(dim_pts) and is_large_enough_for_dims:
+                    screen_xs = [p[0] for p in dim_screen_pts]
+                    screen_ys = [p[1] for p in dim_screen_pts]
                     min_sx = min(screen_xs)
                     max_sx = max(screen_xs)
                     min_sy = min(screen_ys)

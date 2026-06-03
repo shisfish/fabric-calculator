@@ -414,7 +414,7 @@ function main() {
 
       const netContentBoxes = piecesData
         .map(piece => {
-          const points = extractPathPoints(piece.pathOps || []);
+          const points = extractPathPoints(piece.seamAllowancePathOps || piece.pathOps || []);
           if (points.length < 3) return null;
 
           const center = getCentroid(points);
