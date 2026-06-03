@@ -922,7 +922,7 @@ function renderCalcEngineResult(result, inputData) {
 
     // 📐 排料图渲染（与CAD完全一致）
     if (nestingGroups.length > 1) {
-        renderCalcNestingGroupsV3(nestingGroups, inputData.fabric_width);
+        renderCalcNestingGroupsV4(nestingGroups, inputData.fabric_width);
     } else if (nesting.pieces && nesting.positions) {
         console.log('[精确计算] 准备排料图数据...');
         console.log('[精确计算] result.nesting:', {
@@ -1350,6 +1350,40 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
 // ============================================================
 // 📐 CAD排料图渲染函数（完全复制自cad.js，用于精确计算）
 // ============================================================
+
+function renderCalcNestingGroupsV4(groups, fabricWidth) {
+    const container = document.getElementById('calc-nesting-container');
+    if (!container) return;
+
+    container.innerHTML = groups.map((group) => {
+        const material = group.material || 'main';
+        const materialName = group.material_name || MATERIAL_NAMES[material] || material;
+        const image = group.nesting_png_base64 || '';
+        const ext = image.startsWith('data:image/svg') ? 'svg' : 'png';
+        const details = group.marker_length_details || {};
+        const spacingCm = Number(details.spacingCm ?? 0.5);
+        const seamAllowanceCm = Number(details.seamAllowanceCm ?? 1.5);
+        const productionLengthM = Number(group.per_piece_length_m) || 0;
+        const utilization = Number(group.utilization_rate || 0);
+
+        return `
+            <div style="width:100%;margin-bottom:18px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+                    <strong style="font-size:15px;">${materialName}</strong>
+                    <span style="font-size:12px;color:var(--text-secondary);">
+                        实裁 ${formatMeterValue(productionLengthM, 3)} m · 裁片间距 ${spacingCm.toFixed(2)} cm · 缝份 ${seamAllowanceCm.toFixed(2)} cm · ${utilization.toFixed(1)}%
+                    </span>
+                </div>
+                ${image ? `
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                        <img src="${image}" alt="${materialName} 排料图" style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>
+                        <a href="${image}" download="calc_nesting_${material}.${ext}" style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;padding:8px 16px;border:1px solid var(--primary,#3b82f6);border-radius:4px;display:inline-block;">下载排料图</a>
+                    </div>
+                ` : '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无排料图</p>'}
+            </div>
+        `;
+    }).join('');
+}
 
 function renderCalcNestingGroupsV3(groups, fabricWidth) {
     const container = document.getElementById('calc-nesting-container');

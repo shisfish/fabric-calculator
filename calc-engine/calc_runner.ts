@@ -385,13 +385,6 @@ function main() {
         }
       }
 
-      const positionsData = piecesData.map(p => ({
-        name: p.name,
-        x: p.x,
-        y: p.y,
-        rotation: p.rotation
-      }));
-
       const extractPathPoints = (ops: any[]): Array<{ x: number; y: number }> => {
         const points: Array<{ x: number; y: number }> = [];
         for (const op of ops || []) {
@@ -441,15 +434,12 @@ function main() {
         })
         .filter((box): box is { name: string; minX: number; maxX: number; minY: number; maxY: number } => !!box);
 
-      const netContentStartCm = netContentBoxes.length > 0 ? Math.min(...netContentBoxes.map(box => box.minY)) : 0;
-      const netContentEndCm = netContentBoxes.length > 0 ? Math.max(...netContentBoxes.map(box => box.maxY)) : 0;
-      const netContentMarkerLength = netContentBoxes.length > 0 ? netContentEndCm - netContentStartCm : 0;
-      const netContentIntervals = netContentBoxes
+      const netContentIntervalsRaw = netContentBoxes
         .map(box => ({
           pieceName: box.name,
-          startCm: roundCm(box.minY),
-          endCm: roundCm(box.maxY),
-          lengthCm: roundCm(box.maxY - box.minY)
+          startCm: box.minY,
+          endCm: box.maxY,
+          lengthCm: box.maxY - box.minY
         }))
         .sort((a, b) => a.startCm - b.startCm || a.pieceName.localeCompare(b.pieceName));
 
@@ -465,53 +455,66 @@ function main() {
         },
         { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
       );
+      const lengthOriginY = Number.isFinite(outputBounds.minY) ? outputBounds.minY : 0;
+      const occupiedMarkerLength = Number.isFinite(outputBounds.maxY)
+        ? Math.max(0, outputBounds.maxY - outputBounds.minY)
+        : 0;
+      const normalizedPiecesData = piecesData.map(piece => ({
+        ...piece,
+        y: (piece.y || 0) - lengthOriginY
+      }));
+      const positionsData = normalizedPiecesData.map(p => ({
+        name: p.name,
+        x: p.x,
+        y: p.y,
+        rotation: p.rotation
+      }));
       const renderedMaxY = piecesData.reduce(
-        (maxY, piece) => Math.max(maxY, (piece.y || 0) + (piece.height || 0)),
+        (maxY, piece) => Math.max(maxY, (piece.y || 0) - lengthOriginY + (piece.height || 0)),
         0
       );
       const bounds = Number.isFinite(outputBounds.maxY)
         ? {
             width: Math.min(fabricWidth, Math.max(nestResult.bounds.width, outputBounds.maxX + nestingSpacing)),
-            height: Math.max(nestResult.bounds.height, outputBounds.maxY + nestingSpacing, renderedMaxY + nestingSpacing)
+            height: Math.max(occupiedMarkerLength, renderedMaxY)
           }
         : nestResult.bounds;
-      const warpScale = shrinkageResult.config.enabled
-        ? 1 / (1 - (shrinkageResult.config.warpPercent || 0) / 100)
-        : 1;
-      const occupiedMarkerLength = Number.isFinite(outputBounds.maxY)
-        ? Math.max(0, outputBounds.maxY - outputBounds.minY)
-        : bounds.height;
-      const displayMarkerLength = netContentMarkerLength > 0
-        ? netContentMarkerLength
-        : occupiedMarkerLength;
+      const displayMarkerLength = occupiedMarkerLength || bounds.height;
       const displayBounds = {
         ...bounds,
-        height: warpScale > 0 ? displayMarkerLength / warpScale : displayMarkerLength,
-        productionHeight: bounds.height
+        height: displayMarkerLength,
+        productionHeight: occupiedMarkerLength || bounds.height,
+        spacingCm: nestingSpacing,
+        seamAllowanceCm: seamDist
       };
-      const fabricArea = fabricWidth * bounds.height;
+      const fabricArea = fabricWidth * (occupiedMarkerLength || bounds.height);
       const renderedUtilization = fabricArea > 0 ? ((nestResult.usedArea || 0) / fabricArea) * 100 : 0;
 
       result.nesting = {
-        pieces: piecesData,
+        pieces: normalizedPiecesData,
         positions: positionsData,
         bounds: bounds,
         displayBounds,
         markerLength: displayBounds.height,
         contentMarkerLength: displayBounds.height,
-        productionMarkerLength: bounds.height,
+        productionMarkerLength: occupiedMarkerLength || bounds.height,
         markerLengthDetails: {
           formula: 'netLengthCm = netEndCm - netStartCm',
           spacingCm: nestingSpacing,
           seamAllowanceCm: seamDist,
-          netStartCm: roundCm(netContentStartCm),
-          netEndCm: roundCm(netContentEndCm),
+          netStartCm: 0,
+          netEndCm: roundCm(displayMarkerLength),
           netLengthCm: roundCm(displayBounds.height),
-          occupiedStartCm: Number.isFinite(outputBounds.minY) ? roundCm(outputBounds.minY) : 0,
-          occupiedEndCm: Number.isFinite(outputBounds.maxY) ? roundCm(outputBounds.maxY) : roundCm(bounds.height),
+          occupiedStartCm: 0,
+          occupiedEndCm: roundCm(displayMarkerLength),
           occupiedLengthCm: roundCm(occupiedMarkerLength),
-          productionLengthCm: roundCm(bounds.height),
-          intervals: netContentIntervals
+          productionLengthCm: roundCm(occupiedMarkerLength || bounds.height),
+          intervals: netContentIntervalsRaw.map(item => ({
+            pieceName: item.pieceName,
+            startCm: roundCm(item.startCm - lengthOriginY),
+            endCm: roundCm(item.endCm - lengthOriginY),
+            lengthCm: roundCm(item.lengthCm)
+          }))
         },
         utilization: renderedUtilization || 0,
         actualNestingUtilization: renderedUtilization || 0,
@@ -523,9 +526,9 @@ function main() {
         },
         fabricInfo: {
           width: fabricWidth,
-          height: bounds.height,
+          height: occupiedMarkerLength || bounds.height,
           displayHeight: displayBounds.height,
-          productionHeight: bounds.height,
+          productionHeight: occupiedMarkerLength || bounds.height,
           utilization: renderedUtilization || 0,
           actualNestingUtilization: renderedUtilization || 0
         },
@@ -534,10 +537,10 @@ function main() {
           totalArea: nestResult.totalArea || 0,
           usedArea: nestResult.usedArea || 0,
           wasteArea: (nestResult.totalArea || 0) - (nestResult.usedArea || 0),
-          fabricLength: bounds.height,
+          fabricLength: occupiedMarkerLength || bounds.height,
           displayFabricLength: displayBounds.height,
           contentFabricLength: displayBounds.height,
-          productionFabricLength: bounds.height,
+          productionFabricLength: occupiedMarkerLength || bounds.height,
           utilization: renderedUtilization || 0
         }
       };

@@ -889,8 +889,10 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
     # 顶部标注
     summary_label = f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 利用率: {utilization:.1f}%'
-    length_label = f'净内容: {display_nest_h:.1f} cm'
-    if abs(frame_nest_h - display_nest_h) >= 0.1:
+    if spacing_cm is not None:
+        summary_label += f' | 裁片间距: {float(spacing_cm):.2f} cm'
+    length_label = f'排料长度: {display_nest_h:.1f} cm'
+    if False and abs(frame_nest_h - display_nest_h) >= 0.1:
         length_label += f' | 实裁(含缝/距/缩水): {frame_nest_h:.1f} cm'
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 3}" '
                 f'text-anchor="middle" font-size="12" fill="#555" '
@@ -1364,10 +1366,12 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         nest_w = bounds.get('width', fabric_width)
         nest_h = bounds.get('height', 0)
         production_nest_h = bounds.get('productionHeight')
+        spacing_cm = bounds.get('spacingCm')
     else:
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
         production_nest_h = None
+        spacing_cm = None
 
     piece_queues_for_bounds = {}
     for piece in pieces:
@@ -1408,8 +1412,10 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
 
     # 顶部标注
     summary_label = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 利用率: {utilization:.1f}%"
-    length_label = f"净内容: {display_nest_h:.1f} cm"
-    if abs(frame_nest_h - display_nest_h) >= 0.1:
+    if spacing_cm is not None:
+        summary_label += f" | 裁片间距: {float(spacing_cm):.2f} cm"
+    length_label = f"排料长度: {display_nest_h:.1f} cm"
+    if False and abs(frame_nest_h - display_nest_h) >= 0.1:
         length_label += f" | 实裁(含缝/距/缩水): {frame_nest_h:.1f} cm"
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 6), summary_label, fill='#555555', font=font_label, anchor='mt')
