@@ -610,10 +610,12 @@ async function calculate() {
                     fabricWidth: data.fabric_width,
                     seamAllowance: 1.5,
                     pieces: data.pieces.map(p => ({
+                        id: p.id,
                         name: p.name,
                         width: p.width,
                         height: p.length,
                         quantity: p.count,
+                        material: p.material || 'main',
                         onFold: false
                     }))
                 },
@@ -674,6 +676,11 @@ function renderCalcEngineResult(result, inputData) {
     const pattern = result.pattern || {};
     const seam = result.seam || {};
     const nesting = result.nesting || {};
+    const nestingGroups = Array.isArray(result.nesting_groups) && result.nesting_groups.length
+        ? result.nesting_groups
+        : (nesting && nesting.pieces ? [nesting] : []);
+    const hasMultipleMaterials = nestingGroups.length > 1;
+    const materialByPieceName = new Map((inputData.pieces || []).map(p => [p.name, p.material || 'main']));
     const stats = nesting.statistics || {};
     const orderQuantity = parseInt(inputData.quantity) || 1;
     const netLengthCm =
@@ -682,11 +689,11 @@ function renderCalcEngineResult(result, inputData) {
         nesting.markerLength ||
         stats.displayFabricLength ||
         0;
-    const perPieceLengthM = netLengthCm / 100;
+    const perPieceLengthM = hasMultipleMaterials ? 0 : netLengthCm / 100;
     const totalOrderLengthM = perPieceLengthM * orderQuantity;
 
     // 计算利用率
-    const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
+    const utilization = hasMultipleMaterials ? 0 : (stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0));
 
     // 1. 基本信息（保持不变）
     const infoGrid = document.getElementById('result-info-grid');
@@ -722,6 +729,13 @@ function renderCalcEngineResult(result, inputData) {
         </div>
         ` : ''}
     `;
+    if (hasMultipleMaterials) {
+        infoGrid.innerHTML += `
+            <div style="grid-column:1/-1;padding:8px 0;color:var(--text-secondary);font-size:12px;">
+                多面料已拆分排料，长度和利用率请查看下方每种面料的独立数据。
+            </div>
+        `;
+    }
 
     // 2. 材料分类汇总
     const matCards = document.getElementById('result-material-cards');
@@ -762,6 +776,51 @@ function renderCalcEngineResult(result, inputData) {
     }
 
     // 3. 裁片明细表格
+    if (nestingGroups.length > 0) {
+        matCards.style.display = 'block';
+        matCards.innerHTML = nestingGroups.map((group, index) => {
+            const material = group.material || 'main';
+            const materialName = group.material_name || MATERIAL_NAMES[material] || material;
+            const groupLengthM = Number(group.per_piece_length_m) || 0;
+            const orderLengthM = groupLengthM * orderQuantity;
+            const areaM2 = Number(group.total_area_m2) || 0;
+            const orderAreaM2 = areaM2 * orderQuantity;
+            const groupUtilization = Number(group.utilization_rate) || 0;
+            const weightKg = inputData.fabric_weight_gsm ? (orderAreaM2 * inputData.fabric_weight_gsm / 1000) : 0;
+            const color = ['#3b82f6', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed'][index % 5];
+
+            return `
+                <div class="card" style="border-left:4px solid ${color};margin:0 0 10px 0;">
+                    <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${materialName}</div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">单件长度</div>
+                            <div style="font-size:15px;font-weight:600;">${formatMeterValue(groupLengthM, 3)} m</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">订单长度</div>
+                            <div style="font-size:15px;font-weight:600;">${formatMeterValue(orderLengthM, 1)} m</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">订单面积</div>
+                            <div style="font-size:15px;font-weight:600;">${orderAreaM2.toFixed(4)} m²</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">利用率</div>
+                            <div style="font-size:15px;font-weight:600;">${groupUtilization.toFixed(1)}%</div>
+                        </div>
+                        ${weightKg > 0 ? `
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">重量</div>
+                            <div style="font-size:15px;font-weight:600;">${weightKg.toFixed(3)} kg</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
     const piecesTbody = document.getElementById('result-pieces-tbody');
     if (pattern.pieces && pattern.pieces.length > 0) {
         piecesTbody.innerHTML = pattern.pieces.map(p => `
@@ -807,7 +866,9 @@ function renderCalcEngineResult(result, inputData) {
     renderCalcSeamAllowancePreviews(seamForCAD);
 
     // 📐 排料图渲染（与CAD完全一致）
-    if (nesting.pieces && nesting.positions) {
+    if (nestingGroups.length > 1) {
+        renderCalcNestingGroups(nestingGroups, inputData.fabric_width);
+    } else if (nesting.pieces && nesting.positions) {
         console.log('[精确计算] 准备排料图数据...');
         console.log('[精确计算] result.nesting:', {
             hasPieces: !!nesting.pieces,
@@ -1234,6 +1295,35 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
 // ============================================================
 // 📐 CAD排料图渲染函数（完全复制自cad.js，用于精确计算）
 // ============================================================
+
+function renderCalcNestingGroups(groups, fabricWidth) {
+    const container = document.getElementById('calc-nesting-container');
+    if (!container) return;
+
+    container.innerHTML = groups.map((group) => {
+        const material = group.material || 'main';
+        const materialName = group.material_name || MATERIAL_NAMES[material] || material;
+        const image = group.nesting_png_base64 || '';
+        const ext = image.startsWith('data:image/svg') ? 'svg' : 'png';
+
+        return `
+            <div style="width:100%;margin-bottom:18px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;">
+                    <strong style="font-size:15px;">${materialName}</strong>
+                    <span style="font-size:12px;color:var(--text-secondary);">
+                        ${formatMeterValue(group.per_piece_length_m || 0, 3)} m / 件 · ${Number(group.utilization_rate || 0).toFixed(1)}%
+                    </span>
+                </div>
+                ${image ? `
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                        <img src="${image}" alt="${materialName} 排料图" style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>
+                        <a href="${image}" download="calc_nesting_${material}.${ext}" style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;padding:8px 16px;border:1px solid var(--primary,#3b82f6);border-radius:4px;display:inline-block;">下载排料图</a>
+                    </div>
+                ` : '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无排料图</p>'}
+            </div>
+        `;
+    }).join('');
+}
 
 function renderCalcNestingWithReact(result, fabricWidth) {
     console.log('[精确计算] 📐 开始渲染排料图...');

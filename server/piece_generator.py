@@ -1059,10 +1059,8 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
                 local_xs = [p[0] for p in full_pts]
                 local_ys = [p[1] for p in full_pts]
-                net_piece_width = max(local_xs) - min(local_xs)
-                net_piece_length = max(local_ys) - min(local_ys)
-                piece_width = piece.get('width') or net_piece_width
-                piece_length = piece.get('height') or net_piece_length
+                piece_width = max(local_xs) - min(local_xs)
+                piece_length = max(local_ys) - min(local_ys)
                 is_large_enough_for_dims = min(piece_width, piece_length) >= 18 and max(piece_width, piece_length) >= 35
                 if _is_rectangular_piece(full_pts) and is_large_enough_for_dims:
                     screen_xs = [p[0] for p in screen_pts]

@@ -1209,6 +1209,8 @@ def calc_all():
             pattern_data = result.get("pattern", {})
             seam_data = result.get("seam", {})
             nesting_data = result.get("nesting", {})
+            nesting_groups = result.get("nesting_groups") or ([nesting_data] if nesting_data else [])
+            is_multi_material = len(nesting_groups) > 1
             
             piece_images = []
             if pattern_data.get("pattern_png_base64"):
@@ -1233,6 +1235,27 @@ def calc_all():
 
             per_piece_length_m = nesting_data.get("per_piece_length_m", 0) or 0
             per_piece_area_m2 = nesting_data.get("total_area_m2", 0) or 0
+            nesting_images = []
+            for idx, group in enumerate(nesting_groups):
+                if group.get("nesting_png_base64"):
+                    material = group.get("material") or "main"
+                    safe_material = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in material)
+                    nesting_images.append({
+                        "material": material,
+                        "material_name": group.get("material_name") or material,
+                        "file_path": f"/static/uploads/calc_{record_id}_nesting_{idx}_{safe_material}.png"
+                    })
+            material_totals = {
+                (group.get("material") or f"material_{idx}"): {
+                    "name": group.get("material_name") or group.get("material") or f"material_{idx}",
+                    "per_piece_length_m": group.get("per_piece_length_m", 0) or 0,
+                    "total_length_m": round((group.get("per_piece_length_m", 0) or 0) * quantity, 3),
+                    "per_piece_area_m2": group.get("total_area_m2", 0) or 0,
+                    "total_area_m2": round((group.get("total_area_m2", 0) or 0) * quantity, 4),
+                    "utilization_rate": group.get("utilization_rate", 0) or 0,
+                }
+                for idx, group in enumerate(nesting_groups)
+            }
             normalized_input_data = {
                 **data,
                 "category": measurements.get("category", "tshirt"),
@@ -1260,27 +1283,28 @@ def calc_all():
                     **measurements
                 },
                 "result": {
-                    "per_piece_length_m": per_piece_length_m,
-                    "total_length_m": round(per_piece_length_m * quantity, 3),
-                    "total_area_m2": round(per_piece_area_m2 * quantity, 4),
+                    "per_piece_length_m": 0 if is_multi_material else per_piece_length_m,
+                    "total_length_m": 0 if is_multi_material else round(per_piece_length_m * quantity, 3),
+                    "total_area_m2": 0 if is_multi_material else round(per_piece_area_m2 * quantity, 4),
                     "utilization_rate": nesting_data.get("utilization_rate", 0),
-                    "fabric_weight_kg": (per_piece_area_m2 * quantity * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0,
-                    "main_fabric_per_piece_m": per_piece_length_m,
+                    "fabric_weight_kg": 0 if is_multi_material else ((per_piece_area_m2 * quantity * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0),
+                    "main_fabric_per_piece_m": 0 if is_multi_material else per_piece_length_m,
                     "lining_per_piece_m": 0,
                     "calculated_wastage_rate": round((100 - (nesting_data.get("utilization_rate", 0) or 0)), 1) if nesting_data.get("utilization_rate", 0) > 0 else 8,
+                    "material_totals": material_totals,
                 },
                 "input_data": normalized_input_data,
                 "full_result": {
                     **result,
                     # ✅ 智能构建 material_breakdown（支持多种材料：主面料、罗纹、里布等）
-                    "material_breakdown": _build_material_breakdown(
-                        category=measurements.get("category", "tshirt"),
-                        nesting_data=nesting_data,
+                    "material_breakdown": _build_material_breakdown_from_nesting_groups(
+                        nesting_groups=nesting_groups,
                         fabric_weight_gsm=data.get("fabricWeight", 0)
                     ),
                     "piece_images": piece_images,
                     "seam_images": seam_images,
                     "nesting_images": nesting_images,
+                    "material_totals": material_totals,
                 },
                 "user_id": session.get('user_id'),  # 关联当前用户
             }
@@ -1327,6 +1351,17 @@ def calc_all():
                     print(f"  ✅ 排料图已保存")
 
                 print(f"  📝 正在调用 db_manager.save_record()...")
+                for idx, group in enumerate(nesting_groups):
+                    if not group.get("nesting_png_base64"):
+                        continue
+                    material = group.get("material") or "main"
+                    safe_material = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in material)
+                    group_b64 = group["nesting_png_base64"]
+                    if group_b64.startswith('data:'):
+                        group_b64 = group_b64.split(',')[1]
+                    with open(f"{upload_dir}/calc_{record_id}_nesting_{idx}_{safe_material}.png", 'wb') as group_file:
+                        group_file.write(base64.b64decode(group_b64))
+
                 db_manager.save_record(record)
                 print(f"[Calc-Engine] ✅ 已成功保存到数据库: {record_id}")
 
@@ -1465,6 +1500,21 @@ def _build_material_breakdown(category, nesting_data, fabric_weight_gsm=0):
     for key, val in material_breakdown.items():
         print(f"  - {val['name']}: {val['length_m']}m ({val['area_m2']}m²)")
     
+    return material_breakdown
+
+
+def _build_material_breakdown_from_nesting_groups(nesting_groups, fabric_weight_gsm=0):
+    material_breakdown = {}
+    for idx, group in enumerate(nesting_groups or []):
+        material = group.get("material") or f"material_{idx}"
+        area_m2 = group.get("total_area_m2", 0) or 0
+        material_breakdown[material] = {
+            "name": group.get("material_name") or material,
+            "length_m": round(group.get("per_piece_length_m", 0) or 0, 3),
+            "area_m2": round(area_m2, 4),
+            "weight_kg": round((area_m2 * fabric_weight_gsm / 1000), 4) if fabric_weight_gsm else 0,
+            "width_utilization": round(group.get("utilization_rate", 0) or 0, 1),
+        }
     return material_breakdown
 
 

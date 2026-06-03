@@ -98,6 +98,40 @@ def _nesting_utilization(nesting_data):
     )
 
 
+MATERIAL_DISPLAY_NAMES = {
+    "main": "Main fabric",
+    "lining": "Lining",
+    "interlining": "Interlining",
+    "filling_fabric_single": "Filling fabric (single)",
+    "filling_fabric_double": "Filling fabric (double)",
+    "rib": "Rib",
+    "other": "Other",
+}
+
+
+def _material_name(material_key):
+    return MATERIAL_DISPLAY_NAMES.get(material_key or "main", material_key or "Main fabric")
+
+
+def _group_pieces_by_material(pieces):
+    groups = []
+    group_index = {}
+
+    for piece in pieces or []:
+        material = piece.get("material") or piece.get("fabric") or "main"
+        material = str(material).strip() or "main"
+        if material not in group_index:
+            group_index[material] = {
+                "material": material,
+                "material_name": _material_name(material),
+                "pieces": []
+            }
+            groups.append(group_index[material])
+        group_index[material]["pieces"].append(piece)
+
+    return groups
+
+
 def _strip_render_payload(nesting_data):
     cleaned = deepcopy(nesting_data)
     cleaned.pop("nesting_svg", None)
@@ -180,6 +214,75 @@ def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_all
         }
 
     return nesting_data
+
+
+def _build_nesting_result(nesting_data, fabric_width, material=None, material_name=None):
+    if not nesting_data:
+        return None
+
+    pieces = nesting_data.get("pieces", [])
+    positions = nesting_data.get("positions") or nesting_data.get("nestPositions", [])
+    fabric_info = nesting_data.get("fabricInfo", {})
+    bounds = fabric_info.get("bounds", {
+        "width": fabric_width,
+        "height": fabric_info.get("height", 0)
+    })
+    display_bounds = nesting_data.get("displayBounds") or {
+        **bounds,
+        "height": fabric_info.get("displayHeight", bounds.get("height", 0)),
+        "productionHeight": fabric_info.get("productionHeight", bounds.get("height", 0))
+    }
+    utilization = fabric_info.get("utilization", nesting_data.get("utilization", 0))
+
+    nesting_svg = _generate_nesting_svg(
+        pieces=pieces,
+        positions=positions,
+        fabric_width=fabric_width,
+        bounds=display_bounds,
+        utilization=utilization
+    )
+    nesting_png_base64 = _svg_to_data_uri(nesting_svg)
+
+    total_area_cm2 = sum(p.get('area', 0) for p in pieces) if pieces else 0
+    content_marker_length_cm = (
+        nesting_data.get("contentMarkerLength")
+        or nesting_data.get("markerLength")
+        or display_bounds.get("height", 0)
+    )
+    per_piece_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+
+    result = {
+        "pieces": pieces,
+        "positions": positions,
+        "bounds": bounds,
+        "displayBounds": display_bounds,
+        "nesting_svg": nesting_svg,
+        "nesting_png_base64": nesting_png_base64,
+        "per_piece_length_m": round(per_piece_length_m, 3),
+        "total_area_m2": round(total_area_cm2 / 10000, 4),
+        "utilization_rate": round(utilization, 1),
+        "fabricInfo": fabric_info,
+        "shrinkage": nesting_data.get("shrinkage"),
+        "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
+        "markerLength": nesting_data.get("markerLength"),
+        "contentMarkerLength": nesting_data.get("contentMarkerLength"),
+        "productionMarkerLength": nesting_data.get("productionMarkerLength"),
+        "historyBest": nesting_data.get("historyBest"),
+        "statistics": nesting_data.get("statistics", {
+            "totalPieces": len(pieces),
+            "totalArea": total_area_cm2,
+            "usedArea": total_area_cm2 * (utilization / 100) if utilization > 0 else total_area_cm2,
+            "wasteArea": 0,
+            "fabricLength": bounds.get('height', 0),
+            "utilization": utilization
+        })
+    }
+
+    if material:
+        result["material"] = material
+        result["material_name"] = material_name or _material_name(material)
+
+    return result
 
 
 def generate_pattern_pieces(measurements, options=None):
@@ -358,19 +461,13 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         nesting_data = data.get("nesting", {})
         nesting_data = _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_allowance, options)
         
-        pieces = nesting_data.get("pieces", [])
-        positions = nesting_data.get("positions", [])
-        fabric_info = nesting_data.get("fabricInfo", {})
-        bounds = fabric_info.get("bounds", {
-            "width": fabric_width,
-            "height": fabric_info.get("height", 0)
-        })
-        display_bounds = nesting_data.get("displayBounds") or {
-            **bounds,
-            "height": fabric_info.get("displayHeight", bounds.get("height", 0)),
-            "productionHeight": fabric_info.get("productionHeight", bounds.get("height", 0))
-        }
-        utilization = fabric_info.get("utilization", 0)
+        nesting_result = _build_nesting_result(nesting_data, fabric_width)
+        pieces = nesting_result.get("pieces", []) if nesting_result else []
+        positions = nesting_result.get("positions", []) if nesting_result else []
+        bounds = nesting_result.get("bounds", {}) if nesting_result else {}
+        utilization = nesting_result.get("utilization_rate", 0) if nesting_result else 0
+        display_bounds = nesting_result.get("displayBounds", {}) if nesting_result else {}
+        fabric_info = nesting_result.get("fabricInfo", {}) if nesting_result else {}
         
         print(f"\n📐 【精确计算-排料】")
         print(f"  裁片数量: {len(pieces)} 个")
@@ -567,12 +664,43 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             }
         else:
             nesting_result = None
-        
+
+        material_groups = _group_pieces_by_material(measurements.get("pieces", []))
+        nesting_groups = []
+        if len(material_groups) <= 1:
+            if nesting_result:
+                material = material_groups[0]["material"] if material_groups else "main"
+                nesting_result["material"] = material
+                nesting_result["material_name"] = _material_name(material)
+                nesting_groups = [nesting_result]
+        else:
+            for group in material_groups:
+                group_measurements = {
+                    **measurements,
+                    "pieces": group["pieces"]
+                }
+                group_result = generate_nesting_layout(
+                    group_measurements,
+                    fabric_width,
+                    seam_allowance,
+                    options
+                )
+                if not group_result.get("success"):
+                    return group_result
+                group_nesting = group_result.get("data") or {}
+                group_nesting["material"] = group["material"]
+                group_nesting["material_name"] = group["material_name"]
+                nesting_groups.append(group_nesting)
+
+            if nesting_groups:
+                nesting_result = nesting_groups[0]
+
         return {
             "success": True,
             "pattern": pattern_data,
             "seam": seam_data,
             "nesting": nesting_result,  # ✅ 新增排料数据（与CAD格式一致）
+            "nesting_groups": nesting_groups,
             "metadata": {
                 "engine": "calc-engine (独立计算模块)",
                 "version": "1.0.0",
