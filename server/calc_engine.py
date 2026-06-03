@@ -41,9 +41,8 @@ def _json_safe(value):
     return json.loads(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str))
 
 
-def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options):
+def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options, include_algorithm=False):
     key_payload = {
-        "algorithm": NESTING_ALGORITHM_VERSION,
         "measurements": _json_safe(measurements),
         "fabric_width": round(float(fabric_width), 4),
         "seam_allowance": round(float(seam_allowance), 4),
@@ -53,6 +52,8 @@ def _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options)
         "spacing": NESTING_SPACING_CM,
         "nfpCandidates": options.get("nfpCandidates") is True,
     }
+    if include_algorithm:
+        key_payload["algorithm"] = NESTING_ALGORITHM_VERSION
     raw = json.dumps(key_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -117,6 +118,20 @@ def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_all
     key = _make_nesting_cache_key(measurements, fabric_width, seam_allowance, options)
     cache = _load_nesting_cache()
     best = cache.get(key)
+    migrated_from_key = None
+    if not best:
+        legacy_key = _make_nesting_cache_key(
+            measurements,
+            fabric_width,
+            seam_allowance,
+            options,
+            include_algorithm=True
+        )
+        best = cache.get(legacy_key)
+        if best:
+            migrated_from_key = legacy_key
+            cache[key] = deepcopy(best)
+            _save_nesting_cache(cache)
     tolerance_cm = 0.01
 
     if best and current_length > float(best.get("bestLengthCm", 0)) + tolerance_cm:
@@ -130,6 +145,8 @@ def _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_all
             "currentLengthCm": current_length,
             "currentUtilization": _nesting_utilization(nesting_data)
         }
+        if migrated_from_key:
+            reused["historyBest"]["migratedFromKey"] = migrated_from_key
         print(
             f"[Calc-Engine] Reusing best nesting: current={current_length:.2f}cm, "
             f"best={float(best.get('bestLengthCm', 0)):.2f}cm"

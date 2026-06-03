@@ -861,8 +861,11 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         if not piece:
             continue
         render_max_y = max(render_max_y, pos.get('y', 0) + piece.get('height', 0))
-    if not bounds or not bounds.get('productionHeight'):
-        nest_h = render_max_y
+    display_nest_h = nest_h
+    frame_nest_h = max(
+        production_nest_h or display_nest_h,
+        render_max_y
+    )
 
     base_scale = 2.25
     target_max_h_px = 780
@@ -870,7 +873,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     scale = min(base_scale, max_scale_by_h)
 
     # 横向排列：排料长度→水平，门幅→垂直
-    svg_w = int(nest_h * scale + padding * 2)
+    svg_w = int(frame_nest_h * scale + padding * 2)
     svg_h = int(fabric_width * scale + padding * 2 + label_height)
 
     ff = _get_svg_font_family()
@@ -879,9 +882,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}px" height="{svg_h}px" style="max-width:100%;height:auto;">')
 
     # 顶部标注
-    length_label = f'排料长度: {nest_h:.1f} cm'
-    if production_nest_h and abs(production_nest_h - nest_h) >= 0.1:
-        length_label += f' | 裁前补偿: {production_nest_h:.1f} cm'
+    length_label = f'净排料长度: {display_nest_h:.1f} cm'
+    if abs(frame_nest_h - display_nest_h) >= 0.1:
+        length_label += f' | 裁前补偿: {frame_nest_h:.1f} cm'
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
                 f'text-anchor="middle" font-size="13" fill="#555" '
                 f'{ff}>'
@@ -898,7 +901,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
     # 面料虚线框（横向：宽=排料长度，高=门幅）
     lines.append(f'<rect x="{padding}" y="{padding + label_height}" '
-                f'width="{nest_h * scale}" height="{fabric_width * scale}" '
+                f'width="{frame_nest_h * scale}" height="{fabric_width * scale}" '
                 f'fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="8,4"/>')
 
     # 门幅标注（左侧竖向）
@@ -910,11 +913,11 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
                 f'</text>')
 
     # 排料长度标注（底部横向）
-    mid_x = padding + nest_h * scale / 2
+    mid_x = padding + frame_nest_h * scale / 2
     lines.append(f'<text x="{mid_x}" y="{padding + label_height + fabric_width * scale + 15}" '
                 f'text-anchor="middle" font-size="10" fill="#999" '
                 f'{ff}>'
-                f'{nest_h:.1f}cm'
+                f'{frame_nest_h:.1f}cm'
                 f'</text>')
     piece_colors = [
         {'fill': 'rgba(255, 99, 132, 0.25)', 'stroke': '#FF6384'},
@@ -1345,12 +1348,30 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     if bounds:
         nest_w = bounds.get('width', fabric_width)
         nest_h = bounds.get('height', 0)
+        production_nest_h = bounds.get('productionHeight')
     else:
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
+        production_nest_h = None
+
+    piece_queues_for_bounds = {}
+    for piece in pieces:
+        piece_queues_for_bounds.setdefault(piece.get('name', ''), []).append(piece)
+    render_max_y = nest_h
+    for pos in positions:
+        queue = piece_queues_for_bounds.get(pos.get('name', ''), [])
+        piece = queue.pop(0) if queue else None
+        if not piece:
+            continue
+        render_max_y = max(render_max_y, pos.get('y', 0) + piece.get('height', 0))
+    display_nest_h = nest_h
+    frame_nest_h = max(
+        production_nest_h or display_nest_h,
+        render_max_y
+    )
 
     # 横向排列：排料长度→水平，门幅→垂直
-    img_width = int(nest_h * scale + padding * 2)
+    img_width = int(frame_nest_h * scale + padding * 2)
     img_height = int(fabric_width * scale + padding * 2 + label_height)
 
     img = Image.new('RGB', (img_width, img_height), '#ffffff')
@@ -1359,7 +1380,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     # 绘制面料虚线框（横向：宽=排料长度，高=门幅）
     bx1 = int(padding)
     by1 = int(padding + label_height)
-    bx2 = int(padding + nest_h * scale)
+    bx2 = int(padding + frame_nest_h * scale)
     by2 = int(padding + label_height + fabric_width * scale)
     for dash_start in range(bx1, bx2, 20):
         dash_end = min(dash_start + 12, bx2)
@@ -1371,7 +1392,10 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
     # 顶部标注
-    label_text = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%"
+    length_label = f"净排料长度: {display_nest_h:.1f} cm"
+    if abs(frame_nest_h - display_nest_h) >= 0.1:
+        length_label += f" | 裁前补偿: {frame_nest_h:.1f} cm"
+    label_text = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | {length_label} | 利用率: {utilization:.1f}%"
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
 
@@ -1381,8 +1405,8 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
     draw.text((padding - 5, mid_y), f"{fabric_width}cm", fill='#999999', font=font_dim, anchor='rm')
 
     # 排料长度标注（底部横向）
-    mid_x = padding + nest_h * scale / 2
-    draw.text((mid_x, by2 + 10), f"{nest_h:.1f}cm", fill='#999999', font=font_dim, anchor='mt')
+    mid_x = padding + frame_nest_h * scale / 2
+    draw.text((mid_x, by2 + 10), f"{frame_nest_h:.1f}cm", fill='#999999', font=font_dim, anchor='mt')
 
     piece_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
