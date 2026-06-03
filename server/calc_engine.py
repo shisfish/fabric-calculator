@@ -393,7 +393,8 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         
         # 计算统计数据
         total_area_cm2 = sum(p.get('area', 0) for p in pieces) if pieces else 0
-        per_piece_length_m = bounds.get('height', 0) / 100 if bounds.get('height', 0) > 0 else 0
+        content_marker_length_cm = nesting_data.get("contentMarkerLength") or nesting_data.get("markerLength") or display_bounds.get("height", 0)
+        per_piece_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
         
         return {
             "success": True,
@@ -414,6 +415,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
                 "shrinkage": nesting_data.get("shrinkage"),
                 "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
                 "markerLength": nesting_data.get("markerLength"),
+                "contentMarkerLength": nesting_data.get("contentMarkerLength"),
                 "productionMarkerLength": nesting_data.get("productionMarkerLength"),
                 "historyBest": nesting_data.get("historyBest"),
                 
@@ -532,7 +534,8 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             
             # 计算统计数据
             total_area_cm2 = sum(p.get('area', 0) for p in pieces) if pieces else 0
-            per_piece_length_m = bounds.get('height', 0) / 100 if bounds.get('height', 0) > 0 else 0
+            content_marker_length_cm = nesting_data.get("contentMarkerLength") or nesting_data.get("markerLength") or display_bounds.get("height", 0)
+            per_piece_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
             
             # 构建nesting对象（与CAD数据结构完全一致，包含statistics）
             nesting_result = {
@@ -549,6 +552,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "shrinkage": nesting_data.get("shrinkage"),
                 "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
                 "markerLength": nesting_data.get("markerLength"),
+                "contentMarkerLength": nesting_data.get("contentMarkerLength"),
                 "productionMarkerLength": nesting_data.get("productionMarkerLength"),
                 "historyBest": nesting_data.get("historyBest"),
                 # ✅ 【关键】保留完整的statistics字段供前端使用

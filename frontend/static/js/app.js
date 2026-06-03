@@ -663,14 +663,27 @@ const CATEGORY_NAMES = {
 };
 
 // 渲染精确排料引擎结果 (CAD风格)
+function formatMeterValue(value, maximumFractionDigits = 3) {
+    const n = Number(value) || 0;
+    return n.toLocaleString('zh-CN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits
+    });
+}
 function renderCalcEngineResult(result, inputData) {
     const pattern = result.pattern || {};
     const seam = result.seam || {};
     const nesting = result.nesting || {};
     const stats = nesting.statistics || {};
     const orderQuantity = parseInt(inputData.quantity) || 1;
-    const perPieceLengthCm = stats.fabricLength || 0;
-    const totalOrderLengthM = (perPieceLengthCm * orderQuantity) / 100;
+    const netLengthCm =
+        nesting.contentMarkerLength ||
+        stats.contentFabricLength ||
+        nesting.markerLength ||
+        stats.displayFabricLength ||
+        0;
+    const perPieceLengthM = netLengthCm / 100;
+    const totalOrderLengthM = perPieceLengthM * orderQuantity;
 
     // 计算利用率
     const utilization = stats.utilization || (stats.usedArea && stats.totalArea ? (stats.usedArea / stats.totalArea * 100) : 0);
@@ -696,11 +709,11 @@ function renderCalcEngineResult(result, inputData) {
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">用料长度</span>
-            <strong style="font-size:14px;">${(perPieceLengthCm / 100).toFixed(3)} m / 件</strong>
+            <strong style="font-size:14px;">${formatMeterValue(perPieceLengthM, 3)} m / 件</strong>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
             <span style="color:var(--text-secondary);font-size:13px;">总用料长度</span>
-            <strong style="font-size:14px;color:#16a34a;">${totalOrderLengthM.toFixed(3)} m</strong>
+            <strong style="font-size:14px;color:#16a34a;">${formatMeterValue(totalOrderLengthM, 1)} m</strong>
         </div>
         ${inputData.fabric_weight_gsm ? `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px dashed var(--border-color);">
@@ -729,7 +742,7 @@ function renderCalcEngineResult(result, inputData) {
                     </div>
                     <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
                         <div style="font-size:12px;color:var(--text-secondary);">用料长度</div>
-                        <div style="font-size:15px;font-weight:600;">${totalLengthM.toFixed(3)} m</div>
+                        <div style="font-size:15px;font-weight:600;">${formatMeterValue(totalLengthM, 1)} m</div>
                     </div>
                     ${weightKg > 0 ? `
                     <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">

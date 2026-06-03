@@ -392,6 +392,80 @@ function main() {
         rotation: p.rotation
       }));
 
+      const extractPathPoints = (ops: any[]): Array<{ x: number; y: number }> => {
+        const points: Array<{ x: number; y: number }> = [];
+        for (const op of ops || []) {
+          if (op?.to && Number.isFinite(op.to.x) && Number.isFinite(op.to.y)) {
+            points.push({ x: op.to.x, y: op.to.y });
+          }
+        }
+        return points;
+      };
+
+      const getCentroid = (points: Array<{ x: number; y: number }>) => {
+        const sum = points.reduce(
+          (acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }),
+          { x: 0, y: 0 }
+        );
+        return { x: sum.x / points.length, y: sum.y / points.length };
+      };
+
+      const netContentBoxes = piecesData
+        .map(piece => {
+          const points = extractPathPoints(piece.pathOps || []);
+          if (points.length < 3) return null;
+
+          const center = getCentroid(points);
+          const radians = ((piece.rotation || 0) * Math.PI) / 180;
+          const cos = Math.cos(radians);
+          const sin = Math.sin(radians);
+          const transformed = points.map(point => {
+            const dx = point.x - center.x;
+            const dy = point.y - center.y;
+            return {
+              x: (piece.x || 0) + dx * cos - dy * sin + center.x,
+              y: (piece.y || 0) + dx * sin + dy * cos + center.y
+            };
+          });
+          const xs = transformed.map(point => point.x);
+          const ys = transformed.map(point => point.y);
+          return {
+            minX: Math.min(...xs),
+            maxX: Math.max(...xs),
+            minY: Math.min(...ys),
+            maxY: Math.max(...ys)
+          };
+        })
+        .filter((box): box is { minX: number; maxX: number; minY: number; maxY: number } => !!box);
+
+      const contentScanXs = Array.from(new Set(
+        netContentBoxes.flatMap(box => [box.minX, box.maxX])
+      )).sort((a, b) => a - b);
+
+      let netContentMarkerLength = 0;
+      for (let i = 0; i < contentScanXs.length - 1; i++) {
+        const scanX = (contentScanXs[i] + contentScanXs[i + 1]) / 2;
+        const intervals = netContentBoxes
+          .filter(box => box.minX <= scanX && box.maxX >= scanX)
+          .map(box => [box.minY, box.maxY] as [number, number])
+          .sort((a, b) => a[0] - b[0]);
+
+        let unionLength = 0;
+        let current: [number, number] | null = null;
+        for (const interval of intervals) {
+          if (!current) {
+            current = [...interval];
+          } else if (interval[0] <= current[1]) {
+            current[1] = Math.max(current[1], interval[1]);
+          } else {
+            unionLength += current[1] - current[0];
+            current = [...interval];
+          }
+        }
+        if (current) unionLength += current[1] - current[0];
+        netContentMarkerLength = Math.max(netContentMarkerLength, unionLength);
+      }
+
       const outputBounds = placedPolygons.reduce(
         (acc, inst) => {
           const bb = inst.polygon.translate(inst.x, inst.y).getBoundingBox();
@@ -420,9 +494,12 @@ function main() {
       const occupiedMarkerLength = Number.isFinite(outputBounds.maxY)
         ? Math.max(0, outputBounds.maxY - outputBounds.minY)
         : bounds.height;
+      const displayMarkerLength = netContentMarkerLength > 0
+        ? netContentMarkerLength
+        : occupiedMarkerLength;
       const displayBounds = {
         ...bounds,
-        height: warpScale > 0 ? occupiedMarkerLength / warpScale : occupiedMarkerLength,
+        height: warpScale > 0 ? displayMarkerLength / warpScale : displayMarkerLength,
         productionHeight: bounds.height
       };
       const fabricArea = fabricWidth * bounds.height;
@@ -434,6 +511,7 @@ function main() {
         bounds: bounds,
         displayBounds,
         markerLength: displayBounds.height,
+        contentMarkerLength: displayBounds.height,
         productionMarkerLength: bounds.height,
         utilization: renderedUtilization || 0,
         actualNestingUtilization: renderedUtilization || 0,
@@ -458,6 +536,7 @@ function main() {
           wasteArea: (nestResult.totalArea || 0) - (nestResult.usedArea || 0),
           fabricLength: bounds.height,
           displayFabricLength: displayBounds.height,
+          contentFabricLength: displayBounds.height,
           productionFabricLength: bounds.height,
           utilization: renderedUtilization || 0
         }

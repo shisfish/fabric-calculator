@@ -449,7 +449,13 @@ def generate_cad_nesting_result(measurements, options, fabric_width, shrinkage_r
         used_area_cm2 = data.get('usedArea', 0)
 
         total_area_m2 = total_area_cm2 / 10000
-        per_piece_length_m = data.get('bounds', {}).get('height', 0) / 100
+        content_length_cm = (
+            data.get('contentMarkerLength')
+            or data.get('markerLength')
+            or data.get('displayBounds', {}).get('height', 0)
+            or data.get('bounds', {}).get('height', 0)
+        )
+        per_piece_length_m = content_length_cm / 100
         # qtyNestMode时，排料已包含全部数量裁片，不再乘以quantity
         total_length_m = per_piece_length_m * (1 if qty_nest_mode else quantity)
 
@@ -840,7 +846,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         return ""
 
     padding = 50
-    label_height = 30
+    label_height = 48
 
     if bounds:
         nest_w = bounds.get('width', fabric_width)
@@ -882,13 +888,19 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}px" height="{svg_h}px" style="max-width:100%;height:auto;">')
 
     # 顶部标注
-    length_label = f'排料长度(裁片+缝份): {display_nest_h:.1f} cm'
+    summary_label = f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 利用率: {utilization:.1f}%'
+    length_label = f'净内容: {display_nest_h:.1f} cm'
     if abs(frame_nest_h - display_nest_h) >= 0.1:
-        length_label += f' | 含缩水裁剪长度: {frame_nest_h:.1f} cm'
-    lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
-                f'text-anchor="middle" font-size="13" fill="#555" '
+        length_label += f' | 实裁(含缝/距/缩水): {frame_nest_h:.1f} cm'
+    lines.append(f'<text x="{svg_w / 2}" y="{padding + 3}" '
+                f'text-anchor="middle" font-size="12" fill="#555" '
                 f'{ff}>'
-                f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | {length_label} | 利用率: {utilization:.1f}%'
+                f'{summary_label}'
+                f'</text>')
+    lines.append(f'<text x="{svg_w / 2}" y="{padding + 20}" '
+                f'text-anchor="middle" font-size="12" fill="#555" '
+                f'{ff}>'
+                f'{length_label}'
                 f'</text>')
 
     # 图例：毛样(裁剪线) = 实线, 净样(缝合线) = 虚线
@@ -1047,8 +1059,10 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
 
                 local_xs = [p[0] for p in full_pts]
                 local_ys = [p[1] for p in full_pts]
-                piece_width = max(local_xs) - min(local_xs)
-                piece_length = max(local_ys) - min(local_ys)
+                net_piece_width = max(local_xs) - min(local_xs)
+                net_piece_length = max(local_ys) - min(local_ys)
+                piece_width = piece.get('width') or net_piece_width
+                piece_length = piece.get('height') or net_piece_length
                 is_large_enough_for_dims = min(piece_width, piece_length) >= 18 and max(piece_width, piece_length) >= 35
                 if _is_rectangular_piece(full_pts) and is_large_enough_for_dims:
                     screen_xs = [p[0] for p in screen_pts]
@@ -1343,7 +1357,7 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
 
     scale = 3.0
     padding = 40
-    label_height = 50
+    label_height = 64
 
     if bounds:
         nest_w = bounds.get('width', fabric_width)
@@ -1392,12 +1406,13 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
     # 顶部标注
-    length_label = f"排料长度(裁片+缝份): {display_nest_h:.1f} cm"
+    summary_label = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 利用率: {utilization:.1f}%"
+    length_label = f"净内容: {display_nest_h:.1f} cm"
     if abs(frame_nest_h - display_nest_h) >= 0.1:
-        length_label += f" | 含缩水裁剪长度: {frame_nest_h:.1f} cm"
-    label_text = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | {length_label} | 利用率: {utilization:.1f}%"
+        length_label += f" | 实裁(含缝/距/缩水): {frame_nest_h:.1f} cm"
     font_label = _get_font(16)
-    draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
+    draw.text((img_width // 2, padding + 6), summary_label, fill='#555555', font=font_label, anchor='mt')
+    draw.text((img_width // 2, padding + 26), length_label, fill='#555555', font=font_label, anchor='mt')
 
     # 门幅标注（左侧竖向）
     font_dim = _get_font(12)
