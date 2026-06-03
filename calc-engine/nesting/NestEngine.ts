@@ -69,7 +69,7 @@ type PackingRect = {
   height: number;
 };
 
-type BoxSortMode = 'maxSide' | 'height' | 'area';
+type BoxSortMode = 'maxSide' | 'height' | 'area' | 'paired';
 
 export const DEFAULT_NEST_CONFIG: NestConfig = {
   fabricWidth: 1500,
@@ -200,7 +200,7 @@ export class NestEngine {
     let bestPlacedPieces: typeof this.placedPieces | null = null;
     const results: Array<{ attempt: number; height: number; utilization: number; mode: string }> = [];
 
-    const boxSortModes: BoxSortMode[] = ['maxSide', 'height', 'area'];
+    const boxSortModes: BoxSortMode[] = ['paired', 'maxSide', 'height', 'area'];
     for (const mode of boxSortModes) {
       this.placedPieces = [];
       this.useNfpCandidates = false;
@@ -233,7 +233,7 @@ export class NestEngine {
       if (attempt === 0) {
         result = this.executeNesting(sortByArea);
       } else {
-        result = this.executeNestingWithShuffle();
+        result = this.executeNestingWithShuffle(attempt);
       }
 
       const currentHeight = result.bounds.height;
@@ -334,6 +334,21 @@ export class NestEngine {
     const areaB = bb.width * bb.height;
     const maxA = Math.max(ab.width, ab.height);
     const maxB = Math.max(bb.width, bb.height);
+    const groupA = this.getIndustrialPlacementGroup(a);
+    const groupB = this.getIndustrialPlacementGroup(b);
+
+    if (groupA !== groupB) return groupA - groupB;
+
+    if (mode === 'area') {
+      const areaDeltaRatio = Math.abs(areaA - areaB) / Math.max(areaA, areaB, 1);
+      if (areaDeltaRatio > 0.08) return areaB - areaA;
+    }
+
+    if (mode === 'paired') {
+      if (b.quantity !== a.quantity) return b.quantity - a.quantity;
+      if (areaB !== areaA) return areaB - areaA;
+      return maxB - maxA;
+    }
 
     if (mode === 'height') {
       if (bb.height !== ab.height) return bb.height - ab.height;
@@ -348,6 +363,19 @@ export class NestEngine {
 
     if (maxB !== maxA) return maxB - maxA;
     return areaB - areaA;
+  }
+
+  private getIndustrialPlacementGroup(piece: NestingPiece): number {
+    const bb = piece.polygon.getBoundingBox();
+    const area = bb.width * bb.height;
+    const largestArea = this.pieces.reduce((maxArea, candidate) => {
+      const candidateBb = candidate.polygon.getBoundingBox();
+      return Math.max(maxArea, candidateBb.width * candidateBb.height);
+    }, 0);
+
+    if (piece.isAccessory) return 2;
+    if (area >= largestArea * 0.5) return 0;
+    return 1;
   }
 
   private findMaxRectsPlacement(
@@ -389,13 +417,22 @@ export class NestEngine {
         const newHeight = Math.max(currentHeight, free.y + actualHeight + spacing);
         const shortSideFit = Math.min(free.width - reserveWidth, free.height - reserveHeight);
         const longSideFit = Math.max(free.width - reserveWidth, free.height - reserveHeight);
-        const score: [number, number, number, number, number] = [
-          newHeight,
-          shortSideFit,
-          longSideFit,
-          free.y,
-          free.x
-        ];
+        const isFiller = this.getIndustrialPlacementGroup(piece) > 0;
+        const score: [number, number, number, number, number] = isFiller
+          ? [
+              newHeight,
+              shortSideFit,
+              longSideFit,
+              free.y,
+              free.x
+            ]
+          : [
+              newHeight,
+              free.y,
+              free.x,
+              shortSideFit,
+              longSideFit
+            ];
 
         if (!best || this.compareTuple(score, best.score) < 0) {
           best = {
@@ -525,15 +562,15 @@ export class NestEngine {
     return this.calculateResult();
   }
 
-  private executeNestingWithShuffle(): NestResult {
-    const shuffledMain = this.shuffleArray(
-      this.pieces.filter(p => !p.isAccessory)
-    );
-    const shuffledAccessories = this.shuffleArray(
-      this.pieces.filter(p => p.isAccessory)
-    );
+  private executeNestingWithShuffle(attempt: number = 1): NestResult {
+    const sortModes: BoxSortMode[] = ['paired', 'area', 'height', 'maxSide'];
+    const sortMode = sortModes[attempt % sortModes.length];
+    const shuffledMain = [...this.pieces.filter(p => !p.isAccessory)]
+      .sort((a, b) => this.compareBoxItems(a, b, sortMode));
+    const shuffledAccessories = [...this.pieces.filter(p => p.isAccessory)]
+      .sort((a, b) => this.compareBoxItems(a, b, sortMode));
 
-    logger.info(`   🔀 打乱顺序: 主裁片=[${shuffledMain.map(p => p.id).join(',')}], 配件=[${shuffledAccessories.map(p => p.id).join(',')}]`);
+    logger.info(`   🔀 确定性顺序(${sortMode}): 主裁片=[${shuffledMain.map(p => p.id).join(',')}], 配件=[${shuffledAccessories.map(p => p.id).join(',')}]`);
 
     for (const nestingPiece of shuffledMain) {
       for (let q = 0; q < nestingPiece.quantity; q++) {

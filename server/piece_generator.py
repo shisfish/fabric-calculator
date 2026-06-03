@@ -882,9 +882,9 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}px" height="{svg_h}px" style="max-width:100%;height:auto;">')
 
     # 顶部标注
-    length_label = f'净排料长度: {display_nest_h:.1f} cm'
+    length_label = f'排料长度(裁片+缝份): {display_nest_h:.1f} cm'
     if abs(frame_nest_h - display_nest_h) >= 0.1:
-        length_label += f' | 裁前补偿: {frame_nest_h:.1f} cm'
+        length_label += f' | 含缩水裁剪长度: {frame_nest_h:.1f} cm'
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
                 f'text-anchor="middle" font-size="13" fill="#555" '
                 f'{ff}>'
@@ -1392,9 +1392,9 @@ def _generate_nesting_png_direct(pieces, positions, fabric_width, bounds=None, u
         draw.line([(bx2, dash_start), (bx2, dash_end)], fill='#999999', width=2)
 
     # 顶部标注
-    length_label = f"净排料长度: {display_nest_h:.1f} cm"
+    length_label = f"排料长度(裁片+缝份): {display_nest_h:.1f} cm"
     if abs(frame_nest_h - display_nest_h) >= 0.1:
-        length_label += f" | 裁前补偿: {frame_nest_h:.1f} cm"
+        length_label += f" | 含缩水裁剪长度: {frame_nest_h:.1f} cm"
     label_text = f"门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | {length_label} | 利用率: {utilization:.1f}%"
     font_label = _get_font(16)
     draw.text((img_width // 2, padding + 8), label_text, fill='#555555', font=font_label, anchor='mt')
