@@ -32,7 +32,7 @@ def _get_calc_engine_dir():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'calc-engine')
 
 
-NESTING_ALGORITHM_VERSION = "maxrects-restore-v7"
+NESTING_ALGORITHM_VERSION = "maxrects-display-length-v8"
 NESTING_SPACING_CM = 0.5
 NESTING_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nesting_best_cache.json")
 
@@ -348,6 +348,11 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
             "width": fabric_width,
             "height": fabric_info.get("height", 0)
         })
+        display_bounds = nesting_data.get("displayBounds") or {
+            **bounds,
+            "height": fabric_info.get("displayHeight", bounds.get("height", 0)),
+            "productionHeight": fabric_info.get("productionHeight", bounds.get("height", 0))
+        }
         utilization = fabric_info.get("utilization", 0)
         
         print(f"\n📐 【精确计算-排料】")
@@ -362,7 +367,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
             pieces=pieces,
             positions=positions,
             fabric_width=fabric_width,
-            bounds=bounds,
+            bounds=display_bounds,
             utilization=utilization
         )
         
@@ -380,6 +385,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
                 "pieces": pieces,
                 "positions": positions,
                 "bounds": bounds,
+                "displayBounds": display_bounds,
                 "nesting_svg": nesting_svg,
                 "nesting_png_base64": nesting_png_base64,
                 
@@ -390,6 +396,8 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
                 "fabricInfo": fabric_info,
                 "shrinkage": nesting_data.get("shrinkage"),
                 "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
+                "markerLength": nesting_data.get("markerLength"),
+                "productionMarkerLength": nesting_data.get("productionMarkerLength"),
                 "historyBest": nesting_data.get("historyBest"),
                 
                 # 元数据
@@ -480,6 +488,11 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "width": fabric_width,
                 "height": fabric_info.get("height", 0)
             })
+            display_bounds = nesting_data.get("displayBounds") or {
+                **bounds,
+                "height": fabric_info.get("displayHeight", bounds.get("height", 0)),
+                "productionHeight": fabric_info.get("productionHeight", bounds.get("height", 0))
+            }
             utilization = fabric_info.get("utilization", 0)
             
             print(f"\n📐 【精确计算-全模块排料】")
@@ -493,7 +506,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 pieces=pieces,
                 positions=positions,
                 fabric_width=fabric_width,
-                bounds=bounds,
+                bounds=display_bounds,
                 utilization=utilization
             )
             
@@ -509,6 +522,7 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "pieces": pieces,
                 "positions": positions,
                 "bounds": bounds,
+                "displayBounds": display_bounds,
                 "nesting_svg": nesting_svg,
                 "nesting_png_base64": nesting_png_base64,
                 "per_piece_length_m": round(per_piece_length_m, 3),
@@ -517,6 +531,8 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "fabricInfo": fabric_info,
                 "shrinkage": nesting_data.get("shrinkage"),
                 "actualNestingUtilization": nesting_data.get("actualNestingUtilization", utilization),
+                "markerLength": nesting_data.get("markerLength"),
+                "productionMarkerLength": nesting_data.get("productionMarkerLength"),
                 "historyBest": nesting_data.get("historyBest"),
                 # ✅ 【关键】保留完整的statistics字段供前端使用
                 "statistics": nesting_data.get("statistics", {

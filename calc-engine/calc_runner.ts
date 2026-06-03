@@ -414,6 +414,17 @@ function main() {
             height: Math.max(nestResult.bounds.height, outputBounds.maxY + nestingSpacing, renderedMaxY + nestingSpacing)
           }
         : nestResult.bounds;
+      const warpScale = shrinkageResult.config.enabled
+        ? 1 / (1 - (shrinkageResult.config.warpPercent || 0) / 100)
+        : 1;
+      const occupiedMarkerLength = Number.isFinite(outputBounds.maxY)
+        ? Math.max(0, outputBounds.maxY - outputBounds.minY)
+        : bounds.height;
+      const displayBounds = {
+        ...bounds,
+        height: warpScale > 0 ? occupiedMarkerLength / warpScale : occupiedMarkerLength,
+        productionHeight: bounds.height
+      };
       const fabricArea = fabricWidth * bounds.height;
       const renderedUtilization = fabricArea > 0 ? ((nestResult.usedArea || 0) / fabricArea) * 100 : 0;
 
@@ -421,6 +432,9 @@ function main() {
         pieces: piecesData,
         positions: positionsData,
         bounds: bounds,
+        displayBounds,
+        markerLength: displayBounds.height,
+        productionMarkerLength: bounds.height,
         utilization: renderedUtilization || 0,
         actualNestingUtilization: renderedUtilization || 0,
         totalArea: nestResult.totalArea || 0,
@@ -432,6 +446,8 @@ function main() {
         fabricInfo: {
           width: fabricWidth,
           height: bounds.height,
+          displayHeight: displayBounds.height,
+          productionHeight: bounds.height,
           utilization: renderedUtilization || 0,
           actualNestingUtilization: renderedUtilization || 0
         },
@@ -441,6 +457,8 @@ function main() {
           usedArea: nestResult.usedArea || 0,
           wasteArea: (nestResult.totalArea || 0) - (nestResult.usedArea || 0),
           fabricLength: bounds.height,
+          displayFabricLength: displayBounds.height,
+          productionFabricLength: bounds.height,
           utilization: renderedUtilization || 0
         }
       };

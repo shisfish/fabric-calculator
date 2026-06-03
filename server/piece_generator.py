@@ -845,9 +845,11 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     if bounds:
         nest_w = bounds.get('width', fabric_width)
         nest_h = bounds.get('height', 0)
+        production_nest_h = bounds.get('productionHeight')
     else:
         nest_w = fabric_width
         nest_h = max((pos.get('y', 0) + 50) for pos in positions) if positions else 50
+        production_nest_h = None
 
     piece_queues_for_bounds = {}
     for piece in pieces:
@@ -859,7 +861,8 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
         if not piece:
             continue
         render_max_y = max(render_max_y, pos.get('y', 0) + piece.get('height', 0))
-    nest_h = render_max_y
+    if not bounds or not bounds.get('productionHeight'):
+        nest_h = render_max_y
 
     base_scale = 2.25
     target_max_h_px = 780
@@ -876,10 +879,13 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     lines.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}px" height="{svg_h}px" style="max-width:100%;height:auto;">')
 
     # 顶部标注
+    length_label = f'排料长度: {nest_h:.1f} cm'
+    if production_nest_h and abs(production_nest_h - nest_h) >= 0.1:
+        length_label += f' | 裁前补偿: {production_nest_h:.1f} cm'
     lines.append(f'<text x="{svg_w / 2}" y="{padding + 8}" '
                 f'text-anchor="middle" font-size="13" fill="#555" '
                 f'{ff}>'
-                f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | 排料长度: {nest_h:.1f} cm | 利用率: {utilization:.1f}%'
+                f'门幅: {fabric_width} cm (使用: {nest_w:.0f}cm) | {length_label} | 利用率: {utilization:.1f}%'
                 f'</text>')
 
     # 图例：毛样(裁剪线) = 实线, 净样(缝合线) = 虚线
