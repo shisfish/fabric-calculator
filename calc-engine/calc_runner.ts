@@ -410,6 +410,8 @@ function main() {
         return { x: sum.x / points.length, y: sum.y / points.length };
       };
 
+      const roundCm = (value: number) => Math.round(value * 100) / 100;
+
       const netContentBoxes = piecesData
         .map(piece => {
           const points = extractPathPoints(piece.pathOps || []);
@@ -430,41 +432,26 @@ function main() {
           const xs = transformed.map(point => point.x);
           const ys = transformed.map(point => point.y);
           return {
+            name: piece.name,
             minX: Math.min(...xs),
             maxX: Math.max(...xs),
             minY: Math.min(...ys),
             maxY: Math.max(...ys)
           };
         })
-        .filter((box): box is { minX: number; maxX: number; minY: number; maxY: number } => !!box);
+        .filter((box): box is { name: string; minX: number; maxX: number; minY: number; maxY: number } => !!box);
 
-      const contentScanXs = Array.from(new Set(
-        netContentBoxes.flatMap(box => [box.minX, box.maxX])
-      )).sort((a, b) => a - b);
-
-      let netContentMarkerLength = 0;
-      for (let i = 0; i < contentScanXs.length - 1; i++) {
-        const scanX = (contentScanXs[i] + contentScanXs[i + 1]) / 2;
-        const intervals = netContentBoxes
-          .filter(box => box.minX <= scanX && box.maxX >= scanX)
-          .map(box => [box.minY, box.maxY] as [number, number])
-          .sort((a, b) => a[0] - b[0]);
-
-        let unionLength = 0;
-        let current: [number, number] | null = null;
-        for (const interval of intervals) {
-          if (!current) {
-            current = [...interval];
-          } else if (interval[0] <= current[1]) {
-            current[1] = Math.max(current[1], interval[1]);
-          } else {
-            unionLength += current[1] - current[0];
-            current = [...interval];
-          }
-        }
-        if (current) unionLength += current[1] - current[0];
-        netContentMarkerLength = Math.max(netContentMarkerLength, unionLength);
-      }
+      const netContentStartCm = netContentBoxes.length > 0 ? Math.min(...netContentBoxes.map(box => box.minY)) : 0;
+      const netContentEndCm = netContentBoxes.length > 0 ? Math.max(...netContentBoxes.map(box => box.maxY)) : 0;
+      const netContentMarkerLength = netContentBoxes.length > 0 ? netContentEndCm - netContentStartCm : 0;
+      const netContentIntervals = netContentBoxes
+        .map(box => ({
+          pieceName: box.name,
+          startCm: roundCm(box.minY),
+          endCm: roundCm(box.maxY),
+          lengthCm: roundCm(box.maxY - box.minY)
+        }))
+        .sort((a, b) => a.startCm - b.startCm || a.pieceName.localeCompare(b.pieceName));
 
       const outputBounds = placedPolygons.reduce(
         (acc, inst) => {
@@ -513,6 +500,19 @@ function main() {
         markerLength: displayBounds.height,
         contentMarkerLength: displayBounds.height,
         productionMarkerLength: bounds.height,
+        markerLengthDetails: {
+          formula: 'netLengthCm = netEndCm - netStartCm',
+          spacingCm: nestingSpacing,
+          seamAllowanceCm: seamDist,
+          netStartCm: roundCm(netContentStartCm),
+          netEndCm: roundCm(netContentEndCm),
+          netLengthCm: roundCm(displayBounds.height),
+          occupiedStartCm: Number.isFinite(outputBounds.minY) ? roundCm(outputBounds.minY) : 0,
+          occupiedEndCm: Number.isFinite(outputBounds.maxY) ? roundCm(outputBounds.maxY) : roundCm(bounds.height),
+          occupiedLengthCm: roundCm(occupiedMarkerLength),
+          productionLengthCm: roundCm(bounds.height),
+          intervals: netContentIntervals
+        },
         utilization: renderedUtilization || 0,
         actualNestingUtilization: renderedUtilization || 0,
         totalArea: nestResult.totalArea || 0,

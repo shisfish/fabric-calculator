@@ -684,10 +684,12 @@ function renderCalcEngineResult(result, inputData) {
     const stats = nesting.statistics || {};
     const orderQuantity = parseInt(inputData.quantity) || 1;
     const netLengthCm =
-        nesting.contentMarkerLength ||
-        stats.contentFabricLength ||
+        nesting.productionMarkerLength ||
+        stats.productionFabricLength ||
         nesting.markerLength ||
         stats.displayFabricLength ||
+        nesting.contentMarkerLength ||
+        stats.contentFabricLength ||
         0;
     const perPieceLengthM = hasMultipleMaterials ? 0 : netLengthCm / 100;
     const totalOrderLengthM = perPieceLengthM * orderQuantity;
@@ -808,20 +810,33 @@ function renderCalcEngineResult(result, inputData) {
             const material = group.material || 'main';
             const materialName = group.material_name || MATERIAL_NAMES[material] || material;
             const groupLengthM = Number(group.per_piece_length_m) || 0;
+            const netLengthM = Number(group.net_length_m) || 0;
             const orderLengthM = groupLengthM * orderQuantity;
             const areaM2 = Number(group.total_area_m2) || 0;
             const orderAreaM2 = areaM2 * orderQuantity;
             const groupUtilization = Number(group.utilization_rate) || 0;
             const weightKg = inputData.fabric_weight_gsm ? (orderAreaM2 * inputData.fabric_weight_gsm / 1000) : 0;
             const color = ['#3b82f6', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed'][index % 5];
+            const lengthDetails = group.marker_length_details || {};
+            const intervals = Array.isArray(lengthDetails.intervals) ? lengthDetails.intervals : [];
+            const netStart = Number(lengthDetails.netStartCm ?? 0);
+            const netEnd = Number(lengthDetails.netEndCm ?? 0);
+            const netLengthCm = Number(lengthDetails.netLengthCm ?? netLengthM * 100);
+            const productionLengthCm = Number(lengthDetails.productionLengthCm ?? groupLengthM * 100);
+            const spacingCm = Number(lengthDetails.spacingCm ?? 0.5);
+            const seamAllowanceCm = Number(lengthDetails.seamAllowanceCm ?? 1.5);
 
             return `
                 <div class="card" style="border-left:4px solid ${color};margin:0 0 10px 0;">
                     <div style="font-size:16px;font-weight:600;margin-bottom:10px;">${materialName}</div>
                     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
                         <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
-                            <div style="font-size:12px;color:var(--text-secondary);">单件长度</div>
+                            <div style="font-size:12px;color:var(--text-secondary);">实裁长度</div>
                             <div style="font-size:15px;font-weight:600;">${formatMeterValue(groupLengthM, 3)} m</div>
+                        </div>
+                        <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
+                            <div style="font-size:12px;color:var(--text-secondary);">净排料长</div>
+                            <div style="font-size:15px;font-weight:600;">${formatMeterValue(netLengthM, 3)} m</div>
                         </div>
                         <div style="background:var(--bg-secondary);padding:8px 12px;border-radius:6px;">
                             <div style="font-size:12px;color:var(--text-secondary);">订单长度</div>
@@ -840,6 +855,20 @@ function renderCalcEngineResult(result, inputData) {
                             <div style="font-size:12px;color:var(--text-secondary);">重量</div>
                             <div style="font-size:15px;font-weight:600;">${weightKg.toFixed(3)} kg</div>
                         </div>
+                        ` : ''}
+                    </div>
+                    <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid var(--border-color);border-radius:6px;font-size:12px;color:#334155;line-height:1.7;">
+                        <div><strong>净长公式:</strong> ${netEnd.toFixed(2)} - ${netStart.toFixed(2)} = ${netLengthCm.toFixed(2)} cm</div>
+                        <div><strong>实裁长度:</strong> ${productionLengthCm.toFixed(2)} cm；裁片间距: ${spacingCm.toFixed(2)} cm；缝份: ${seamAllowanceCm.toFixed(2)} cm</div>
+                        ${intervals.length ? `
+                        <details style="margin-top:6px;">
+                            <summary style="cursor:pointer;color:#2563eb;">查看裁片长度区间</summary>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px;margin-top:6px;">
+                                ${intervals.map(item => `
+                                    <div>${item.pieceName}: ${Number(item.startCm).toFixed(2)} - ${Number(item.endCm).toFixed(2)} = ${Number(item.lengthCm).toFixed(2)} cm</div>
+                                `).join('')}
+                            </div>
+                        </details>
                         ` : ''}
                     </div>
                 </div>
@@ -893,7 +922,7 @@ function renderCalcEngineResult(result, inputData) {
 
     // 📐 排料图渲染（与CAD完全一致）
     if (nestingGroups.length > 1) {
-        renderCalcNestingGroups(nestingGroups, inputData.fabric_width);
+        renderCalcNestingGroupsV2(nestingGroups, inputData.fabric_width);
     } else if (nesting.pieces && nesting.positions) {
         console.log('[精确计算] 准备排料图数据...');
         console.log('[精确计算] result.nesting:', {
@@ -1322,6 +1351,40 @@ function renderCalcSeamAllowanceCanvas(canvas, outlineOps, seamOps, pieceName, p
 // 📐 CAD排料图渲染函数（完全复制自cad.js，用于精确计算）
 // ============================================================
 
+function renderCalcNestingGroupsV2(groups, fabricWidth) {
+    const container = document.getElementById('calc-nesting-container');
+    if (!container) return;
+
+    container.innerHTML = groups.map((group) => {
+        const material = group.material || 'main';
+        const materialName = group.material_name || MATERIAL_NAMES[material] || material;
+        const image = group.nesting_png_base64 || '';
+        const ext = image.startsWith('data:image/svg') ? 'svg' : 'png';
+        const netLengthM = Number(group.net_length_m) || 0;
+        const productionLengthM = Number(group.per_piece_length_m) || 0;
+        const details = group.marker_length_details || {};
+        const netStart = Number(details.netStartCm ?? 0);
+        const netEnd = Number(details.netEndCm ?? 0);
+
+        return `
+            <div style="width:100%;margin-bottom:18px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;">
+                    <strong style="font-size:15px;">${materialName}</strong>
+                    <span style="font-size:12px;color:var(--text-secondary);">
+                        净 ${formatMeterValue(netLengthM, 3)} m (${netEnd.toFixed(2)} - ${netStart.toFixed(2)} cm) · 实裁 ${formatMeterValue(productionLengthM, 3)} m · ${Number(group.utilization_rate || 0).toFixed(1)}%
+                    </span>
+                </div>
+                ${image ? `
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                        <img src="${image}" alt="${materialName} 排料图" style="max-width:100%;height:auto;border:1px solid var(--border-color, #e0e0e0);border-radius:4px;"/>
+                        <a href="${image}" download="calc_nesting_${material}.${ext}" style="font-size:13px;color:var(--primary,#3b82f6);text-decoration:none;padding:8px 16px;border:1px solid var(--primary,#3b82f6);border-radius:4px;display:inline-block;">下载排料图</a>
+                    </div>
+                ` : '<p style="color:var(--text-secondary);text-align:center;padding:20px;">暂无排料图</p>'}
+            </div>
+        `;
+    }).join('');
+}
+
 function renderCalcNestingGroups(groups, fabricWidth) {
     const container = document.getElementById('calc-nesting-container');
     if (!container) return;
@@ -1331,13 +1394,15 @@ function renderCalcNestingGroups(groups, fabricWidth) {
         const materialName = group.material_name || MATERIAL_NAMES[material] || material;
         const image = group.nesting_png_base64 || '';
         const ext = image.startsWith('data:image/svg') ? 'svg' : 'png';
+        const netLengthM = Number(group.net_length_m) || 0;
+        const productionLengthM = Number(group.per_piece_length_m) || 0;
 
         return `
             <div style="width:100%;margin-bottom:18px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px;">
                     <strong style="font-size:15px;">${materialName}</strong>
                     <span style="font-size:12px;color:var(--text-secondary);">
-                        ${formatMeterValue(group.per_piece_length_m || 0, 3)} m / 件 · ${Number(group.utilization_rate || 0).toFixed(1)}%
+                        净 ${formatMeterValue(netLengthM, 3)} m · 实裁 ${formatMeterValue(productionLengthM, 3)} m · ${Number(group.utilization_rate || 0).toFixed(1)}%
                     </span>
                 </div>
                 ${image ? `

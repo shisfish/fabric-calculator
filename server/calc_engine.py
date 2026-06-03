@@ -249,7 +249,14 @@ def _build_nesting_result(nesting_data, fabric_width, material=None, material_na
         or nesting_data.get("markerLength")
         or display_bounds.get("height", 0)
     )
-    per_piece_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+    production_marker_length_cm = (
+        nesting_data.get("productionMarkerLength")
+        or display_bounds.get("productionHeight")
+        or bounds.get("height", 0)
+        or content_marker_length_cm
+    )
+    net_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+    production_length_m = production_marker_length_cm / 100 if production_marker_length_cm > 0 else net_length_m
 
     result = {
         "pieces": pieces,
@@ -258,7 +265,10 @@ def _build_nesting_result(nesting_data, fabric_width, material=None, material_na
         "displayBounds": display_bounds,
         "nesting_svg": nesting_svg,
         "nesting_png_base64": nesting_png_base64,
-        "per_piece_length_m": round(per_piece_length_m, 3),
+        "per_piece_length_m": round(production_length_m, 3),
+        "net_length_m": round(net_length_m, 3),
+        "production_length_m": round(production_length_m, 3),
+        "marker_length_details": nesting_data.get("markerLengthDetails"),
         "total_area_m2": round(total_area_cm2 / 10000, 4),
         "utilization_rate": round(utilization, 1),
         "fabricInfo": fabric_info,
@@ -491,7 +501,9 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         # 计算统计数据
         total_area_cm2 = sum(p.get('area', 0) for p in pieces) if pieces else 0
         content_marker_length_cm = nesting_data.get("contentMarkerLength") or nesting_data.get("markerLength") or display_bounds.get("height", 0)
-        per_piece_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+        production_marker_length_cm = nesting_data.get("productionMarkerLength") or display_bounds.get("productionHeight") or bounds.get("height", 0) or content_marker_length_cm
+        net_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+        per_piece_length_m = production_marker_length_cm / 100 if production_marker_length_cm > 0 else net_length_m
         
         return {
             "success": True,
@@ -506,6 +518,9 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
                 
                 # 统计信息
                 "per_piece_length_m": round(per_piece_length_m, 3),
+                "net_length_m": round(net_length_m, 3),
+                "production_length_m": round(per_piece_length_m, 3),
+                "marker_length_details": nesting_data.get("markerLengthDetails"),
                 "total_area_m2": round(total_area_cm2 / 10000, 4),
                 "utilization_rate": round(utilization, 1),
                 "fabricInfo": fabric_info,
@@ -632,7 +647,9 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             # 计算统计数据
             total_area_cm2 = sum(p.get('area', 0) for p in pieces) if pieces else 0
             content_marker_length_cm = nesting_data.get("contentMarkerLength") or nesting_data.get("markerLength") or display_bounds.get("height", 0)
-            per_piece_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+            production_marker_length_cm = nesting_data.get("productionMarkerLength") or display_bounds.get("productionHeight") or bounds.get("height", 0) or content_marker_length_cm
+            net_length_m = content_marker_length_cm / 100 if content_marker_length_cm > 0 else 0
+            per_piece_length_m = production_marker_length_cm / 100 if production_marker_length_cm > 0 else net_length_m
             
             # 构建nesting对象（与CAD数据结构完全一致，包含statistics）
             nesting_result = {
@@ -643,6 +660,9 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 "nesting_svg": nesting_svg,
                 "nesting_png_base64": nesting_png_base64,
                 "per_piece_length_m": round(per_piece_length_m, 3),
+                "net_length_m": round(net_length_m, 3),
+                "production_length_m": round(per_piece_length_m, 3),
+                "marker_length_details": nesting_data.get("markerLengthDetails"),
                 "total_area_m2": round(total_area_cm2 / 10000, 4),
                 "utilization_rate": round(utilization, 1),
                 "fabricInfo": fabric_info,

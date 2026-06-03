@@ -1249,6 +1249,9 @@ def calc_all():
                 (group.get("material") or f"material_{idx}"): {
                     "name": group.get("material_name") or group.get("material") or f"material_{idx}",
                     "per_piece_length_m": group.get("per_piece_length_m", 0) or 0,
+                    "net_length_m": group.get("net_length_m", 0) or 0,
+                    "production_length_m": group.get("production_length_m", group.get("per_piece_length_m", 0)) or 0,
+                    "marker_length_details": group.get("marker_length_details"),
                     "total_length_m": round((group.get("per_piece_length_m", 0) or 0) * quantity, 3),
                     "per_piece_area_m2": group.get("total_area_m2", 0) or 0,
                     "total_area_m2": round((group.get("total_area_m2", 0) or 0) * quantity, 4),

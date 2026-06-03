@@ -879,7 +879,7 @@ def _generate_nesting_svg(pieces, positions, fabric_width, bounds=None, utilizat
     scale = min(base_scale, max_scale_by_h)
 
     # 横向排列：排料长度→水平，门幅→垂直
-    svg_w = int(frame_nest_h * scale + padding * 2)
+    svg_w = max(520, int(frame_nest_h * scale + padding * 2))
     svg_h = int(fabric_width * scale + padding * 2 + label_height)
 
     ff = _get_svg_font_family()
