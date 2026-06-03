@@ -350,7 +350,7 @@ export class NestEngine {
     if (area < 500) score += 20;
     else if (area < 1000) score += 10;
 
-    const fabricWidth = this.config.fabricWidth / 10;
+    const fabricWidth = this.config.fabricWidth;
     if (bb.width > fabricWidth * 0.8) score -= 40;
 
     return score;
@@ -368,11 +368,11 @@ export class NestEngine {
 
     if (isVeryLongNarrow) {
       category = 'long_narrow';
-      isAccessory = true;
+      isAccessory = false;
       placementPriority = -150;
     } else if (isLongNarrow) {
       category = 'long_narrow';
-      isAccessory = true;
+      isAccessory = false;
       placementPriority = -100;
     } else if (isVerySmall) {
       category = 'small_filler';
@@ -592,7 +592,7 @@ export class NestEngine {
       waste += overlapX * overlapY;
     }
 
-    const rightSpace = (this.config.fabricWidth / 10) - b.maxX;
+    const rightSpace = this.config.fabricWidth - b.maxX;
     const bottomSpace = this.config.fabricHeight - b.maxY;
     
     waste += rightSpace * b.height * 0.6;
@@ -1312,7 +1312,7 @@ export class NestEngine {
     }
 
     const heightIncrease = Math.max(0, maxY - currentHeight);
-    const rightSpace = (this.config.fabricWidth / 10) - bb.maxX;
+    const rightSpace = this.config.fabricWidth - bb.maxX;
     
     let score = heightIncrease * 1000;
     score += y * 2;
