@@ -162,12 +162,12 @@
                 ${renderImageGroup('裁片图', pieceImages, 'piece-image-card')}
                 ${!pieceImages.length && canRenderPiecePreview(full) ? `
                 <h4 class="detail-subtitle">裁片图</h4>
-                <div id="calc-piece-previews-container" class="detail-calc-preview-grid"></div>
+                ${renderPatternPreviewGroup(full.pattern?.pieces || [])}
                 ` : ''}
                 ${renderImageGroup('缝份图', seamImages, 'piece-image-card')}
                 ${!seamImages.length && canRenderSeamPreview(full) ? `
                 <h4 class="detail-subtitle">缝份图</h4>
-                <div id="calc-seam-allowance-container" class="detail-calc-preview-grid detail-calc-preview-grid-wide"></div>
+                ${renderSeamPreviewGroup(full.seam?.pieces || [])}
                 ` : ''}
                 ${renderImageGroup('排料图', nestingImages, 'nesting-image-card')}
                 ${!nestingImages.length && canRenderNestingPreview(full) ? `
@@ -239,11 +239,11 @@
     }
 
     function canRenderPiecePreview(full) {
-        return Array.isArray(full.pattern?.pieces) && full.pattern.pieces.length && typeof window.renderCalcPiecePreviews === 'function';
+        return Array.isArray(full.pattern?.pieces) && full.pattern.pieces.length;
     }
 
     function canRenderSeamPreview(full) {
-        return Array.isArray(full.seam?.pieces) && full.seam.pieces.length && typeof window.renderCalcSeamAllowancePreviews === 'function';
+        return Array.isArray(full.seam?.pieces) && full.seam.pieces.length;
     }
 
     function canRenderNestingPreview(full) {
@@ -254,7 +254,7 @@
     }
 
     function renderCalculatedPreviewContainers(full) {
-        if (canRenderPiecePreview(full) && document.getElementById('calc-piece-previews-container')) {
+        if (typeof window.renderCalcPiecePreviews === 'function' && document.getElementById('calc-piece-previews-container')) {
             window.renderCalcPiecePreviews({
                 pieces: (full.pattern.pieces || []).map(piece => ({
                     name: piece.name,
@@ -266,7 +266,7 @@
             });
         }
 
-        if (canRenderSeamPreview(full) && document.getElementById('calc-seam-allowance-container')) {
+        if (typeof window.renderCalcSeamAllowancePreviews === 'function' && document.getElementById('calc-seam-allowance-container')) {
             window.renderCalcSeamAllowancePreviews({
                 pieces: (full.seam.pieces || []).map(piece => ({
                     name: piece.name,
@@ -310,6 +310,141 @@
                 }).join('')}
             </div>
         `;
+    }
+
+    function renderPatternPreviewGroup(pieces) {
+        return `
+            <div class="detail-calc-preview-grid">
+                ${uniquePieces(pieces).map(piece => renderPathPreviewCard(piece, {
+                    title: piece.name || '裁片',
+                    fill: '#dbeafe',
+                    stroke: '#2563eb',
+                })).join('')}
+            </div>
+        `;
+    }
+
+    function renderSeamPreviewGroup(pieces) {
+        return `
+            <div class="detail-calc-preview-grid detail-calc-preview-grid-wide">
+                ${uniquePieces(pieces).map(piece => renderPathPreviewCard(piece, {
+                    title: `${piece.name || '裁片'} - 缝份`,
+                    fill: '#dbeafe',
+                    stroke: '#2563eb',
+                    seamFill: '#fef3c7',
+                    seamStroke: '#f59e0b',
+                })).join('')}
+            </div>
+        `;
+    }
+
+    function renderPathPreviewCard(piece, options) {
+        const pathOps = piece.pathOps || [];
+        const seamOps = piece.seamAllowancePathOps || [];
+        if (!pathOps.length) {
+            return `
+                <div class="card" style="padding:16px;text-align:center;">
+                    <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">${escapeHtml(options.title)}</div>
+                    <div style="color:var(--text-secondary);font-size:12px;">缺少路径数据</div>
+                </div>
+            `;
+        }
+
+        const bounds = getPathBounds([...pathOps, ...seamOps]);
+        const padding = Math.max(bounds.width, bounds.height) * 0.08 || 8;
+        const viewBox = [
+            bounds.minX - padding,
+            bounds.minY - padding,
+            bounds.width + padding * 2,
+            bounds.height + padding * 2,
+        ].join(' ');
+        const outline = pathOpsToD(pathOps);
+        const seam = pathOpsToD(seamOps);
+        const area = firstDefined(piece.area, piece.area_cm2);
+        const count = firstDefined(piece.cutCount, piece.quantity, piece.count);
+
+        return `
+            <div class="card" style="padding:16px;text-align:center;">
+                <div style="font-size:15px;font-weight:700;margin-bottom:10px;color:#1e293b;">
+                    ${escapeHtml(options.title)}${count > 1 ? ` ×${escapeHtml(count)}` : ''}
+                </div>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;min-height:300px;display:flex;align-items:center;justify-content:center;">
+                    <svg viewBox="${escapeAttr(viewBox)}" style="width:100%;max-height:360px;">
+                        ${seam ? `<path d="${escapeAttr(seam)}" fill="${options.seamFill}" stroke="${options.seamStroke}" stroke-width="1.4" vector-effect="non-scaling-stroke"></path>` : ''}
+                        <path d="${escapeAttr(outline)}" fill="${options.fill}" stroke="${options.stroke}" stroke-width="1.6" vector-effect="non-scaling-stroke"></path>
+                    </svg>
+                </div>
+                <div style="margin-top:10px;font-size:11px;color:#64748b;line-height:1.5;">
+                    <div><strong>尺寸:</strong> ${formatNumber(bounds.width, 1)} × ${formatNumber(bounds.height, 1)} cm</div>
+                    ${area ? `<div><strong>面积:</strong> ${formatNumber(area, 1)} cm²</div>` : ''}
+                    ${piece.onFold ? '<div style="color:#059669;">● 对折裁片</div>' : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    function uniquePieces(pieces) {
+        const seen = new Set();
+        return (pieces || []).filter(piece => {
+            const name = piece.name || '';
+            if (seen.has(name)) return false;
+            seen.add(name);
+            return true;
+        });
+    }
+
+    function pathOpsToD(pathOps) {
+        return (pathOps || []).map(op => {
+            switch (op.type) {
+                case 'move':
+                    return `M ${pointD(op.to)}`;
+                case 'line':
+                    return `L ${pointD(op.to)}`;
+                case 'quad':
+                    return `Q ${pointD(op.cp1)} ${pointD(op.to)}`;
+                case 'curve':
+                    return `C ${pointD(op.cp1)} ${pointD(op.cp2)} ${pointD(op.to)}`;
+                case 'close':
+                    return 'Z';
+                default:
+                    return '';
+            }
+        }).filter(Boolean).join(' ');
+    }
+
+    function pointD(point) {
+        if (!point) return '0 0';
+        return `${Number(point.x) || 0} ${Number(point.y) || 0}`;
+    }
+
+    function getPathBounds(pathOps) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        (pathOps || []).forEach(op => {
+            [op.to, op.cp1, op.cp2].forEach(point => {
+                if (!point) return;
+                minX = Math.min(minX, Number(point.x) || 0);
+                minY = Math.min(minY, Number(point.y) || 0);
+                maxX = Math.max(maxX, Number(point.x) || 0);
+                maxY = Math.max(maxY, Number(point.y) || 0);
+            });
+        });
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+            return { minX: 0, minY: 0, maxX: 100, maxY: 100, width: 100, height: 100 };
+        }
+
+        return {
+            minX,
+            minY,
+            maxX,
+            maxY,
+            width: Math.max(maxX - minX, 1),
+            height: Math.max(maxY - minY, 1),
+        };
     }
 
     function renderNestingData(full, materials) {
