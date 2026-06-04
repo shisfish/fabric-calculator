@@ -177,9 +177,7 @@
         if (full.pattern?.pattern_png_base64) {
             images.push({ name: '裁片图', image_base64: full.pattern.pattern_png_base64 });
         }
-        if (options?.mode !== 'live') {
-            images.push(...(full.piece_images || []));
-        } else if (!images.length) {
+        if (!images.length) {
             images.push(...(full.piece_images || []));
         }
         return normalizeImages(images, '裁片图');
@@ -190,9 +188,7 @@
         if (full.seam?.seam_png_base64) {
             images.push({ name: '缝份图', image_base64: full.seam.seam_png_base64 });
         }
-        if (options?.mode !== 'live') {
-            images.push(...(full.seam_images || []));
-        } else if (!images.length) {
+        if (!images.length) {
             images.push(...(full.seam_images || []));
         }
         return normalizeImages(images, '缝份图');
@@ -210,6 +206,11 @@
                     material_name: group.material_name || group.material || `排料图 ${index + 1}`,
                     image_base64: group.nesting_png_base64,
                 });
+            } else if (group?.nesting_svg) {
+                images.push({
+                    material_name: group.material_name || group.material || `排料图 ${index + 1}`,
+                    src: svgToDataUri(group.nesting_svg),
+                });
             }
         });
 
@@ -218,14 +219,23 @@
                 material_name: full.nesting.material_name || full.nesting.material || '排料图',
                 image_base64: full.nesting.nesting_png_base64,
             });
+        } else if (!images.length && full.nesting?.nesting_svg) {
+            images.push({
+                material_name: full.nesting.material_name || full.nesting.material || '排料图',
+                src: svgToDataUri(full.nesting.nesting_svg),
+            });
         }
 
-        if (options?.mode !== 'live') {
-            images.push(...(full.nesting_images || []));
-        } else if (!images.length) {
+        if (!images.length) {
             images.push(...(full.nesting_images || []));
         }
         return normalizeImages(images, '排料图');
+    }
+
+    function svgToDataUri(svg) {
+        if (!svg) return '';
+        if (String(svg).startsWith('data:image/svg')) return svg;
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     }
 
     function hasCalculatedPreviewData(full) {

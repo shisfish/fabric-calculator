@@ -63,6 +63,8 @@ def get_current_user():
     """获取当前登录用户信息"""
     if 'user_id' not in session:
         return None
+
+
     try:
         # ✅ 正确用法：使用上下文管理器方式获取连接
         with db_manager._get_connection() as conn:
@@ -82,6 +84,20 @@ def get_current_user():
 def hash_password(password):
     """密码哈希（SHA256）"""
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+def _image_ext_from_data_uri(data_uri, default='png'):
+    """Return a file extension that matches a data URI image payload."""
+    if not data_uri or not isinstance(data_uri, str):
+        return default
+    header = data_uri.split(',', 1)[0].lower() if data_uri.startswith('data:') else ''
+    if 'image/svg' in header:
+        return 'svg'
+    if 'image/jpeg' in header or 'image/jpg' in header:
+        return 'jpg'
+    if 'image/webp' in header:
+        return 'webp'
+    return default
 
 
 # ============================================================
@@ -1225,9 +1241,10 @@ def calc_all():
             
             nesting_images = []
             if nesting_data.get("nesting_png_base64"):
+                nesting_ext = _image_ext_from_data_uri(nesting_data.get("nesting_png_base64"))
                 nesting_images.append({
                     "material_name": "主面料",
-                    "file_path": f"/static/uploads/calc_{record_id}_nesting.png"
+                    "file_path": f"/static/uploads/calc_{record_id}_nesting.{nesting_ext}"
                 })
 
             per_piece_length_m = nesting_data.get("per_piece_length_m", 0) or 0
@@ -1237,10 +1254,11 @@ def calc_all():
                 if group.get("nesting_png_base64"):
                     material = group.get("material") or "main"
                     safe_material = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in material)
+                    nesting_ext = _image_ext_from_data_uri(group.get("nesting_png_base64"))
                     nesting_images.append({
                         "material": material,
                         "material_name": group.get("material_name") or material,
-                        "file_path": f"/static/uploads/calc_{record_id}_nesting_{idx}_{safe_material}.png"
+                        "file_path": f"/static/uploads/calc_{record_id}_nesting_{idx}_{safe_material}.{nesting_ext}"
                     })
             material_totals = {
                 (group.get("material") or f"material_{idx}"): {
@@ -1351,9 +1369,10 @@ def calc_all():
 
                 if nesting_data.get("nesting_png_base64"):
                     nest_b64 = nesting_data["nesting_png_base64"]
+                    nesting_ext = _image_ext_from_data_uri(nest_b64)
                     if nest_b64.startswith('data:'):
                         nest_b64 = nest_b64.split(',')[1]
-                    with open(f"{upload_dir}/calc_{record_id}_nesting.png", 'wb') as f:
+                    with open(f"{upload_dir}/calc_{record_id}_nesting.{nesting_ext}", 'wb') as f:
                         f.write(base64.b64decode(nest_b64))
                     print(f"  ✅ 排料图已保存")
 
@@ -1364,9 +1383,10 @@ def calc_all():
                     material = group.get("material") or "main"
                     safe_material = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in material)
                     group_b64 = group["nesting_png_base64"]
+                    nesting_ext = _image_ext_from_data_uri(group_b64)
                     if group_b64.startswith('data:'):
                         group_b64 = group_b64.split(',')[1]
-                    with open(f"{upload_dir}/calc_{record_id}_nesting_{idx}_{safe_material}.png", 'wb') as group_file:
+                    with open(f"{upload_dir}/calc_{record_id}_nesting_{idx}_{safe_material}.{nesting_ext}", 'wb') as group_file:
                         group_file.write(base64.b64decode(group_b64))
 
                 db_manager.save_record(record)
