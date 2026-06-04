@@ -1689,3 +1689,8 @@ function renderCalcNestingWithReact(result, fabricWidth) {
     console.log(`[精确计算] ✅ 排料图渲染完成`);
 }
 
+window.renderCalcPiecePreviews = renderCalcPiecePreviews;
+window.renderCalcSeamAllowancePreviews = renderCalcSeamAllowancePreviews;
+window.renderCalcNestingGroupsV4 = renderCalcNestingGroupsV4;
+window.renderCalcNestingWithReact = renderCalcNestingWithReact;
+

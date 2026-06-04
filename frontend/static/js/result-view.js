@@ -41,12 +41,14 @@
             </div>
             ` : ''}
 
-            ${renderImages(full)}
+            ${renderImages(full, options)}
 
             ${renderNestingData(full, materials)}
 
             ${renderPieces(full, record, inputData)}
         `;
+
+        renderCalculatedPreviewContainers(full);
     }
 
     function normalizeFullResult(result) {
@@ -147,20 +149,145 @@
         `;
     }
 
-    function renderImages(full) {
-        const pieceImages = normalizeImages(full.piece_images, '裁片图');
-        const seamImages = normalizeImages(full.seam_images, '缝份图');
-        const nestingImages = normalizeImages(full.nesting_images, '排料图');
-        if (!pieceImages.length && !seamImages.length && !nestingImages.length) return '';
+    function renderImages(full, options) {
+        const pieceImages = getPieceImages(full, options);
+        const seamImages = getSeamImages(full, options);
+        const nestingImages = getNestingImages(full, options);
+        const canRenderCalculatedPreviews = hasCalculatedPreviewData(full);
+        if (!pieceImages.length && !seamImages.length && !nestingImages.length && !canRenderCalculatedPreviews) return '';
 
         return `
             <div class="section">
                 <h3>🖼 图形展示</h3>
                 ${renderImageGroup('裁片图', pieceImages, 'piece-image-card')}
+                ${!pieceImages.length && canRenderPiecePreview(full) ? `
+                <h4 class="detail-subtitle">裁片图</h4>
+                <div id="calc-piece-previews-container" class="detail-calc-preview-grid"></div>
+                ` : ''}
                 ${renderImageGroup('缝份图', seamImages, 'piece-image-card')}
+                ${!seamImages.length && canRenderSeamPreview(full) ? `
+                <h4 class="detail-subtitle">缝份图</h4>
+                <div id="calc-seam-allowance-container" class="detail-calc-preview-grid detail-calc-preview-grid-wide"></div>
+                ` : ''}
                 ${renderImageGroup('排料图', nestingImages, 'nesting-image-card')}
+                ${!nestingImages.length && canRenderNestingPreview(full) ? `
+                <h4 class="detail-subtitle">排料图</h4>
+                <div id="calc-nesting-container" class="nesting-svg-container" style="margin-bottom:20px;"></div>
+                ` : ''}
             </div>
         `;
+    }
+
+    function getPieceImages(full, options) {
+        const images = [];
+        if (full.pattern?.pattern_png_base64) {
+            images.push({ name: '裁片图', image_base64: full.pattern.pattern_png_base64 });
+        }
+        if (options?.mode !== 'live') {
+            images.push(...(full.piece_images || []));
+        } else if (!images.length) {
+            images.push(...(full.piece_images || []));
+        }
+        return normalizeImages(images, '裁片图');
+    }
+
+    function getSeamImages(full, options) {
+        const images = [];
+        if (full.seam?.seam_png_base64) {
+            images.push({ name: '缝份图', image_base64: full.seam.seam_png_base64 });
+        }
+        if (options?.mode !== 'live') {
+            images.push(...(full.seam_images || []));
+        } else if (!images.length) {
+            images.push(...(full.seam_images || []));
+        }
+        return normalizeImages(images, '缝份图');
+    }
+
+    function getNestingImages(full, options) {
+        const images = [];
+        const groups = Array.isArray(full.nesting_groups) && full.nesting_groups.length
+            ? full.nesting_groups
+            : (full.nesting ? [full.nesting] : []);
+
+        groups.forEach((group, index) => {
+            if (group?.nesting_png_base64) {
+                images.push({
+                    material_name: group.material_name || group.material || `排料图 ${index + 1}`,
+                    image_base64: group.nesting_png_base64,
+                });
+            }
+        });
+
+        if (!images.length && full.nesting?.nesting_png_base64) {
+            images.push({
+                material_name: full.nesting.material_name || full.nesting.material || '排料图',
+                image_base64: full.nesting.nesting_png_base64,
+            });
+        }
+
+        if (options?.mode !== 'live') {
+            images.push(...(full.nesting_images || []));
+        } else if (!images.length) {
+            images.push(...(full.nesting_images || []));
+        }
+        return normalizeImages(images, '排料图');
+    }
+
+    function hasCalculatedPreviewData(full) {
+        return canRenderPiecePreview(full) || canRenderSeamPreview(full) || canRenderNestingPreview(full);
+    }
+
+    function canRenderPiecePreview(full) {
+        return Array.isArray(full.pattern?.pieces) && full.pattern.pieces.length && typeof window.renderCalcPiecePreviews === 'function';
+    }
+
+    function canRenderSeamPreview(full) {
+        return Array.isArray(full.seam?.pieces) && full.seam.pieces.length && typeof window.renderCalcSeamAllowancePreviews === 'function';
+    }
+
+    function canRenderNestingPreview(full) {
+        const hasGroups = Array.isArray(full.nesting_groups) && full.nesting_groups.length;
+        const hasSingle = full.nesting && (full.nesting.pieces || full.nesting.positions || full.nesting.nesting_svg || full.nesting.nesting_png_base64);
+        return (hasGroups && typeof window.renderCalcNestingGroupsV4 === 'function') ||
+            (hasSingle && typeof window.renderCalcNestingWithReact === 'function');
+    }
+
+    function renderCalculatedPreviewContainers(full) {
+        if (canRenderPiecePreview(full) && document.getElementById('calc-piece-previews-container')) {
+            window.renderCalcPiecePreviews({
+                pieces: (full.pattern.pieces || []).map(piece => ({
+                    name: piece.name,
+                    pathOps: piece.pathOps || [],
+                    cutCount: piece.cutCount || piece.quantity || 1,
+                    onFold: piece.onFold || false,
+                    area: piece.area,
+                })),
+            });
+        }
+
+        if (canRenderSeamPreview(full) && document.getElementById('calc-seam-allowance-container')) {
+            window.renderCalcSeamAllowancePreviews({
+                pieces: (full.seam.pieces || []).map(piece => ({
+                    name: piece.name,
+                    pathOps: piece.pathOps || [],
+                    seamAllowancePathOps: piece.seamAllowancePathOps || [],
+                    seamAllowance: piece.seamAllowance || 1.5,
+                    cutCount: piece.cutCount || piece.quantity || 1,
+                    onFold: piece.onFold || false,
+                })),
+            });
+        }
+
+        if (document.getElementById('calc-nesting-container')) {
+            if (Array.isArray(full.nesting_groups) && full.nesting_groups.length && typeof window.renderCalcNestingGroupsV4 === 'function') {
+                const fabricWidth = full.params?.fabric_width || full.params?.fabricWidth || full.metadata?.fabricWidth || 145;
+                window.renderCalcNestingGroupsV4(full.nesting_groups, fabricWidth);
+            } else if (full.nesting && typeof window.renderCalcNestingWithReact === 'function') {
+                const fabricWidth = full.params?.fabric_width || full.params?.fabricWidth || full.metadata?.fabricWidth || 145;
+                window.renderCalcNestingWithReact(full.nesting, fabricWidth);
+            }
+        }
     }
 
     function renderImageGroup(title, images, cardClass) {
