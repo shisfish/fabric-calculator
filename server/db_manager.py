@@ -530,7 +530,7 @@ class DatabaseManager:
             result.get('per_piece_length_m'),
             result.get('total_area_m2'),
             result.get('utilization_rate'),
-            result.get('fabric_weight_kg'),
+            None,
             result.get('main_fabric_per_piece_m'),
             result.get('lining_per_piece_m'),
             result.get('curved_pieces_count'),
@@ -795,9 +795,6 @@ class DatabaseManager:
             full_result['total_area_m2'] = float(row['total_area_m2'])
         if row.get('utilization_rate') is not None:
             full_result['utilization_rate'] = float(row['utilization_rate'])
-        if row.get('fabric_weight_kg') is not None:
-            full_result['fabric_weight_kg'] = float(row['fabric_weight_kg'])
-        
         return full_result
 
     def _ensure_snapshot_table(self, conn):
@@ -959,8 +956,6 @@ class DatabaseManager:
             result['total_area_m2'] = float(row['total_area_m2'])
         if row.get('utilization_rate') is not None:
             result['utilization_rate'] = float(row['utilization_rate'])
-        if row.get('fabric_weight_kg') is not None:
-            result['fabric_weight_kg'] = float(row['fabric_weight_kg'])
         if row.get('main_fabric_per_piece_m') is not None:
             result['main_fabric_per_piece_m'] = float(row['main_fabric_per_piece_m'])
         if row.get('lining_per_piece_m') is not None:

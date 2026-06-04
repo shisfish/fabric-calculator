@@ -89,12 +89,6 @@
             <h2>录入裁片数据</h2>
             <p class="panel-desc">手动填写各分片测量数据，支持多边形裁片（矩形、单切角、双切角）。</p>
 
-            <div class="toolbar">
-                <button class="btn btn-sm btn-outline" onclick="addPiece()">+ 添加裁片</button>
-                <button class="btn btn-sm btn-outline" onclick="resetPieces()">重置</button>
-                <span class="toolbar-hint">💡 提示：高度和宽度为裁片平铺后的最大尺寸（含缝份请额外加1-2cm）</span>
-            </div>
-
             <div class="table-container">
                 <table class="data-table" id="pieces-table">
                     <thead>
@@ -116,6 +110,12 @@
                         <!-- 动态加载 -->
                     </tbody>
                 </table>
+            </div>
+
+            <div class="toolbar">
+                <button class="btn btn-sm btn-outline" onclick="addPiece()">+ 添加裁片</button>
+                <button class="btn btn-sm btn-outline" onclick="resetPieces()">重置</button>
+                <span class="toolbar-hint">💡 提示：高度和宽度为裁片平铺后的最大尺寸（含缝份请额外加1-2cm）</span>
             </div>
 
             <!-- 裁片预览 -->

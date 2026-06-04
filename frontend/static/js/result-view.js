@@ -106,11 +106,6 @@
             record.result?.total_area_m2,
             sum(materials.map(item => toNumber(item.area_m2) * quantity))
         );
-        const weight = firstDefined(
-            full.fabric_weight_kg,
-            record.result?.fabric_weight_kg,
-            sum(materials.map(item => toNumber(item.weight_kg) * quantity))
-        );
         const utilization = firstDefined(
             full.utilization_rate,
             full.nesting?.utilization_rate,
@@ -124,7 +119,6 @@
             ['总面积', formatWithUnit(totalArea, 'm²')],
             ['门幅利用率', formatPercent(utilization)],
             ['材料种类', `${materials.length || 0} 种`],
-            ['总重量', formatWithUnit(weight, 'kg')],
         ];
 
         return cards.map(([label, value], index) => `

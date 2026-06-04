@@ -635,7 +635,6 @@ def calculate_curved():
                 "per_piece_length_m": result.get("per_piece_length_m"),
                 "total_area_m2": result.get("total_area_m2"),
                 "utilization_rate": result.get("utilization_rate"),
-                "fabric_weight_kg": result.get("fabric_weight_kg"),
                 "curved_pieces_count": result.get("curved_pieces_count", 0),
             },
             "input_data": data,
@@ -883,7 +882,6 @@ def api_polygon_nesting():
                 "per_piece_length_m": round(nesting_result["total_length_cm"] / 100, 3),
                 "total_area_m2": round(sum(m["area_m2"] for m in material_breakdown.values()), 4),
                 "utilization_rate": round(nesting_result["width_utilization"] * 100, 1),
-                "fabric_weight_kg": round(sum(m["weight_kg"] for m in material_breakdown.values()), 4),
                 "calculated_wastage_rate": round(calculated_wastage_rate, 1),
             },
             "input_data": data,
@@ -1041,7 +1039,6 @@ def cad_nesting():
                 "per_piece_length_m": result.get("per_piece_length_m"),
                 "total_area_m2": result.get("total_area_m2"),
                 "utilization_rate": result.get("utilization_rate"),
-                "fabric_weight_kg": result.get("fabric_weight_kg"),
                 "calculated_wastage_rate": result.get("calculated_wastage_rate"),
             },
             "input_data": data,
@@ -1290,7 +1287,6 @@ def calc_all():
                     "total_length_m": 0 if is_multi_material else round(per_piece_length_m * quantity, 3),
                     "total_area_m2": 0 if is_multi_material else round(per_piece_area_m2 * quantity, 4),
                     "utilization_rate": nesting_data.get("utilization_rate", 0),
-                    "fabric_weight_kg": 0 if is_multi_material else ((per_piece_area_m2 * quantity * data.get("fabricWeight", 0) / 1000) if data.get("fabricWeight") else 0),
                     "main_fabric_per_piece_m": 0 if is_multi_material else per_piece_length_m,
                     "lining_per_piece_m": 0,
                     "calculated_wastage_rate": round((100 - (nesting_data.get("utilization_rate", 0) or 0)), 1) if nesting_data.get("utilization_rate", 0) > 0 else 8,
@@ -1541,8 +1537,8 @@ def _build_basic_full_result(record):
     # 从 result 中复制基础统计数据
     if record.get("result"):
         result = record["result"]
-        for key in ["per_piece_length_m", "total_area_m2", "utilization_rate", 
-                    "fabric_weight_kg", "main_fabric_per_piece_m", "lining_per_piece_m",
+        for key in ["per_piece_length_m", "total_area_m2", "utilization_rate",
+                    "main_fabric_per_piece_m", "lining_per_piece_m",
                     "calculated_wastage_rate"]:
             if result.get(key) is not None:
                 full_result[key] = result[key]

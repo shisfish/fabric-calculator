@@ -499,11 +499,6 @@
             <div class="card" style="margin-top:20px;">
                 <h3>自定义配件</h3>
                 <p class="panel-desc" style="margin-bottom:12px;">添加口袋、配件等矩形裁片（默认矩形，缝份1.5cm）</p>
-                <div class="toolbar" style="margin-bottom:10px;">
-                    <button class="btn btn-sm btn-outline" onclick="addCustomPiece()">+ 添加裁片</button>
-                    <button class="btn btn-sm btn-outline" onclick="resetCustomPieces()">重置</button>
-                    <span class="toolbar-hint">💡 提示：高度和宽度为裁片平铺后的最大尺寸（含缝份请额外加1-2cm）</span>
-                </div>
                 <div class="table-container">
                     <table class="data-table" id="custom-pieces-table">
                         <thead>
@@ -518,6 +513,11 @@
                         <tbody id="custom-pieces-tbody">
                         </tbody>
                     </table>
+                </div>
+                <div class="toolbar" style="margin-top:10px;">
+                    <button class="btn btn-sm btn-outline" onclick="addCustomPiece()">+ 添加裁片</button>
+                    <button class="btn btn-sm btn-outline" onclick="resetCustomPieces()">重置</button>
+                    <span class="toolbar-hint">💡 提示：高度和宽度为裁片平铺后的最大尺寸（含缝份请额外加1-2cm）</span>
                 </div>
             </div>
             </div>
