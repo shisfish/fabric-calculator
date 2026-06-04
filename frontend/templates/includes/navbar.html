@@ -8,5 +8,26 @@
         <a href="/cad" class="nav-link {% if active_page == 'cad' %}active{% endif %}">CAD排料</a>
         <a href="/quotation" class="nav-link {% if active_page == 'quotation' %}active{% endif %}">报价管理</a>
         <a href="/history" class="nav-link {% if active_page == 'history' %}active{% endif %}">历史记录</a>
+        <a href="/login" class="nav-link nav-user-link nav-auth-slot" aria-label="用户入口"></a>
     </div>
 </nav>
+<script>
+    (function () {
+        try {
+            var slot = document.querySelector('.nav-auth-slot');
+            var raw = localStorage.getItem('auth_user_info');
+            var cacheTime = parseInt(localStorage.getItem('auth_cache_time') || '0', 10);
+            if (!slot || !raw || Date.now() - cacheTime > 30 * 60 * 1000) return;
+
+            var user = JSON.parse(raw);
+            var name = user && (user.nickname || user.username);
+            if (!name) return;
+
+            slot.className = 'nav-link nav-user-link nav-auth-slot auth-element';
+            slot.href = '/profile';
+            slot.setAttribute('aria-label', '个人中心');
+            slot.innerHTML = '<span class="nav-user-icon">👤</span><span class="nav-user-name"></span>';
+            slot.querySelector('.nav-user-name').textContent = name;
+        } catch (e) {}
+    })();
+</script>

@@ -108,27 +108,29 @@ const Auth = {
     updateNavbar() {
         const navLinks = document.querySelector('.nav-links');
         if (!navLinks) return;
+
+        let userLink = navLinks.querySelector('.nav-auth-slot');
+        if (!userLink) {
+            userLink = document.createElement('a');
+            navLinks.appendChild(userLink);
+        }
         
         // 移除旧的认证元素
-        navLinks.querySelectorAll('.auth-element').forEach(el => el.remove());
+        navLinks.querySelectorAll('.auth-element:not(.nav-auth-slot)').forEach(el => el.remove());
         
         if (this.currentUser) {
             // 已登录：显示用户名链接（点击进入个人中心）
-            const userLink = document.createElement('a');
-            userLink.className = 'nav-link nav-user-link auth-element';
+            userLink.className = 'nav-link nav-user-link nav-auth-slot auth-element';
             userLink.href = '/profile';
-            userLink.innerHTML = `<span class="nav-user-icon">👤</span><span class="nav-user-name">${this.currentUser.nickname || this.currentUser.username}</span>`;
-            
-            navLinks.appendChild(userLink);
+            userLink.setAttribute('aria-label', '个人中心');
+            userLink.innerHTML = '<span class="nav-user-icon">👤</span><span class="nav-user-name"></span>';
+            userLink.querySelector('.nav-user-name').textContent = this.currentUser.nickname || this.currentUser.username;
         } else {
             // 未登录：显示登录按钮
-            const loginBtn = document.createElement('a');
-            loginBtn.className = 'nav-link auth-element';
-            loginBtn.href = '/login';
-            loginBtn.textContent = '登录';
-            loginBtn.style.cssText = 'background:#2563eb;color:white;';
-            
-            navLinks.appendChild(loginBtn);
+            userLink.className = 'nav-link nav-user-link nav-auth-slot auth-element';
+            userLink.href = '/login';
+            userLink.setAttribute('aria-label', '登录');
+            userLink.textContent = '登录';
         }
     },
     
