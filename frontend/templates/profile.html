@@ -525,21 +525,8 @@
     </style>
 </head>
 <body>
-    <!-- 导航栏 -->
-    <nav class="navbar">
-        <div class="nav-brand">
-            <span class="nav-icon">✂️</span>
-            <span class="nav-title">面料用量快速计算系统</span>
-        </div>
-        <div class="nav-links">
-            <a href="/" class="nav-link">首页计算</a>
-            <a href="/cad" class="nav-link">CAD排料</a>
-            <a href="/history" class="nav-link">历史记录</a>
-            <a href="/quotation" class="nav-link">报价管理</a>
-            <a href="/profile" class="nav-link active">个人中心</a>
-            <button onclick="handleLogout()" class="btn btn-sm btn-outline" style="margin-left:12px;">退出登录</button>
-        </div>
-    </nav>
+    {% set active_page = 'profile' %}
+    {% include 'includes/navbar.html' %}
 
     <div class="profile-wrapper">
         <!-- 用户信息头部 -->
@@ -682,6 +669,7 @@
         </div>
     </div>
 
+    <script src="/static/js/auth.js?v=20260603a"></script>
     <script>
         let currentUser = null;
 

@@ -95,6 +95,24 @@ body {
     color: white;
 }
 
+.nav-user-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    padding-inline: 12px;
+}
+
+.nav-user-link:hover {
+    background: var(--bg);
+    color: var(--text);
+}
+
+.nav-user-icon {
+    font-size: 15px;
+    line-height: 1;
+}
+
 /* 容器 */
 .container {
     max-width: 1200px;
@@ -357,6 +375,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    text-decoration: none;
 }
 
 .btn-primary {

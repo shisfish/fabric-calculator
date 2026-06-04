@@ -115,29 +115,9 @@ const Auth = {
         if (this.currentUser) {
             // 已登录：显示用户名链接（点击进入个人中心）
             const userLink = document.createElement('a');
-            userLink.className = 'nav-link auth-element';
+            userLink.className = 'nav-link nav-user-link auth-element';
             userLink.href = '/profile';
-            userLink.innerHTML = `👤 <span class="nav-user-name">${this.currentUser.nickname || this.currentUser.username}</span>`;
-            userLink.style.cssText = `
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                color: #334155;
-                font-weight: 500;
-                font-size: 14px;
-                padding: 6px 12px;
-                border-radius: 8px;
-                transition: all 0.2s ease;
-                border: 1px solid transparent;
-            `;
-            userLink.onmouseenter = function() { 
-                this.style.background = '#f8fafc'; 
-                this.style.borderColor = '#e2e8f0'; 
-            };
-            userLink.onmouseleave = function() { 
-                this.style.background = ''; 
-                this.style.borderColor = 'transparent'; 
-            };
+            userLink.innerHTML = `<span class="nav-user-icon">👤</span><span class="nav-user-name">${this.currentUser.nickname || this.currentUser.username}</span>`;
             
             navLinks.appendChild(userLink);
         } else {
