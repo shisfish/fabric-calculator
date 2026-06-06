@@ -25,27 +25,29 @@
                 </div>
             </div>
 
+            ${type !== 'precise' ? `
             <div class="section">
                 <h3>📊 结果概览</h3>
                 <div class="result-cards">
                     ${renderSummaryCards(record, full, params, materials, type)}
                 </div>
             </div>
+            ` : ''}
 
             ${materials.length ? `
             <div class="section">
                 <h3>📦 材料分类汇总</h3>
                 <div class="detail-material-list">
-                    ${materials.map(renderMaterialCard).join('')}
+                    ${materials.map(item => renderMaterialCard(item, type)).join('')}
                 </div>
             </div>
             ` : ''}
 
-            ${renderImages(full, options)}
-
-            ${renderNestingData(full, materials)}
-
-            ${renderPieces(full, record, inputData)}
+            ${type === 'precise'
+                ? renderNestingImages(full)
+                : `${renderImages(full, options)}
+                   ${renderNestingData(full, materials)}
+                   ${renderPieces(full, record, inputData)}`}
         `;
 
         renderCalculatedPreviewContainers(full);
@@ -145,7 +147,7 @@
         `).join('');
     }
 
-    function renderMaterialCard(item) {
+    function renderMaterialCard(item, type) {
         return `
             <div class="card detail-material-card">
                 <div class="detail-material-title">${escapeHtml(item.name || item.material || '未命名材料')}</div>
@@ -153,12 +155,27 @@
                     ${metricCell('用料长度', formatWithUnit(item.length_m, 'm'))}
                     ${metricCell('排料长度', formatWithUnit(item.nesting_length_m, 'm'))}
                     ${metricCell('面积法长度', formatWithUnit(item.area_method_length_m, 'm'))}
-                    ${metricCell('面积', formatWithUnit(item.area_m2, 'm²'))}
+                    ${type !== 'precise' ? metricCell('面积', formatWithUnit(item.area_m2, 'm²')) : ''}
                     ${metricCell('面料门幅', formatWithUnit(item.fabric_width, 'cm'))}
                     ${metricCell('缩水率', formatPercent(item.shrinkage_rate, true))}
                     ${metricCell('门幅利用率', formatPercent(item.width_utilization))}
                 </div>
                 ${renderAreaMethodDetails(item.area_method_details)}
+            </div>
+        `;
+    }
+
+    function renderNestingImages(full) {
+        const nestingImages = getNestingImages(full);
+        if (!nestingImages.length && !canRenderNestingPreview(full)) return '';
+
+        return `
+            <div class="section">
+                <h3>📐 排料图</h3>
+                ${renderImageGroup('', nestingImages, 'nesting-image-card')}
+                ${!nestingImages.length && canRenderNestingPreview(full) ? `
+                    <div id="calc-nesting-container" class="nesting-svg-container" style="margin-bottom:20px;"></div>
+                ` : ''}
             </div>
         `;
     }
@@ -349,7 +366,7 @@
     function renderImageGroup(title, images, cardClass) {
         if (!images.length) return '';
         return `
-            <h4 class="detail-subtitle">${escapeHtml(title)}</h4>
+            ${title ? `<h4 class="detail-subtitle">${escapeHtml(title)}</h4>` : ''}
             <div class="detail-image-grid">
                 ${images.map(image => {
                     const src = image.file_path || image.src;
