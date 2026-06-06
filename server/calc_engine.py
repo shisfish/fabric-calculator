@@ -163,6 +163,30 @@ def _group_pieces_by_material(pieces):
     return groups
 
 
+def _normalize_fabrics(fabrics, fallback_width=145, fallback_shrinkage=0.5):
+    normalized = []
+    for index, fabric in enumerate(fabrics or []):
+        material_id = str(fabric.get("id") or fabric.get("material") or f"fabric_{index + 1}").strip()
+        if not material_id:
+            continue
+        normalized.append({
+            "id": material_id,
+            "name": str(fabric.get("name") or fabric.get("material_name") or material_id).strip(),
+            "fabric_type": fabric.get("fabric_type") or fabric.get("fabricType") or "woven",
+            "fabric_width": float(fabric.get("fabric_width", fabric.get("fabricWidth", fallback_width))),
+            "shrinkage_rate": float(fabric.get("shrinkage_rate", fabric.get("shrinkRate", fallback_shrinkage))),
+        })
+    if not normalized:
+        normalized.append({
+            "id": "main",
+            "name": "Main fabric",
+            "fabric_type": "woven",
+            "fabric_width": float(fallback_width),
+            "shrinkage_rate": float(fallback_shrinkage),
+        })
+    return normalized
+
+
 def _strip_render_payload(nesting_data):
     cleaned = deepcopy(nesting_data)
     cleaned.pop("nesting_svg", None)
@@ -570,7 +594,7 @@ def generate_nesting_layout(measurements, fabric_width=145, seam_allowance=1.0, 
         return {"success": False, "error": str(e)}
 
 
-def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, options=None):
+def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, options=None, fabrics=None):
     """
     一次性生成所有模块 - 独立计算模块（裁片图 + 缝份图 + 排料图）
     
@@ -585,6 +609,21 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
     """
     if options is None:
         options = {}
+
+    normalized_fabrics = _normalize_fabrics(
+        fabrics,
+        fallback_width=fabric_width,
+        fallback_shrinkage=options.get("shrinkage_rate", options.get("shrinkRate", 0.5)) or 0.5,
+    )
+    fabric_by_id = {fabric["id"]: fabric for fabric in normalized_fabrics}
+    default_fabric = normalized_fabrics[0]
+    first_piece = (measurements.get("pieces") or [{}])[0]
+    initial_fabric = fabric_by_id.get(first_piece.get("material"), default_fabric)
+    fabric_width = initial_fabric["fabric_width"]
+    options = {
+        **options,
+        "shrinkage_rate": initial_fabric["shrinkage_rate"],
+    }
 
     # 🔧 【关键修复】将measurements中的字段提取到顶层（匹配calc_runner期望的格式）
     shrinkage_rate = options.get("shrinkage_rate", options.get("shrinkRate"))
@@ -713,26 +752,44 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
         if len(material_groups) <= 1:
             if nesting_result:
                 material = material_groups[0]["material"] if material_groups else "main"
+                fabric = fabric_by_id.get(material, default_fabric)
                 nesting_result["material"] = material
-                nesting_result["material_name"] = _material_name(material)
+                nesting_result["material_name"] = fabric["name"]
+                nesting_result["fabric"] = fabric
+                nesting_result["fabric_width"] = fabric["fabric_width"]
+                nesting_result["shrinkage_rate"] = fabric["shrinkage_rate"]
                 nesting_groups = [nesting_result]
         else:
             for group in material_groups:
+                fabric = fabric_by_id.get(group["material"])
+                if not fabric:
+                    return {
+                        "success": False,
+                        "error": f"Piece material '{group['material']}' has no matching fabric configuration"
+                    }
                 group_measurements = {
                     **measurements,
                     "pieces": group["pieces"]
                 }
+                group_options = {
+                    **options,
+                    "shrinkage_rate": fabric["shrinkage_rate"],
+                    "shrinkage": None,
+                }
                 group_result = generate_nesting_layout(
                     group_measurements,
-                    fabric_width,
+                    fabric["fabric_width"],
                     seam_allowance,
-                    options
+                    group_options
                 )
                 if not group_result.get("success"):
                     return group_result
                 group_nesting = group_result.get("data") or {}
                 group_nesting["material"] = group["material"]
-                group_nesting["material_name"] = group["material_name"]
+                group_nesting["material_name"] = fabric["name"]
+                group_nesting["fabric"] = fabric
+                group_nesting["fabric_width"] = fabric["fabric_width"]
+                group_nesting["shrinkage_rate"] = fabric["shrinkage_rate"]
                 nesting_groups.append(group_nesting)
 
             if nesting_groups:
@@ -744,10 +801,11 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
             "seam": seam_data,
             "nesting": nesting_result,  # ✅ 新增排料数据（与CAD格式一致）
             "nesting_groups": nesting_groups,
+            "fabrics": normalized_fabrics,
             "metadata": {
                 "engine": "calc-engine (独立计算模块)",
                 "version": "1.0.0",
-                "fabricWidth": fabric_width,
+                "fabricWidth": default_fabric["fabric_width"],
                 "seamAllowance": seam_allowance
             }
         }

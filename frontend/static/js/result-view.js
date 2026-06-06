@@ -28,7 +28,7 @@
             <div class="section">
                 <h3>📊 结果概览</h3>
                 <div class="result-cards">
-                    ${renderSummaryCards(record, full, params, materials)}
+                    ${renderSummaryCards(record, full, params, materials, type)}
                 </div>
             </div>
 
@@ -63,6 +63,8 @@
                     weight_kg: item.weight_kg,
                     width_utilization: item.utilization_rate,
                     total_length_m: item.total_length_m,
+                    fabric_width: item.fabric_width,
+                    shrinkage_rate: item.shrinkage_rate,
                 };
             });
         }
@@ -70,18 +72,24 @@
     }
 
     function renderInfoItems(record, params, category, type, full) {
-        const items = [
+        const commonItems = [
             record.id ? ['记录ID', record.id] : null,
             ['计算类型', getTypeLabel(type)],
             ['服装品类', getCategoryName(category)],
             record.timestamp ? ['记录时间', record.timestamp] : null,
+            ['缝份', formatWithUnit(firstDefined(params.seam_allowance, params.seamAllowance, full.metadata?.seamAllowance), 'cm')],
+        ];
+        const parameterItems = type === 'precise'
+            ? [['面料种类', `${(params.fabrics || full.fabrics || []).length || (full.nesting_groups || []).length} 种`]]
+            : [
             ['面料门幅', formatWithUnit(firstDefined(params.fabric_width, params.fabricWidth, full.metadata?.fabricWidth), 'cm')],
             ['订单数量', formatWithUnit(firstDefined(params.quantity, record.result?.quantity), '件')],
             ['面料克重', formatWithUnit(firstDefined(params.fabric_weight_gsm, params.fabricWeight), 'g/m²')],
             ['缩水率', formatPercent(firstDefined(params.shrinkage_rate, params.shrinkRate), true)],
-            ['缝份', formatWithUnit(firstDefined(params.seam_allowance, params.seamAllowance, full.metadata?.seamAllowance), 'cm')],
             ['面料类型', firstDefined(params.fabric_type, params.fabricType)],
-        ].filter(item => item && item[1] !== undefined && item[1] !== null && item[1] !== '');
+        ];
+        const items = [...commonItems, ...parameterItems]
+            .filter(item => item && item[1] !== undefined && item[1] !== null && item[1] !== '');
 
         return items.map(([label, value]) => `
             <div class="detail-info-item">
@@ -91,7 +99,7 @@
         `).join('');
     }
 
-    function renderSummaryCards(record, full, params, materials) {
+    function renderSummaryCards(record, full, params, materials, type) {
         const quantity = Number(firstDefined(params.quantity, record.result?.quantity, 1)) || 1;
         const materialPerPieceLength = sum(materials.map(item => toNumber(item.length_m)));
         const rawPerPieceLength = firstDefined(
@@ -113,7 +121,12 @@
             average(materials.map(item => normalizePercentValue(item.width_utilization)).filter(value => value > 0))
         );
 
-        const cards = [
+        const cards = type === 'precise' ? [
+            ['单件合计用料', formatWithUnit(perPieceLength, 'm')],
+            ['合计面积', formatWithUnit(sum(materials.map(item => toNumber(item.area_m2))), 'm²')],
+            ['平均门幅利用率', formatPercent(utilization)],
+            ['面料种类', `${materials.length || 0} 种`],
+        ] : [
             ['单件用料', formatWithUnit(perPieceLength, 'm')],
             ['订单总长度', formatWithUnit(totalLength || (toNumber(perPieceLength) * quantity), 'm')],
             ['总面积', formatWithUnit(totalArea, 'm²')],
@@ -136,7 +149,8 @@
                 <div class="detail-metric-grid">
                     ${metricCell('用料长度', formatWithUnit(item.length_m, 'm'))}
                     ${metricCell('面积', formatWithUnit(item.area_m2, 'm²'))}
-                    ${metricCell('重量', formatWithUnit(item.weight_kg, 'kg'))}
+                    ${metricCell('面料门幅', formatWithUnit(item.fabric_width, 'cm'))}
+                    ${metricCell('缩水率', formatPercent(item.shrinkage_rate, true))}
                     ${metricCell('门幅利用率', formatPercent(item.width_utilization))}
                 </div>
             </div>
@@ -285,10 +299,10 @@
 
         if (document.getElementById('calc-nesting-container')) {
             if (Array.isArray(full.nesting_groups) && full.nesting_groups.length && typeof window.renderCalcNestingGroupsV4 === 'function') {
-                const fabricWidth = full.params?.fabric_width || full.params?.fabricWidth || full.metadata?.fabricWidth || 145;
+                const fabricWidth = full.nesting_groups[0]?.fabric_width || full.nesting_groups[0]?.fabric?.fabric_width || 145;
                 window.renderCalcNestingGroupsV4(full.nesting_groups, fabricWidth);
             } else if (full.nesting && typeof window.renderCalcNestingWithReact === 'function') {
-                const fabricWidth = full.params?.fabric_width || full.params?.fabricWidth || full.metadata?.fabricWidth || 145;
+                const fabricWidth = full.nesting.fabric_width || full.nesting.fabric?.fabric_width || full.metadata?.fabricWidth || 145;
                 window.renderCalcNestingWithReact(full.nesting, fabricWidth);
             }
         }
@@ -535,6 +549,8 @@
                 weight_kg: value.weight_kg,
                 width_utilization: firstDefined(value.width_utilization, value.utilization_rate),
                 total_length_m: value.total_length_m || (toNumber(firstDefined(value.length_m, value.per_piece_length_m)) * quantity),
+                fabric_width: value.fabric_width,
+                shrinkage_rate: value.shrinkage_rate,
             }));
         }
         if (Array.isArray(full.nesting_groups) && full.nesting_groups.length) {
@@ -546,6 +562,8 @@
                 weight_kg: group.weight_kg,
                 width_utilization: group.utilization_rate,
                 total_length_m: toNumber(group.per_piece_length_m) * quantity,
+                fabric_width: firstDefined(group.fabric_width, group.fabric?.fabric_width),
+                shrinkage_rate: firstDefined(group.shrinkage_rate, group.fabric?.shrinkage_rate),
             }));
         }
         return [];

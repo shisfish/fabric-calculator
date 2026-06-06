@@ -175,37 +175,11 @@
         <!-- Step 2: 设置参数 -->
         <div class="panel" id="panel-2">
             <h2>设置面料与工艺参数</h2>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label>面料门幅 (cm)</label>
-                    <input type="number" id="fabric-width" value="145" step="1" min="60" max="300">
-                    <span class="form-hint">常见门幅：140/145/148/150cm</span>
-                </div>
-                <div class="form-group">
-                    <label>面料克重 (g/m²)</label>
-                    <input type="number" id="fabric-weight" value="300" step="10" min="0">
-                    <span class="form-hint">留空则不计算重量</span>
-                </div>
-                <div class="form-group">
-                    <label>面料类型</label>
-                    <select id="fabric-type">
-                        <option value="woven">梭织面料</option>
-                        <option value="knit">针织面料</option>
-                        <option value="down_shell">羽绒服面料</option>
-                        <option value="lining">里布</option>
-                        <option value="interlining">衬布/粘合衬</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>缩水率 (%)</label>
-                    <input type="number" id="shrinkage-rate" value="3" step="0.5" min="0" max="20">
-                    <span class="form-hint">棉布3-5%，化纤1-3%，毛呢2-4%</span>
-                </div>
-                <div class="form-group">
-                    <label>订单数量 (件)</label>
-                    <input type="number" id="quantity" value="1" step="1" min="1">
-                    <span class="form-hint">小批量(<50件)建议增加损耗</span>
-                </div>
+            <p class="panel-desc">可添加多种面料。每种面料会按自己的门幅和缩水率独立排料。</p>
+            <div id="fabric-list" class="fabric-list"></div>
+            <div class="toolbar fabric-toolbar">
+                <button class="btn btn-sm btn-outline" type="button" onclick="addFabric()">+ 添加面料</button>
+                <span class="toolbar-hint">裁片录入中的“材料类型”将使用这里配置的面料。</span>
             </div>
             <div class="btn-group">
                 <button class="btn btn-secondary" onclick="goStep(1)">上一步</button>

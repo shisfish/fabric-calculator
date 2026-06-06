@@ -461,6 +461,41 @@ body {
     color: var(--text-secondary);
 }
 
+.fabric-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.fabric-card {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.2fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card-bg);
+}
+
+.fabric-card .form-group {
+    margin-bottom: 0;
+}
+
+.fabric-toolbar {
+    margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+    .fabric-card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .fabric-card-actions {
+        grid-column: 1 / -1;
+    }
+}
+
 /* 表格 */
 .table-container {
     overflow-x: auto;

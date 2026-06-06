@@ -244,10 +244,18 @@ class DatabaseManager:
         params = self._build_params(row)
         result = self._build_result(row)
         pieces = self._get_pieces(conn, row['id'])
+        fabrics = self._get_fabrics(conn, row['id']) if row['type'] == 'precise' else []
         quick_params = self._get_quick_params(conn, row['id']) if row['type'] == 'quick' else None
         piece_images, nesting_images, seam_images = self._get_images(conn, row['id'])
         # 从平铺表重新组装 input_data（用于重新计算）
         input_data = self._build_input_data(conn, row, pieces, quick_params)
+        if fabrics:
+            input_data["fabrics"] = fabrics
+            for key in ("fabric_width", "fabric_type", "fabric_weight_gsm", "shrinkage_rate", "quantity"):
+                input_data.pop(key, None)
+            params["fabrics"] = fabrics
+            for key in ("fabric_width", "fabric_type", "fabric_weight_gsm", "shrinkage_rate", "quantity"):
+                params.pop(key, None)
 
         # 组装 full_result（从各子表重建完整数据）
         full_result = self._build_full_result(conn, row, pieces, piece_images, nesting_images, seam_images)
@@ -381,6 +389,28 @@ class DatabaseManager:
                     ))
 
             # 4. ✅ 写材料用量汇总（所有类型共享）
+            if record['type'] == 'precise':
+                self._ensure_history_fabrics_table(conn)
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM history_fabrics WHERE history_id = %s", (record['id'],))
+                    for sort_order, fabric in enumerate(record.get('input_data', {}).get('fabrics', [])):
+                        cursor.execute("""
+                            INSERT INTO history_fabrics
+                            (history_id, fabric_id, fabric_name, fabric_type, fabric_width,
+                             shrinkage_rate, sort_order, user_id)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            record['id'],
+                            fabric.get('id'),
+                            fabric.get('name', ''),
+                            fabric.get('fabric_type', 'woven'),
+                            fabric.get('fabric_width'),
+                            fabric.get('shrinkage_rate', 0.5),
+                            sort_order,
+                            user_id,
+                        ))
+
+            # 5. ✅ 写材料用量汇总（所有类型共享）
             full_result = record.get('full_result', {})
             material_breakdown = full_result.get('material_breakdown', {})
             
@@ -415,7 +445,7 @@ class DatabaseManager:
             else:
                 print(f"[DB] ⚠️ 无 material_breakdown 数据，跳过保存")
 
-            # 5. ✅ 写图片路径（所有类型共享，包含 user_id）
+            # 6. ✅ 写图片路径（所有类型共享，包含 user_id）
             with conn.cursor() as cursor:
                 cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record['id'],))
                 piece_images = full_result.get('piece_images', [])
@@ -514,6 +544,7 @@ class DatabaseManager:
         }
         cat = record.get('category', '')
         cat_name = params.get('category', cat_names.get(cat, cat))
+        is_precise = record.get('type') == 'precise'
 
         return (
             record['id'],
@@ -521,12 +552,12 @@ class DatabaseManager:
             record['type'],
             cat,
             cat_name,
-            params.get('fabric_width') or input_data.get('fabric_width'),
-            params.get('fabric_type') or input_data.get('fabric_type'),
-            params.get('fabric_weight_gsm') or input_data.get('fabric_weight_gsm'),
-            params.get('shrinkage_rate') or input_data.get('shrinkage_rate'),
+            None if is_precise else (params.get('fabric_width') or input_data.get('fabric_width')),
+            None if is_precise else (params.get('fabric_type') or input_data.get('fabric_type')),
+            None if is_precise else (params.get('fabric_weight_gsm') or input_data.get('fabric_weight_gsm')),
+            None if is_precise else (params.get('shrinkage_rate') or input_data.get('shrinkage_rate')),
             params.get('wastage_rate') or input_data.get('wastage_rate'),
-            params.get('quantity') or input_data.get('quantity'),
+            None if is_precise else (params.get('quantity') or input_data.get('quantity')),
             result.get('per_piece_length_m'),
             result.get('total_area_m2'),
             result.get('utilization_rate'),
@@ -571,6 +602,47 @@ class DatabaseManager:
     # ============================================================
     # 子表查询
     # ============================================================
+
+    def _ensure_history_fabrics_table(self, conn):
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS history_fabrics (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    history_id VARCHAR(20) NOT NULL,
+                    fabric_id VARCHAR(80) NOT NULL,
+                    fabric_name VARCHAR(100) NOT NULL DEFAULT '',
+                    fabric_type VARCHAR(30) NOT NULL DEFAULT 'woven',
+                    fabric_width DECIMAL(8,2) NOT NULL,
+                    shrinkage_rate DECIMAL(5,2) NOT NULL DEFAULT 0.50,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    user_id INT NULL,
+                    INDEX idx_history_id (history_id),
+                    INDEX idx_user_id (user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+
+    def _get_fabrics(self, conn, history_id):
+        try:
+            self._ensure_history_fabrics_table(conn)
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT fabric_id, fabric_name, fabric_type, fabric_width, shrinkage_rate
+                    FROM history_fabrics
+                    WHERE history_id = %s
+                    ORDER BY sort_order, id
+                """, (history_id,))
+                rows = cursor.fetchall()
+        except Exception as e:
+            print(f"[DB] Failed to load history fabrics: {e}")
+            return []
+
+        return [{
+            "id": row["fabric_id"],
+            "name": row["fabric_name"],
+            "fabric_type": row["fabric_type"],
+            "fabric_width": float(row["fabric_width"]),
+            "shrinkage_rate": float(row["shrinkage_rate"]),
+        } for row in rows]
 
     def _get_materials_summary(self, conn, history_id):
         """获取材料用量汇总（用于历史列表显示）"""

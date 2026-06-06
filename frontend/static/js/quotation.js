@@ -38,13 +38,17 @@ function renderConsumptionInfo(data) {
             <div class="info-row"><span class="info-label">订单数量</span><span class="info-value">${data.params.quantity} 件</span></div>
         `;
     } else {
+        const preciseMaterials = Object.values(data.material_breakdown || {});
+        const fabrics = data.params?.fabrics || data.fabrics || [];
         html = `
             <div class="info-row"><span class="info-label">品类</span><span class="info-value">${data.params.category}</span></div>
-            <div class="info-row"><span class="info-label">面料门幅</span><span class="info-value">${data.params.fabric_width} cm</span></div>
-            <div class="info-row"><span class="info-label">单件用料长度</span><span class="info-value">${data.per_piece_length_m} 米</span></div>
-            <div class="info-row"><span class="info-label">总面积</span><span class="info-value">${data.total_area_m2} m²</span></div>
-            <div class="info-row"><span class="info-label">面料利用率</span><span class="info-value">${data.utilization_rate}%</span></div>
-            <div class="info-row"><span class="info-label">订单数量</span><span class="info-value">${data.params.quantity} 件</span></div>
+            <div class="info-row"><span class="info-label">面料种类</span><span class="info-value">${fabrics.length || preciseMaterials.length} 种</span></div>
+            ${preciseMaterials.map(material => `
+                <div class="info-row">
+                    <span class="info-label">${material.name || '面料'}</span>
+                    <span class="info-value">${material.length_m || 0} 米</span>
+                </div>
+            `).join('')}
         `;
     }
 

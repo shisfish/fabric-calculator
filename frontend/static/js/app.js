@@ -9,6 +9,17 @@ let lastCalcResult = null;
 const PRECISION_DRAFT_KEY = 'fabric_calculator_precise_draft';
 let restoringDraft = false;
 let pieceTemplateLoaded = false;  // 裁片模板是否已加载
+let fabrics = [];
+let fabricSequence = 0;
+
+const DEFAULT_SHRINKAGE_RATE = 0.5;
+const FABRIC_TYPE_OPTIONS = [
+    { value: "woven", label: "梭织面料" },
+    { value: "knit", label: "针织面料" },
+    { value: "down_shell", label: "羽绒服面料" },
+    { value: "lining", label: "里布" },
+    { value: "interlining", label: "衬布/粘合衬" },
+];
 
 function showLoading(show) {
     const loadingEl = document.getElementById('loading');
@@ -41,6 +52,7 @@ const MATERIAL_OPTIONS = [
     { value: "rib", label: "罗纹" },
     { value: "other", label: "其他" },
 ];
+const LEGACY_MATERIAL_NAMES = Object.fromEntries(MATERIAL_OPTIONS.map(item => [item.value, item.label]));
 
 // 形状选项
 const SHAPE_OPTIONS = [
@@ -52,6 +64,7 @@ const SHAPE_OPTIONS = [
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
+    setFabrics([createFabric({ id: 'main', name: '主面料' })]);
     loadCategories().then(() => {
         // 品类列表加载完成后，检查是否是编辑模式
         const urlParams = new URLSearchParams(window.location.search);
@@ -78,8 +91,127 @@ function startNewPrecisionCalculation() {
     currentCategory = null;
     categoryDetail = null;
     pieceTemplateLoaded = false;
+    setFabrics([createFabric({ id: 'main', name: '主面料' })]);
     window.history.replaceState(null, '', '/');
     goStep(1, true);
+}
+
+function createFabric(overrides = {}) {
+    fabricSequence += 1;
+    return {
+        id: overrides.id || `fabric_${Date.now()}_${fabricSequence}`,
+        name: overrides.name || `面料${fabricSequence}`,
+        fabric_type: overrides.fabric_type || overrides.type || 'woven',
+        fabric_width: Number(overrides.fabric_width ?? overrides.width ?? 145),
+        shrinkage_rate: Number(overrides.shrinkage_rate ?? overrides.shrinkage ?? DEFAULT_SHRINKAGE_RATE),
+    };
+}
+
+function normalizeFabric(fabric, index = 0) {
+    return createFabric({
+        id: fabric?.id || fabric?.material || (index === 0 ? 'main' : undefined),
+        name: fabric?.name || fabric?.material_name || (index === 0 ? '主面料' : `面料${index + 1}`),
+        fabric_type: fabric?.fabric_type || fabric?.fabricType || fabric?.type || 'woven',
+        fabric_width: fabric?.fabric_width ?? fabric?.fabricWidth ?? fabric?.width ?? 145,
+        shrinkage_rate: fabric?.shrinkage_rate ?? fabric?.shrinkRate ?? fabric?.shrinkage ?? DEFAULT_SHRINKAGE_RATE,
+    });
+}
+
+function setFabrics(nextFabrics) {
+    fabrics = (nextFabrics || []).map(normalizeFabric);
+    if (fabrics.length === 0) {
+        fabrics = [createFabric({ id: 'main', name: '主面料' })];
+    }
+    renderFabricList();
+    refreshPieceMaterialOptions();
+}
+
+function renderFabricList() {
+    const list = document.getElementById('fabric-list');
+    if (!list) return;
+    list.innerHTML = fabrics.map((fabric, index) => `
+        <div class="fabric-card" data-fabric-id="${fabric.id}">
+            <div class="form-group">
+                <label>面料名称</label>
+                <input type="text" value="${escapeAttribute(fabric.name)}" data-fabric-field="name" maxlength="50">
+            </div>
+            <div class="form-group">
+                <label>面料门幅 (cm)</label>
+                <input type="number" value="${fabric.fabric_width}" data-fabric-field="fabric_width" step="1" min="60" max="300">
+            </div>
+            <div class="form-group">
+                <label>面料类型</label>
+                <select data-fabric-field="fabric_type">
+                    ${FABRIC_TYPE_OPTIONS.map(option => `<option value="${option.value}" ${option.value === fabric.fabric_type ? 'selected' : ''}>${option.label}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>缩水率 (%)</label>
+                <input type="number" value="${fabric.shrinkage_rate}" data-fabric-field="shrinkage_rate" step="0.1" min="0" max="50">
+            </div>
+            <div class="fabric-card-actions">
+                <button class="btn btn-sm btn-danger" type="button" onclick="removeFabric('${fabric.id}')" ${fabrics.length === 1 ? 'disabled' : ''}>删除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function escapeAttribute(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+}
+
+function syncFabricsFromForm() {
+    document.querySelectorAll('#fabric-list .fabric-card').forEach(card => {
+        const fabric = fabrics.find(item => item.id === card.dataset.fabricId);
+        if (!fabric) return;
+        card.querySelectorAll('[data-fabric-field]').forEach(field => {
+            const key = field.dataset.fabricField;
+            fabric[key] = key === 'fabric_width' || key === 'shrinkage_rate'
+                ? Number(field.value)
+                : field.value.trim();
+        });
+    });
+}
+
+function addFabric() {
+    syncFabricsFromForm();
+    fabrics.push(createFabric({ name: `面料${fabrics.length + 1}` }));
+    renderFabricList();
+    refreshPieceMaterialOptions();
+    savePrecisionDraft();
+}
+
+function removeFabric(fabricId) {
+    if (fabrics.length <= 1) return;
+    const usedBy = collectPieceRows({ includeEmpty: true }).filter(piece => piece.material === fabricId);
+    if (usedBy.length > 0) {
+        alert(`该面料已被 ${usedBy.length} 个裁片使用，请先为这些裁片选择其他面料。`);
+        return;
+    }
+    fabrics = fabrics.filter(fabric => fabric.id !== fabricId);
+    renderFabricList();
+    refreshPieceMaterialOptions();
+    savePrecisionDraft();
+}
+
+function getFabricOptions(selectedId) {
+    const fallbackId = fabrics[0]?.id || 'main';
+    const selected = fabrics.some(fabric => fabric.id === selectedId) ? selectedId : fallbackId;
+    return fabrics.map(fabric =>
+        `<option value="${fabric.id}" ${fabric.id === selected ? 'selected' : ''}>${fabric.name}</option>`
+    ).join('');
+}
+
+function refreshPieceMaterialOptions() {
+    syncFabricsFromForm();
+    document.querySelectorAll('#pieces-tbody [data-field="material"]').forEach(select => {
+        const selected = select.value;
+        select.innerHTML = getFabricOptions(selected);
+    });
 }
 
 // 加载品类列表
@@ -147,14 +279,27 @@ function normalizeEditRecord(record) {
         record.full_result?.pieces_detail ||
         record.full_result?.pattern?.pieces ||
         [];
+    const storedFabrics = input.fabrics || params.fabrics || record.full_result?.fabrics || [];
+    const legacyMaterialIds = [...new Set(rawPieces.map(piece => piece.material || 'main'))];
+    const legacyFabrics = legacyMaterialIds.map((material, index) => ({
+        id: material,
+        name: LEGACY_MATERIAL_NAMES[material] || (index === 0 ? '主面料' : material),
+        fabric_width: input.fabric_width ?? input.fabricWidth ?? measurements.fabricWidth ?? params.fabric_width ?? 145,
+        fabric_type: material === 'lining' || material === 'interlining'
+            ? material
+            : (input.fabric_type ?? input.fabricType ?? params.fabric_type ?? 'woven'),
+        shrinkage_rate: input.shrinkage_rate ?? input.shrinkRate ?? input.fabricShrinkage ?? params.shrinkage_rate ?? DEFAULT_SHRINKAGE_RATE,
+    }));
 
     return {
         category: input.category || measurements.category || params.category || record.category || 'custom',
-        fabric_width: input.fabric_width ?? input.fabricWidth ?? measurements.fabricWidth ?? params.fabric_width,
-        fabric_type: input.fabric_type ?? input.fabricType ?? params.fabric_type,
-        fabric_weight_gsm: input.fabric_weight_gsm ?? input.fabricWeight ?? params.fabric_weight_gsm,
-        shrinkage_rate: input.shrinkage_rate ?? input.shrinkRate ?? input.fabricShrinkage ?? params.shrinkage_rate,
-        quantity: input.quantity ?? params.quantity,
+        fabrics: storedFabrics.length ? storedFabrics : (legacyFabrics.length ? legacyFabrics : [{
+            id: 'main',
+            name: '主面料',
+            fabric_width: 145,
+            fabric_type: 'woven',
+            shrinkage_rate: DEFAULT_SHRINKAGE_RATE,
+        }]),
         pieces: rawPieces.map(normalizeEditPiece),
     };
 }
@@ -177,15 +322,12 @@ async function fillEditData(data) {
         const category = data.category || 'custom';
         await selectCategory(category, { skipAutoStep: true });
 
-        applyFabricDraft({
-            width: data.fabric_width,
-            weight: data.fabric_weight_gsm,
-            type: data.fabric_type,
-            shrinkage: data.shrinkage_rate,
-            quantity: data.quantity,
-        });
+        applyFabricDraft(data.fabrics || []);
 
-        const pieces = (data.pieces || []).map(normalizeEditPiece);
+        const pieces = (data.pieces || []).map(normalizeEditPiece).map(piece => ({
+            ...piece,
+            material: resolveLegacyMaterialId(piece.material),
+        }));
 
         if (pieces.length > 0) {
             renderPieceRows(pieces);
@@ -206,22 +348,23 @@ function handlePrecisionDraftChange(event) {
     const target = event.target;
     if (!target || !target.closest) return;
     if (target.closest('#panel-2') || target.closest('#panel-3')) {
+        if (target.matches('[data-fabric-field]')) {
+            syncFabricsFromForm();
+            if (target.dataset.fabricField === 'name') {
+                refreshPieceMaterialOptions();
+            }
+        }
         savePrecisionDraft();
     }
 }
 
 function collectPrecisionDraft() {
+    syncFabricsFromForm();
     const activePanel = document.querySelector('.panel.active');
     return {
         category: currentCategory,
         step: activePanel?.id?.replace('panel-', '') || '1',
-        fabric: {
-            width: document.getElementById('fabric-width')?.value || '',
-            weight: document.getElementById('fabric-weight')?.value || '',
-            type: document.getElementById('fabric-type')?.value || '',
-            shrinkage: document.getElementById('shrinkage-rate')?.value || '',
-            quantity: document.getElementById('quantity')?.value || '',
-        },
+        fabrics: fabrics.map(fabric => ({ ...fabric })),
         pieces: collectPieceRows({ includeEmpty: true }),
         savedAt: Date.now(),
     };
@@ -262,9 +405,18 @@ async function restorePrecisionDraft() {
     restoringDraft = true;
     try {
         await selectCategory(draft.category, { skipAutoStep: true });
-        applyFabricDraft(draft.fabric || {});
+        applyFabricDraft(draft.fabrics || (draft.fabric ? [{
+            id: 'main',
+            name: '主面料',
+            fabric_width: draft.fabric.width,
+            fabric_type: draft.fabric.type,
+            shrinkage_rate: draft.fabric.shrinkage,
+        }] : []));
         if (draft.pieces && draft.pieces.length > 0) {
-            renderPieceRows(draft.pieces);
+            renderPieceRows(draft.pieces.map(piece => ({
+                ...piece,
+                material: resolveLegacyMaterialId(piece.material),
+            })));
             pieceTemplateLoaded = true;
         }
         goStep(Number(draft.step || 3), true);
@@ -273,20 +425,27 @@ async function restorePrecisionDraft() {
     }
 }
 
-function applyFabricDraft(fabric) {
-    const fields = {
-        'fabric-width': fabric.width,
-        'fabric-weight': fabric.weight,
-        'fabric-type': fabric.type,
-        'shrinkage-rate': fabric.shrinkage,
-        quantity: fabric.quantity,
+function applyFabricDraft(nextFabrics) {
+    setFabrics(nextFabrics);
+}
+
+function resolveLegacyMaterialId(material) {
+    if (fabrics.some(fabric => fabric.id === material)) return material;
+    const legacyNames = {
+        main: ['主面料', '面料'],
+        lining: ['里布', '里料'],
+        interlining: ['衬布', '粘合衬'],
+        filling_fabric_single: ['胆料(单层)', '胆料（单层）'],
+        filling_fabric_double: ['胆料(双层)', '胆料（双层）'],
+        rib: ['罗纹', '螺纹'],
+        other: ['其他'],
     };
-    Object.entries(fields).forEach(([id, value]) => {
-        const el = document.getElementById(id);
-        if (el && value !== undefined && value !== null && value !== '') {
-            el.value = value;
-        }
-    });
+    const candidates = legacyNames[material] || [];
+    const matched = fabrics.find(fabric =>
+        candidates.some(name => fabric.name.includes(name)) ||
+        fabric.fabric_type === material
+    );
+    return matched?.id || fabrics[0]?.id || 'main';
 }
 
 // 选择品类
@@ -305,7 +464,6 @@ async function selectCategory(catId, options = {}) {
         const data = await resp.json();
         if (data.success) {
             categoryDetail = data.data;
-            document.getElementById('shrinkage-rate').value = categoryDetail.default_shrinkage;
         }
     } catch (e) {
         console.error('加载品类详情失败:', e);
@@ -375,7 +533,7 @@ function loadPieceTemplate() {
             </td>
             <td>
                 <select class="inline-input" data-field="material">
-                    ${getDefaultMaterial(piece.id, MATERIAL_OPTIONS)}
+                    ${getFabricOptions(getDefaultMaterial(piece.id))}
                 </select>
             </td>
             <td>
@@ -401,7 +559,7 @@ function renderPieceRows(pieces) {
             </td>
             <td>
                 <select class="inline-input" data-field="material">
-                    ${MATERIAL_OPTIONS.map(o => `<option value="${o.value}" ${o.value === (piece.material || 'main') ? 'selected' : ''}>${o.label}</option>`).join('')}
+                    ${getFabricOptions(resolveLegacyMaterialId(piece.material || fabrics[0]?.id))}
                 </select>
             </td>
             <td>
@@ -441,7 +599,7 @@ function getDefaultCount(pieceId) {
 }
 
 // 获取默认材料类型
-function getDefaultMaterial(pieceId, options) {
+function getDefaultMaterial(pieceId) {
     const materialMap = {
         'lining': 'lining', 'interlining': 'interlining',
         'filling_fabric_single': 'filling_fabric_single',
@@ -450,9 +608,7 @@ function getDefaultMaterial(pieceId, options) {
         'cuff': 'rib', 'bottom_rib': 'rib', 'collar_rib': 'rib',
     };
     const defaultMat = materialMap[pieceId] || 'main';
-    return options.map(o =>
-        `<option value="${o.value}" ${o.value === defaultMat ? 'selected' : ''}>${o.label}</option>`
-    ).join('');
+    return resolveLegacyMaterialId(defaultMat);
 }
 
 // 添加裁片
@@ -471,7 +627,7 @@ function addPiece() {
         </td>
         <td>
             <select class="inline-input" data-field="material">
-                ${MATERIAL_OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+                ${getFabricOptions(fabrics[0]?.id)}
             </select>
         </td>
         <td>
@@ -534,28 +690,36 @@ async function calculate() {
     // ✅ 登录检查：未登录则跳转到登录页面
     if (!Auth.requireLogin('进行精确计算')) return;
 
+    syncFabricsFromForm();
     const pieces = collectPieces();
     if (pieces.length === 0) {
         alert('请至少填写一个裁片的尺寸数据（高度和宽度都必须大于0）');
         return;
     }
 
-    // 校验面料参数
-    const fabricWidth = parseFloat(document.getElementById('fabric-width').value);
-    const quantity = parseInt(document.getElementById('quantity').value);
-    const shrinkage = parseFloat(document.getElementById('shrinkage-rate').value);
-
-    if (!fabricWidth || fabricWidth < 60 || fabricWidth > 300) {
-        alert('面料门幅应在 60-300 cm 之间');
+    if (fabrics.length === 0) {
+        alert('请至少设置一种面料');
         return;
     }
-    if (!quantity || quantity < 1) {
-        alert('订单数量至少为 1');
-        return;
-    }
-    if (isNaN(shrinkage) || shrinkage < 0 || shrinkage > 50) {
-        alert('缩水率应在 0-50% 之间');
-        return;
+    const fabricNames = new Set();
+    for (const fabric of fabrics) {
+        if (!fabric.name) {
+            alert('请填写面料名称');
+            return;
+        }
+        if (fabricNames.has(fabric.name)) {
+            alert(`面料名称“${fabric.name}”重复，请使用不同名称`);
+            return;
+        }
+        fabricNames.add(fabric.name);
+        if (!fabric.fabric_width || fabric.fabric_width < 60 || fabric.fabric_width > 300) {
+            alert(`面料“${fabric.name}”的门幅应在 60-300 cm 之间`);
+            return;
+        }
+        if (!Number.isFinite(fabric.shrinkage_rate) || fabric.shrinkage_rate < 0 || fabric.shrinkage_rate > 50) {
+            alert(`面料“${fabric.name}”的缩水率应在 0-50% 之间`);
+            return;
+        }
     }
 
     // 校验裁片数据
@@ -576,15 +740,15 @@ async function calculate() {
             alert(`裁片"${p.name}"的数量至少为1`);
             return;
         }
+        if (!fabrics.some(fabric => fabric.id === p.material)) {
+            alert(`裁片"${p.name}"选择的面料不存在，请重新选择`);
+            return;
+        }
     }
 
     const data = {
         category: currentCategory,
-        fabric_width: parseFloat(document.getElementById('fabric-width').value) || 145,
-        fabric_type: document.getElementById('fabric-type').value,
-        fabric_weight_gsm: parseFloat(document.getElementById('fabric-weight').value) || 0,
-        shrinkage_rate: parseFloat(document.getElementById('shrinkage-rate').value) || 3,
-        quantity: parseInt(document.getElementById('quantity').value) || 1,
+        fabrics: fabrics.map(fabric => ({ ...fabric })),
         pieces: pieces,
     };
 
@@ -600,7 +764,6 @@ async function calculate() {
             body: JSON.stringify({
                 measurements: {
                     category: data.category,
-                    fabricWidth: data.fabric_width,
                     seamAllowance: 1.5,
                     pieces: data.pieces.map(p => ({
                         id: p.id,
@@ -612,12 +775,8 @@ async function calculate() {
                         onFold: false
                     }))
                 },
-                fabricWidth: data.fabric_width,
                 seamAllowance: 1.5,
-                fabricType: data.fabric_type,
-                fabricWeight: data.fabric_weight_gsm,
-                shrinkRate: data.shrinkage_rate,
-                quantity: data.quantity
+                fabrics: data.fabrics
             }),
             signal: controller.signal,
         });
@@ -712,11 +871,7 @@ function renderCalcEngineResult(result, inputData) {
                 ...result,
                 params: {
                     category: inputData.category,
-                    fabric_width: inputData.fabric_width,
-                    fabric_type: inputData.fabric_type,
-                    fabric_weight_gsm: inputData.fabric_weight_gsm,
-                    shrinkage_rate: inputData.shrinkage_rate,
-                    quantity: inputData.quantity,
+                    fabrics: inputData.fabrics,
                 },
             });
 

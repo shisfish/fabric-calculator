@@ -1202,21 +1202,74 @@ def calc_all():
             return jsonify({"success": False, "message": "请求数据为空"}), 400
 
         measurements = data.get("measurements", {})
-        fabric_width = float(data.get("fabricWidth", 145))
         seam_allowance = float(data.get("seamAllowance", 1.0))
         options = data.get("options", {})
-        options["shrinkage_rate"] = data.get("shrinkage_rate", data.get("shrinkRate"))
-        options["shrinkage"] = data.get("shrinkage") or data.get("fabricShrinkage")
+        raw_fabrics = data.get("fabrics")
+        if not raw_fabrics:
+            legacy_names = {
+                "main": "主面料",
+                "lining": "里布",
+                "interlining": "衬布",
+                "filling_fabric_single": "胆料(单层)",
+                "filling_fabric_double": "胆料(双层)",
+                "rib": "罗纹",
+                "other": "其他",
+            }
+            legacy_materials = []
+            for piece in measurements.get("pieces", []):
+                material = piece.get("material") or "main"
+                if material not in legacy_materials:
+                    legacy_materials.append(material)
+            raw_fabrics = [{
+                "id": material,
+                "name": legacy_names.get(material, material),
+                "fabric_type": data.get("fabricType", "woven"),
+                "fabric_width": data.get("fabricWidth", 145),
+                "shrinkage_rate": data.get("shrinkRate", data.get("shrinkage_rate", 0.5)),
+            } for material in (legacy_materials or ["main"])]
+        fabrics = []
+        fabric_ids = set()
+        for index, fabric in enumerate(raw_fabrics):
+            fabric_id = str(fabric.get("id") or f"fabric_{index + 1}").strip()
+            fabric_name = str(fabric.get("name") or f"面料{index + 1}").strip()
+            if not fabric_id or fabric_id in fabric_ids:
+                return jsonify({"success": False, "message": "面料标识不能为空或重复"}), 400
+            fabric_width = float(fabric.get("fabric_width", fabric.get("fabricWidth", 145)))
+            shrinkage_rate = float(fabric.get("shrinkage_rate", fabric.get("shrinkRate", 0.5)))
+            if fabric_width < 60 or fabric_width > 300:
+                return jsonify({"success": False, "message": f"面料“{fabric_name}”门幅应在60-300cm之间"}), 400
+            if shrinkage_rate < 0 or shrinkage_rate > 50:
+                return jsonify({"success": False, "message": f"面料“{fabric_name}”缩水率应在0-50%之间"}), 400
+            fabric_ids.add(fabric_id)
+            fabrics.append({
+                "id": fabric_id,
+                "name": fabric_name,
+                "fabric_type": fabric.get("fabric_type") or fabric.get("fabricType") or "woven",
+                "fabric_width": fabric_width,
+                "shrinkage_rate": shrinkage_rate,
+            })
+
+        for piece in measurements.get("pieces", []):
+            if (piece.get("material") or "main") not in fabric_ids:
+                return jsonify({
+                    "success": False,
+                    "message": f"裁片“{piece.get('name', '')}”引用了不存在的面料"
+                }), 400
 
         from calc_engine import generate_all_modules
-        result = generate_all_modules(measurements, fabric_width, seam_allowance, options)
+        result = generate_all_modules(
+            measurements,
+            fabrics[0]["fabric_width"],
+            seam_allowance,
+            options,
+            fabrics=fabrics,
+        )
 
         elapsed = time.time() - start_time
 
         if result["success"]:
             # ✅ 【新增】保存精确计算结果到数据库
             record_id = datetime.now().strftime("%Y%m%d%H%M%S")
-            quantity = int(data.get("quantity", 1) or 1)
             
             # 构建图片数据（用于保存到数据库）
             pattern_data = result.get("pattern", {})
@@ -1267,22 +1320,17 @@ def calc_all():
                     "net_length_m": group.get("net_length_m", 0) or 0,
                     "production_length_m": group.get("production_length_m", group.get("per_piece_length_m", 0)) or 0,
                     "marker_length_details": group.get("marker_length_details"),
-                    "total_length_m": round((group.get("per_piece_length_m", 0) or 0) * quantity, 3),
                     "per_piece_area_m2": group.get("total_area_m2", 0) or 0,
-                    "total_area_m2": round((group.get("total_area_m2", 0) or 0) * quantity, 4),
                     "utilization_rate": group.get("utilization_rate", 0) or 0,
+                    "fabric_width": group.get("fabric_width"),
+                    "shrinkage_rate": group.get("shrinkage_rate"),
                 }
                 for idx, group in enumerate(nesting_groups)
             }
             normalized_input_data = {
-                **data,
                 "category": measurements.get("category", "tshirt"),
-                "fabric_width": fabric_width,
                 "seam_allowance": seam_allowance,
-                "fabric_type": data.get("fabricType", "woven"),
-                "fabric_weight_gsm": data.get("fabricWeight", 0),
-                "shrinkage_rate": data.get("shrinkRate", 3),
-                "quantity": quantity,
+                "fabrics": fabrics,
                 "pieces": measurements.get("pieces", []),
             }
 
@@ -1292,18 +1340,13 @@ def calc_all():
                 "type": "precise",
                 "category": measurements.get("category", "tshirt"),
                 "params": {
-                    "fabric_width": fabric_width,
                     "seam_allowance": seam_allowance,
-                    "fabric_type": data.get("fabricType", "woven"),
-                    "fabric_weight_gsm": data.get("fabricWeight", 0),
-                    "shrinkage_rate": data.get("shrinkRate", 3),
-                    "quantity": quantity,
-                    **measurements
+                    "category": measurements.get("category", "tshirt"),
+                    "fabrics": fabrics,
                 },
                 "result": {
                     "per_piece_length_m": 0 if is_multi_material else per_piece_length_m,
-                    "total_length_m": 0 if is_multi_material else round(per_piece_length_m * quantity, 3),
-                    "total_area_m2": 0 if is_multi_material else round(per_piece_area_m2 * quantity, 4),
+                    "total_area_m2": 0 if is_multi_material else round(per_piece_area_m2, 4),
                     "utilization_rate": nesting_data.get("utilization_rate", 0),
                     "main_fabric_per_piece_m": 0 if is_multi_material else per_piece_length_m,
                     "lining_per_piece_m": 0,
@@ -1315,8 +1358,7 @@ def calc_all():
                     **result,
                     # ✅ 智能构建 material_breakdown（支持多种材料：主面料、罗纹、里布等）
                     "material_breakdown": _build_material_breakdown_from_nesting_groups(
-                        nesting_groups=nesting_groups,
-                        fabric_weight_gsm=data.get("fabricWeight", 0)
+                        nesting_groups=nesting_groups
                     ),
                     "piece_images": piece_images,
                     "seam_images": seam_images,
@@ -1345,9 +1387,7 @@ def calc_all():
                 print(f"\n[Calc-Engine] 📦 准备保存计算结果到数据库...")
                 print(f"  Record ID: {record_id}")
                 print(f"  Category: {record.get('category')}")
-                print(f"  Fabric Width: {record['params'].get('fabric_width')}")
-                print(f"  Fabric Type: {record['params'].get('fabric_type')}")
-                print(f"  Quantity: {record['params'].get('quantity')}")
+                print(f"  Fabrics: {[fabric['name'] for fabric in fabrics]}")
                 print(f"  Per Piece Length: {record['result'].get('per_piece_length_m')} m")
                 print(f"  Material Breakdown: {list(record['full_result'].get('material_breakdown', {}).keys())}")
 
@@ -1541,6 +1581,9 @@ def _build_material_breakdown_from_nesting_groups(nesting_groups, fabric_weight_
             "area_m2": round(area_m2, 4),
             "weight_kg": round((area_m2 * fabric_weight_gsm / 1000), 4) if fabric_weight_gsm else 0,
             "width_utilization": round(group.get("utilization_rate", 0) or 0, 1),
+            "fabric_width": group.get("fabric_width"),
+            "shrinkage_rate": group.get("shrinkage_rate"),
+            "fabric_type": (group.get("fabric") or {}).get("fabric_type"),
         }
     return material_breakdown
 

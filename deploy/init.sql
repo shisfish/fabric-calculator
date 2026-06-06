@@ -144,6 +144,24 @@ CREATE TABLE IF NOT EXISTS history_materials (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='计算历史材料汇总表';
 
 -- ========================================
+-- 表: history_fabrics
+-- 描述: 精确计算中用户配置的多面料参数
+-- ========================================
+CREATE TABLE IF NOT EXISTS history_fabrics (
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    history_id VARCHAR(20) NOT NULL COMMENT '关联 calculation_history.id',
+    fabric_id VARCHAR(80) NOT NULL COMMENT '面料稳定标识',
+    fabric_name VARCHAR(100) NOT NULL DEFAULT '' COMMENT '面料名称',
+    fabric_type VARCHAR(30) NOT NULL DEFAULT 'woven' COMMENT '面料类型',
+    fabric_width DECIMAL(8,2) NOT NULL COMMENT '面料门幅(cm)',
+    shrinkage_rate DECIMAL(5,2) NOT NULL DEFAULT 0.50 COMMENT '缩水率(%)',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT '显示顺序',
+    user_id INT NULL COMMENT '关联用户ID',
+    INDEX idx_history_id (history_id),
+    INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='精确计算面料配置表';
+
+-- ========================================
 -- 表: history_images
 -- 描述: 计算历史图片路径表
 -- ========================================
