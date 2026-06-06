@@ -12,6 +12,7 @@ import subprocess
 import json
 import os
 import hashlib
+import math
 from collections import Counter
 from copy import deepcopy
 
@@ -185,6 +186,49 @@ def _normalize_fabrics(fabrics, fallback_width=145, fallback_shrinkage=0.5):
             "shrinkage_rate": float(fallback_shrinkage),
         })
     return normalized
+
+
+def _piece_calculation_method(piece):
+    method = piece.get("calculation_method") or piece.get("calculationMethod") or "nesting"
+    return "area" if method == "area" else "nesting"
+
+
+def _calculate_area_method_piece(piece, fabric, seam_allowance):
+    crosswise_cm = float(piece.get("height", piece.get("length", 0)) or 0)
+    lengthwise_cm = float(piece.get("width", 0) or 0)
+    quantity = max(int(piece.get("quantity", piece.get("count", 1)) or 1), 1)
+    shrinkage_rate = float(fabric.get("shrinkage_rate", 0.5) or 0)
+    shrinkage_scale = 1 / (1 - shrinkage_rate / 100)
+
+    effective_crosswise_cm = (crosswise_cm + seam_allowance * 2) * shrinkage_scale
+    effective_lengthwise_cm = (lengthwise_cm + seam_allowance * 2) * shrinkage_scale
+    pieces_per_row = math.floor(float(fabric["fabric_width"]) / effective_crosswise_cm)
+    if pieces_per_row < 1:
+        raise ValueError(
+            f"Area-method piece '{piece.get('name', '')}' is wider than fabric "
+            f"({effective_crosswise_cm:.2f}cm > {float(fabric['fabric_width']):.2f}cm)"
+        )
+
+    raw_length_cm = effective_lengthwise_cm / pieces_per_row * quantity
+    rounded_length_cm = math.ceil(raw_length_cm)
+    total_area_cm2 = effective_crosswise_cm * effective_lengthwise_cm * quantity
+    return {
+        "id": piece.get("id", ""),
+        "name": piece.get("name", ""),
+        "material": piece.get("material") or fabric["id"],
+        "calculation_method": "area",
+        "quantity": quantity,
+        "original_crosswise_cm": round(crosswise_cm, 4),
+        "original_lengthwise_cm": round(lengthwise_cm, 4),
+        "effective_crosswise_cm": round(effective_crosswise_cm, 4),
+        "effective_lengthwise_cm": round(effective_lengthwise_cm, 4),
+        "pieces_per_row": pieces_per_row,
+        "raw_length_cm": round(raw_length_cm, 4),
+        "length_cm": rounded_length_cm,
+        "length_m": round(rounded_length_cm / 100, 4),
+        "area_cm2": round(total_area_cm2, 4),
+        "formula": "ceil(effective_lengthwise_cm / pieces_per_row * quantity)",
+    }
 
 
 def _strip_render_payload(nesting_data):
@@ -669,6 +713,18 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
         pattern_data = data.get("pattern", {})
         seam_data = data.get("seam", {})
         nesting_data = data.get("nesting", {})
+        source_piece_by_name = {
+            str(piece.get("name") or ""): piece
+            for piece in measurements.get("pieces", [])
+        }
+        for rendered_piece in pattern_data.get("pieces", []) or []:
+            source_piece = source_piece_by_name.get(str(rendered_piece.get("name") or ""), {})
+            rendered_piece["material"] = source_piece.get("material", "main")
+            rendered_piece["calculation_method"] = _piece_calculation_method(source_piece)
+        for rendered_piece in seam_data.get("pieces", []) or []:
+            source_piece = source_piece_by_name.get(str(rendered_piece.get("name") or ""), {})
+            rendered_piece["material"] = source_piece.get("material", "main")
+            rendered_piece["calculation_method"] = _piece_calculation_method(source_piece)
         nesting_data = _apply_best_nesting_cache(nesting_data, measurements, fabric_width, seam_allowance, options)
         
         # ✅ 【关键】直接使用calc-engine返回的nesting数据（不做任何转换！）
@@ -749,32 +805,32 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
 
         material_groups = _group_pieces_by_material(measurements.get("pieces", []))
         nesting_groups = []
-        if len(material_groups) <= 1:
-            if nesting_result:
-                material = material_groups[0]["material"] if material_groups else "main"
-                fabric = fabric_by_id.get(material, default_fabric)
-                nesting_result["material"] = material
-                nesting_result["material_name"] = fabric["name"]
-                nesting_result["fabric"] = fabric
-                nesting_result["fabric_width"] = fabric["fabric_width"]
-                nesting_result["shrinkage_rate"] = fabric["shrinkage_rate"]
-                nesting_groups = [nesting_result]
-        else:
-            for group in material_groups:
-                fabric = fabric_by_id.get(group["material"])
-                if not fabric:
-                    return {
-                        "success": False,
-                        "error": f"Piece material '{group['material']}' has no matching fabric configuration"
-                    }
+        for group in material_groups:
+            fabric = fabric_by_id.get(group["material"])
+            if not fabric:
+                return {
+                    "success": False,
+                    "error": f"Piece material '{group['material']}' has no matching fabric configuration"
+                }
+
+            nesting_pieces = [
+                piece for piece in group["pieces"]
+                if _piece_calculation_method(piece) == "nesting"
+            ]
+            area_pieces = [
+                piece for piece in group["pieces"]
+                if _piece_calculation_method(piece) == "area"
+            ]
+            group_options = {
+                **options,
+                "shrinkage_rate": fabric["shrinkage_rate"],
+                "shrinkage": None,
+            }
+
+            if nesting_pieces:
                 group_measurements = {
                     **measurements,
-                    "pieces": group["pieces"]
-                }
-                group_options = {
-                    **options,
-                    "shrinkage_rate": fabric["shrinkage_rate"],
-                    "shrinkage": None,
+                    "pieces": nesting_pieces
                 }
                 group_result = generate_nesting_layout(
                     group_measurements,
@@ -785,15 +841,67 @@ def generate_all_modules(measurements, fabric_width=145, seam_allowance=1.0, opt
                 if not group_result.get("success"):
                     return group_result
                 group_nesting = group_result.get("data") or {}
-                group_nesting["material"] = group["material"]
-                group_nesting["material_name"] = fabric["name"]
-                group_nesting["fabric"] = fabric
-                group_nesting["fabric_width"] = fabric["fabric_width"]
-                group_nesting["shrinkage_rate"] = fabric["shrinkage_rate"]
-                nesting_groups.append(group_nesting)
+            else:
+                group_nesting = {
+                    "pieces": [],
+                    "positions": [],
+                    "bounds": {"width": fabric["fabric_width"], "height": 0},
+                    "displayBounds": {"width": fabric["fabric_width"], "height": 0},
+                    "per_piece_length_m": 0,
+                    "net_length_m": 0,
+                    "production_length_m": 0,
+                    "total_area_m2": 0,
+                    "utilization_rate": 0,
+                    "statistics": {"totalPieces": 0, "totalArea": 0, "fabricLength": 0, "utilization": 0},
+                }
 
-            if nesting_groups:
-                nesting_result = nesting_groups[0]
+            try:
+                area_method_details = [
+                    _calculate_area_method_piece(piece, fabric, seam_allowance)
+                    for piece in area_pieces
+                ]
+            except ValueError as error:
+                return {"success": False, "error": str(error)}
+
+            nesting_length_m = float(group_nesting.get("per_piece_length_m", 0) or 0)
+            area_method_length_cm = sum(item["length_cm"] for item in area_method_details)
+            area_method_length_m = area_method_length_cm / 100
+            combined_length_m = nesting_length_m + area_method_length_m
+            nesting_area_m2 = float(group_nesting.get("total_area_m2", 0) or 0)
+            area_method_area_m2 = sum(item["area_cm2"] for item in area_method_details) / 10000
+            combined_area_m2 = nesting_area_m2 + area_method_area_m2
+            combined_fabric_area_m2 = fabric["fabric_width"] * (combined_length_m * 100) / 10000
+            combined_utilization = (
+                combined_area_m2 / combined_fabric_area_m2 * 100
+                if combined_fabric_area_m2 > 0 else 0
+            )
+
+            group_nesting["material"] = group["material"]
+            group_nesting["material_name"] = fabric["name"]
+            group_nesting["fabric"] = fabric
+            group_nesting["fabric_width"] = fabric["fabric_width"]
+            group_nesting["shrinkage_rate"] = fabric["shrinkage_rate"]
+            group_nesting["nesting_length_m"] = round(nesting_length_m, 4)
+            group_nesting["area_method_length_m"] = round(area_method_length_m, 4)
+            group_nesting["area_method_details"] = area_method_details
+            group_nesting["per_piece_length_m"] = round(combined_length_m, 4)
+            group_nesting["production_length_m"] = round(combined_length_m, 4)
+            group_nesting["total_area_m2"] = round(combined_area_m2, 4)
+            group_nesting["utilization_rate"] = round(combined_utilization, 1)
+            group_nesting["statistics"] = {
+                **(group_nesting.get("statistics") or {}),
+                "totalPieces": sum(
+                    max(int(piece.get("quantity", piece.get("count", 1)) or 1), 1)
+                    for piece in group["pieces"]
+                ),
+                "totalArea": round(combined_area_m2 * 10000, 4),
+                "fabricLength": round(combined_length_m * 100, 4),
+                "utilization": round(combined_utilization, 1),
+            }
+            nesting_groups.append(group_nesting)
+
+        if nesting_groups:
+            nesting_result = nesting_groups[0]
 
         return {
             "success": True,

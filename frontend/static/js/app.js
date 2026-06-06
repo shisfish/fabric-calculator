@@ -54,12 +54,9 @@ const MATERIAL_OPTIONS = [
 ];
 const LEGACY_MATERIAL_NAMES = Object.fromEntries(MATERIAL_OPTIONS.map(item => [item.value, item.label]));
 
-// 形状选项
-const SHAPE_OPTIONS = [
-    { value: "rectangle", label: "矩形" },
-    { value: "trapezoid", label: "梯形" },
-    { value: "triangle", label: "三角形" },
-    { value: "circle", label: "圆形" },
+const CALCULATION_METHOD_OPTIONS = [
+    { value: "nesting", label: "排料" },
+    { value: "area", label: "面积法" },
 ];
 
 // 页面初始化
@@ -305,13 +302,14 @@ function normalizeEditRecord(record) {
 }
 
 function normalizeEditPiece(piece) {
+    const method = piece.calculation_method || piece.calculationMethod || piece.calc_method;
     return {
         id: piece.id || piece.piece_id || '',
         name: piece.name || piece.piece_name || '',
         length: piece.length ?? piece.height ?? piece.original_length ?? piece.originalSize?.height ?? '',
         width: piece.width ?? piece.original_width ?? piece.originalSize?.width ?? '',
         count: piece.count ?? piece.quantity ?? piece.cutCount ?? piece.piece_count ?? 1,
-        shape: piece.shape || 'rectangle',
+        calculation_method: method === 'area' ? 'area' : 'nesting',
         material: piece.material || 'main',
     };
 }
@@ -527,8 +525,8 @@ function loadPieceTemplate() {
                 <input type="number" class="inline-input inline-input-sm" value="${piece.default_count || getDefaultCount(piece.id)}" data-field="count" min="1" step="1">
             </td>
             <td>
-                <select class="inline-input" data-field="shape">
-                    ${SHAPE_OPTIONS.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}
+                <select class="inline-input" data-field="calculation_method">
+                    ${CALCULATION_METHOD_OPTIONS.map(option => `<option value="${option.value}">${option.label}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -553,8 +551,8 @@ function renderPieceRows(pieces) {
             <td><input type="number" class="inline-input inline-input-sm" value="${piece.width || ''}" placeholder="0" data-field="width" step="0.5" min="0"></td>
             <td><input type="number" class="inline-input inline-input-sm" value="${piece.count || 1}" data-field="count" min="1" step="1"></td>
             <td>
-                <select class="inline-input" data-field="shape">
-                    ${SHAPE_OPTIONS.map(s => `<option value="${s.value}" ${s.value === (piece.shape || 'rectangle') ? 'selected' : ''}>${s.label}</option>`).join('')}
+                <select class="inline-input" data-field="calculation_method">
+                    ${CALCULATION_METHOD_OPTIONS.map(option => `<option value="${option.value}" ${option.value === (piece.calculation_method || 'nesting') ? 'selected' : ''}>${option.label}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -621,8 +619,8 @@ function addPiece() {
         <td><input type="number" class="inline-input inline-input-sm" placeholder="0" data-field="width" step="0.5" min="0"></td>
         <td><input type="number" class="inline-input inline-input-sm" value="1" data-field="count" min="1" step="1"></td>
         <td>
-            <select class="inline-input" data-field="shape">
-                ${SHAPE_OPTIONS.map(s => `<option value="${s.value}">${s.label}</option>`).join('')}
+            <select class="inline-input" data-field="calculation_method">
+                ${CALCULATION_METHOD_OPTIONS.map(option => `<option value="${option.value}">${option.label}</option>`).join('')}
             </select>
         </td>
         <td>
@@ -674,7 +672,7 @@ function collectPieceRows(options = {}) {
             length: includeEmpty ? lengthValue : length,
             width: includeEmpty ? widthValue : width,
             count: parseInt(row.querySelector('[data-field="count"]')?.value) || 1,
-            shape: row.querySelector('[data-field="shape"]')?.value || 'rectangle',
+            calculation_method: row.querySelector('[data-field="calculation_method"]')?.value || 'nesting',
             material: row.querySelector('[data-field="material"]')?.value || 'main',
         });
     });
@@ -772,6 +770,7 @@ async function calculate() {
                         height: p.length,
                         quantity: p.count,
                         material: p.material || 'main',
+                        calculation_method: p.calculation_method || 'nesting',
                         onFold: false
                     }))
                 },

@@ -1255,6 +1255,12 @@ def calc_all():
                     "success": False,
                     "message": f"裁片“{piece.get('name', '')}”引用了不存在的面料"
                 }), 400
+            method = piece.get("calculation_method") or piece.get("calculationMethod") or "nesting"
+            if method not in ("nesting", "area"):
+                return jsonify({
+                    "success": False,
+                    "message": f"裁片“{piece.get('name', '')}”计算方式无效"
+                }), 400
 
         from calc_engine import generate_all_modules
         result = generate_all_modules(
@@ -1324,6 +1330,9 @@ def calc_all():
                     "utilization_rate": group.get("utilization_rate", 0) or 0,
                     "fabric_width": group.get("fabric_width"),
                     "shrinkage_rate": group.get("shrinkage_rate"),
+                    "nesting_length_m": group.get("nesting_length_m", 0),
+                    "area_method_length_m": group.get("area_method_length_m", 0),
+                    "area_method_details": group.get("area_method_details", []),
                 }
                 for idx, group in enumerate(nesting_groups)
             }
@@ -1584,6 +1593,9 @@ def _build_material_breakdown_from_nesting_groups(nesting_groups, fabric_weight_
             "fabric_width": group.get("fabric_width"),
             "shrinkage_rate": group.get("shrinkage_rate"),
             "fabric_type": (group.get("fabric") or {}).get("fabric_type"),
+            "nesting_length_m": group.get("nesting_length_m", 0),
+            "area_method_length_m": group.get("area_method_length_m", 0),
+            "area_method_details": group.get("area_method_details", []),
         }
     return material_breakdown
 

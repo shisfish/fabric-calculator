@@ -65,6 +65,9 @@
                     total_length_m: item.total_length_m,
                     fabric_width: item.fabric_width,
                     shrinkage_rate: item.shrinkage_rate,
+                    nesting_length_m: item.nesting_length_m,
+                    area_method_length_m: item.area_method_length_m,
+                    area_method_details: item.area_method_details || [],
                 };
             });
         }
@@ -148,11 +151,46 @@
                 <div class="detail-material-title">${escapeHtml(item.name || item.material || '未命名材料')}</div>
                 <div class="detail-metric-grid">
                     ${metricCell('用料长度', formatWithUnit(item.length_m, 'm'))}
+                    ${metricCell('排料长度', formatWithUnit(item.nesting_length_m, 'm'))}
+                    ${metricCell('面积法长度', formatWithUnit(item.area_method_length_m, 'm'))}
                     ${metricCell('面积', formatWithUnit(item.area_m2, 'm²'))}
                     ${metricCell('面料门幅', formatWithUnit(item.fabric_width, 'cm'))}
                     ${metricCell('缩水率', formatPercent(item.shrinkage_rate, true))}
                     ${metricCell('门幅利用率', formatPercent(item.width_utilization))}
                 </div>
+                ${renderAreaMethodDetails(item.area_method_details)}
+            </div>
+        `;
+    }
+
+    function renderAreaMethodDetails(details) {
+        if (!Array.isArray(details) || !details.length) return '';
+        return `
+            <div class="table-container" style="margin-top:12px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>面积法裁片</th>
+                            <th>补偿后尺寸</th>
+                            <th>数量</th>
+                            <th>每排数量</th>
+                            <th>未进位长度</th>
+                            <th>进位后长度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${details.map(detail => `
+                            <tr>
+                                <td>${escapeHtml(detail.name || '-')}</td>
+                                <td>${escapeHtml(formatSize(detail.effective_crosswise_cm, detail.effective_lengthwise_cm))}</td>
+                                <td>${escapeHtml(String(detail.quantity || 0))}</td>
+                                <td>${escapeHtml(String(detail.pieces_per_row || 0))}</td>
+                                <td>${escapeHtml(formatWithUnit(detail.raw_length_cm, 'cm'))}</td>
+                                <td>${escapeHtml(formatWithUnit(detail.length_cm, 'cm'))}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
             </div>
         `;
     }
@@ -476,8 +514,9 @@
                         <thead>
                             <tr>
                                 <th>材料</th>
-                                <th>单件用料</th>
-                                <th>净长度</th>
+                                <th>排料长度</th>
+                                <th>面积法长度</th>
+                                <th>合计长度</th>
                                 <th>面积</th>
                                 <th>利用率</th>
                                 <th>裁片数</th>
@@ -487,8 +526,9 @@
                             ${rows.map(row => `
                                 <tr>
                                     <td>${escapeHtml(row.material_name || row.name || row.material || '未命名材料')}</td>
+                                    <td>${escapeHtml(formatWithUnit(firstDefined(row.nesting_length_m, row.net_length_m, 0), 'm'))}</td>
+                                    <td>${escapeHtml(formatWithUnit(firstDefined(row.area_method_length_m, 0), 'm'))}</td>
                                     <td>${escapeHtml(formatWithUnit(firstDefined(row.per_piece_length_m, row.length_m, row.production_length_m), 'm'))}</td>
-                                    <td>${escapeHtml(formatWithUnit(firstDefined(row.net_length_m, row.marker_length_m), 'm'))}</td>
                                     <td>${escapeHtml(formatWithUnit(firstDefined(row.total_area_m2, row.area_m2), 'm²'))}</td>
                                     <td>${escapeHtml(formatPercent(firstDefined(row.utilization_rate, row.width_utilization)))}</td>
                                     <td>${escapeHtml(String(getPieceCount(row)))}</td>
@@ -515,6 +555,7 @@
                                 <th>原始尺寸(cm)</th>
                                 <th>含缝份尺寸(cm)</th>
                                 <th>数量</th>
+                                <th>计算方式</th>
                                 <th>面积(cm²)</th>
                                 <th>材料</th>
                             </tr>
@@ -526,6 +567,7 @@
                                     <td>${escapeHtml(formatSize(firstDefined(piece.original_length, piece.length, piece.height, piece.originalSize?.height), firstDefined(piece.original_width, piece.width, piece.originalSize?.width)))}</td>
                                     <td>${escapeHtml(formatSize(piece.effective_length, piece.effective_width))}</td>
                                     <td>${escapeHtml(String(firstDefined(piece.count, piece.quantity, piece.cutCount, 1)))}</td>
+                                    <td>${escapeHtml((piece.calculation_method || piece.calculationMethod) === 'area' ? '面积法' : '排料')}</td>
                                     <td>${escapeHtml(formatNumber(firstDefined(piece.area_cm2, piece.area, piece.area_with_shrinkage_cm2)))}</td>
                                     <td>${escapeHtml(getMaterialName(piece.material || 'main'))}</td>
                                 </tr>
@@ -551,6 +593,9 @@
                 total_length_m: value.total_length_m || (toNumber(firstDefined(value.length_m, value.per_piece_length_m)) * quantity),
                 fabric_width: value.fabric_width,
                 shrinkage_rate: value.shrinkage_rate,
+                nesting_length_m: value.nesting_length_m,
+                area_method_length_m: value.area_method_length_m,
+                area_method_details: value.area_method_details || [],
             }));
         }
         if (Array.isArray(full.nesting_groups) && full.nesting_groups.length) {
@@ -564,6 +609,9 @@
                 total_length_m: toNumber(group.per_piece_length_m) * quantity,
                 fabric_width: firstDefined(group.fabric_width, group.fabric?.fabric_width),
                 shrinkage_rate: firstDefined(group.shrinkage_rate, group.fabric?.shrinkage_rate),
+                nesting_length_m: group.nesting_length_m,
+                area_method_length_m: group.area_method_length_m,
+                area_method_details: group.area_method_details || [],
             }));
         }
         return [];
@@ -585,10 +633,14 @@
     }
 
     function getPieceCount(row) {
+        const statisticsCount = firstDefined(row.statistics?.totalPieces, row.totalPieces);
+        if (statisticsCount !== undefined && statisticsCount !== null) {
+            return statisticsCount;
+        }
         if (Array.isArray(row.pieces)) {
             return row.pieces.reduce((total, piece) => total + (Number(firstDefined(piece.quantity, piece.count, piece.cutCount, 1)) || 0), 0);
         }
-        return firstDefined(row.totalPieces, row.statistics?.totalPieces, '-');
+        return '-';
     }
 
     function normalizeImages(images, fallbackName) {

@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS history_pieces (
     original_width DECIMAL(8,2) COMMENT '裁片原始宽度(cm)',
     piece_count INT DEFAULT 1 COMMENT '裁片数量',
     shape VARCHAR(20) COMMENT '形状: rectangle/trapezoid/triangle/circle',
+    calculation_method VARCHAR(20) NOT NULL DEFAULT 'nesting' COMMENT '计算方式: nesting/area',
     material VARCHAR(30) COMMENT '材料类型: main/lining/interlining/rib等',
     seam_allowance DECIMAL(5,2) COMMENT '缝份(cm)',
     piece_id VARCHAR(30) COMMENT '裁片标识ID',

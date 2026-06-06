@@ -345,17 +345,18 @@ class DatabaseManager:
                     cursor.execute("""
                         INSERT INTO history_pieces
                         (history_id, piece_name, original_length, original_width,
-                         piece_count, shape, material, seam_allowance,
+                         piece_count, shape, calculation_method, material, seam_allowance,
                          piece_id, shoulder_width, bicep_width, cuff_width,
                          user_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         record['id'],
                         p.get('name', ''),
                         length_val,
                         width_val,
                         p.get('count', 1),
-                        p.get('shape', ''),
+                        'rectangle',
+                        p.get('calculation_method', p.get('calculationMethod', 'nesting')),
                         p.get('material', ''),
                         p.get('seam_allowance'),
                         p.get('id', ''),
@@ -668,7 +669,7 @@ class DatabaseManager:
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT piece_name, original_length, original_width, piece_count,
-                       shape, material, seam_allowance, piece_id,
+                       shape, calculation_method, material, seam_allowance, piece_id,
                        shoulder_width, bicep_width, cuff_width
                 FROM history_pieces
                 WHERE history_id = %s
@@ -681,6 +682,7 @@ class DatabaseManager:
                     "length": float(r['original_length']) if r['original_length'] else 0,
                     "width": float(r['original_width']) if r['original_width'] else 0,
                     "count": int(r['piece_count']) if r['piece_count'] else 1,
+                    "calculation_method": r['calculation_method'] or 'nesting',
                     "material": r['material'] or '',
                     "seam_allowance": float(r['seam_allowance']) if r['seam_allowance'] else 0,
                 }
@@ -840,13 +842,13 @@ class DatabaseManager:
         if pieces:
             full_result['pieces_detail'] = [
                 {
-                    "name": p.get('piece_name', ''),
-                    "original_length": float(p.get('original_length', 0)) if p.get('original_length') else None,
-                    "original_width": float(p.get('original_width', 0)) if p.get('original_width') else None,
+                    "name": p.get('name', ''),
+                    "original_length": p.get('length'),
+                    "original_width": p.get('width'),
                     "effective_length": None,  # 历史记录可能没有此字段
                     "effective_width": None,
-                    "count": int(p.get('piece_count', 1)),
-                    "calc_method": p.get('shape', '矩形'),
+                    "count": int(p.get('count', 1)),
+                    "calculation_method": p.get('calculation_method', 'nesting'),
                     "area_cm2": None,
                     "area_with_shrinkage_cm2": None,
                     "material": p.get('material', ''),
@@ -855,7 +857,7 @@ class DatabaseManager:
                     "cuff_width": p.get('cuff_width'),
                 }
                 for p in pieces
-                if p.get('piece_name')  # 过滤空记录
+                if p.get('name')  # 过滤空记录
             ]
             
             print(f"[DB] ✅ _build_full_result: 从 history_pieces 加载 {len(full_result['pieces_detail'])} 个裁片")
@@ -1066,6 +1068,8 @@ class DatabaseManager:
                                 print(f"[警告] 删除文件失败 {full_path}: {e}")
 
                 cursor.execute("DELETE FROM history_pieces WHERE history_id = %s", (record_id,))
+                self._ensure_history_fabrics_table(conn)
+                cursor.execute("DELETE FROM history_fabrics WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM history_quick_params WHERE history_id = %s", (record_id,))
                 cursor.execute("DELETE FROM history_images WHERE history_id = %s", (record_id,))
                 self._ensure_snapshot_table(conn)
@@ -1093,6 +1097,8 @@ class DatabaseManager:
                                 print(f"[警告] 删除文件失败 {full_path}: {e}")
 
                 cursor.execute("TRUNCATE TABLE history_pieces")
+                self._ensure_history_fabrics_table(conn)
+                cursor.execute("TRUNCATE TABLE history_fabrics")
                 cursor.execute("TRUNCATE TABLE history_quick_params")
                 cursor.execute("TRUNCATE TABLE history_images")
                 self._ensure_snapshot_table(conn)
