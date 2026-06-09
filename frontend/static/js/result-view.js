@@ -684,20 +684,266 @@
         return `/static/${value}`;
     }
 
-    function getExportText(recordOrResult) {
+    function printReport(recordOrResult) {
+        const reportWindow = window.open('', '_blank');
+        if (!reportWindow) {
+            alert('浏览器阻止了报告窗口，请允许本站打开新窗口后重试');
+            return false;
+        }
+
+        reportWindow.document.open();
+        reportWindow.document.write(buildReportHtml(recordOrResult));
+        reportWindow.document.close();
+        return true;
+    }
+
+    function buildReportHtml(recordOrResult) {
         const record = recordOrResult.full_result ? recordOrResult : { full_result: recordOrResult };
         const full = normalizeFullResult(record.full_result || recordOrResult || {});
-        const materials = getMaterials(full, full.params || record.params || {});
-        return [
-            '=== 面料用量计算结果 ===',
-            '',
-            record.id ? `记录ID: ${record.id}` : null,
-            record.timestamp ? `记录时间: ${record.timestamp}` : null,
-            `计算类型: ${getTypeLabel(record.type || 'precise')}`,
-            '',
-            '--- 材料汇总 ---',
-            ...materials.map(item => `${item.name || item.material}: ${formatWithUnit(item.length_m, 'm')} / ${formatWithUnit(item.area_m2, 'm²')} / ${formatPercent(item.width_utilization)}`),
-        ].filter(Boolean).join('\n');
+        const inputData = record.input_data || {};
+        const params = full.params || record.params || inputData || {};
+        const type = record.type || 'precise';
+        const category = record.category || inputData.category || inputData.measurements?.category || params.category;
+        const materials = getMaterials(full, params);
+        const pieces = getPieces(full, record, inputData);
+        const nestingImages = getNestingImages(full).map(image => ({
+            ...image,
+            file_path: absoluteAssetUrl(image.file_path),
+        }));
+        const reportTime = record.timestamp || new Date().toLocaleString('zh-CN', { hour12: false });
+        const perPieceLength = sum(materials.map(item => toNumber(item.length_m)));
+        const totalArea = sum(materials.map(item => toNumber(item.area_m2)));
+        const utilizationValues = materials
+            .map(item => normalizePercentValue(item.width_utilization))
+            .filter(value => value > 0);
+
+        return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>${escapeHtml(getCategoryName(category))} - 面料用量计算报告</title>
+    <style>
+        @page { size: A4; margin: 12mm; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: #172033;
+            font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .report { max-width: 190mm; margin: 0 auto; }
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #2563eb;
+        }
+        h1 { margin: 0 0 4px; font-size: 24px; }
+        .subtitle, .muted { color: #64748b; }
+        .report-meta { text-align: right; white-space: nowrap; }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin: 14px 0;
+        }
+        .summary-item {
+            padding: 10px;
+            background: #f1f5f9;
+            border-radius: 6px;
+        }
+        .summary-item span { display: block; color: #64748b; font-size: 11px; }
+        .summary-item strong { display: block; margin-top: 2px; font-size: 16px; }
+        section { margin-top: 16px; break-inside: avoid; }
+        h2 {
+            margin: 0 0 8px;
+            padding-left: 8px;
+            border-left: 4px solid #2563eb;
+            font-size: 15px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            padding: 7px 8px;
+            border: 1px solid #cbd5e1;
+            text-align: left;
+            vertical-align: middle;
+        }
+        th { background: #eff6ff; color: #1e3a8a; font-weight: 600; }
+        tbody tr:nth-child(even) { background: #f8fafc; }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .info-item { padding: 8px 10px; border-right: 1px solid #e2e8f0; }
+        .info-item span { display: block; color: #64748b; font-size: 11px; }
+        .image-card {
+            margin-bottom: 12px;
+            padding: 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            break-inside: avoid;
+            text-align: center;
+        }
+        .image-card h3 { margin: 0 0 8px; font-size: 13px; text-align: left; }
+        .image-card img { display: block; max-width: 100%; max-height: 235mm; margin: 0 auto; }
+        .footer {
+            margin-top: 18px;
+            padding-top: 8px;
+            border-top: 1px solid #cbd5e1;
+            color: #94a3b8;
+            font-size: 10px;
+            text-align: center;
+        }
+        @media print {
+            .report { max-width: none; }
+            thead { display: table-header-group; }
+            tr, img { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <main class="report">
+        <header class="report-header">
+            <div>
+                <h1>面料用量计算报告</h1>
+                <div class="subtitle">${escapeHtml(getTypeLabel(type))} · ${escapeHtml(getCategoryName(category))}</div>
+            </div>
+            <div class="report-meta">
+                ${record.id ? `<div>记录编号：${escapeHtml(record.id)}</div>` : ''}
+                <div>报告时间：${escapeHtml(reportTime)}</div>
+            </div>
+        </header>
+
+        <div class="summary">
+            ${reportSummaryItem('单件合计用料', formatWithUnit(perPieceLength, 'm'))}
+            ${reportSummaryItem('合计面积', formatWithUnit(totalArea, 'm²'))}
+            ${reportSummaryItem('平均门幅利用率', utilizationValues.length ? `${average(utilizationValues).toFixed(1)}%` : '-')}
+            ${reportSummaryItem('面料种类', `${materials.length} 种`)}
+        </div>
+
+        <section>
+            <h2>基本信息</h2>
+            <div class="info-grid">
+                ${reportInfoItem('计算类型', getTypeLabel(type))}
+                ${reportInfoItem('服装品类', getCategoryName(category))}
+                ${reportInfoItem('缝份', formatWithUnit(firstDefined(params.seam_allowance, params.seamAllowance, full.metadata?.seamAllowance), 'cm'))}
+            </div>
+        </section>
+
+        ${materials.length ? `
+        <section>
+            <h2>材料用量汇总</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>材料</th>
+                        <th>门幅</th>
+                        <th>缩水率</th>
+                        <th>排料长度</th>
+                        <th>面积法长度</th>
+                        <th>合计用料</th>
+                        <th>面积</th>
+                        <th>利用率</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${materials.map(item => `
+                    <tr>
+                        <td>${escapeHtml(item.name || item.material || '-')}</td>
+                        <td>${escapeHtml(formatWithUnit(item.fabric_width, 'cm'))}</td>
+                        <td>${escapeHtml(formatPercent(item.shrinkage_rate, true))}</td>
+                        <td>${escapeHtml(formatWithUnit(item.nesting_length_m, 'm'))}</td>
+                        <td>${escapeHtml(formatWithUnit(item.area_method_length_m, 'm'))}</td>
+                        <td><strong>${escapeHtml(formatWithUnit(item.length_m, 'm'))}</strong></td>
+                        <td>${escapeHtml(formatWithUnit(item.area_m2, 'm²'))}</td>
+                        <td>${escapeHtml(formatPercent(item.width_utilization))}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </section>
+        ` : ''}
+
+        ${pieces.length ? `
+        <section>
+            <h2>裁片明细</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>裁片名称</th>
+                        <th>原始尺寸(cm)</th>
+                        <th>含缝份尺寸(cm)</th>
+                        <th>数量</th>
+                        <th>计算方式</th>
+                        <th>面积(cm²)</th>
+                        <th>材料</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pieces.map(piece => `
+                    <tr>
+                        <td>${escapeHtml(piece.name || '-')}</td>
+                        <td>${escapeHtml(formatSize(firstDefined(piece.original_length, piece.length, piece.height, piece.originalSize?.height), firstDefined(piece.original_width, piece.width, piece.originalSize?.width)))}</td>
+                        <td>${escapeHtml(formatSize(piece.effective_length, piece.effective_width))}</td>
+                        <td>${escapeHtml(String(firstDefined(piece.count, piece.quantity, piece.cutCount, 1)))}</td>
+                        <td>${escapeHtml((piece.calculation_method || piece.calculationMethod) === 'area' ? '面积法' : '排料')}</td>
+                        <td>${escapeHtml(formatNumber(firstDefined(piece.area_cm2, piece.area, piece.area_with_shrinkage_cm2)))}</td>
+                        <td>${escapeHtml(getMaterialName(piece.material || 'main'))}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </section>
+        ` : ''}
+
+        ${nestingImages.length ? `
+        <section>
+            <h2>排料图</h2>
+            ${nestingImages.map(image => `
+            <div class="image-card">
+                <h3>${escapeHtml(image.material_name || image.name || '排料图')}</h3>
+                <img src="${escapeAttr(image.file_path)}" alt="${escapeAttr(image.material_name || image.name || '排料图')}">
+            </div>
+            `).join('')}
+        </section>
+        ` : ''}
+
+        <div class="footer">面料用量快速计算系统生成 · 建议在正式生产前由版师复核</div>
+    </main>
+    <script>
+        window.addEventListener('load', function () {
+            var images = Array.from(document.images);
+            Promise.all(images.map(function (image) {
+                if (image.complete) return Promise.resolve();
+                return new Promise(function (resolve) {
+                    image.addEventListener('load', resolve, { once: true });
+                    image.addEventListener('error', resolve, { once: true });
+                });
+            })).then(function () {
+                window.setTimeout(function () { window.print(); }, 250);
+            });
+        });
+    </script>
+</body>
+</html>`;
+    }
+
+    function reportSummaryItem(label, value) {
+        return `<div class="summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value || '-'))}</strong></div>`;
+    }
+
+    function reportInfoItem(label, value) {
+        return `<div class="info-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value || '-'))}</strong></div>`;
+    }
+
+    function absoluteAssetUrl(path) {
+        if (!path || String(path).startsWith('data:')) return path || '';
+        return new URL(path, window.location.origin).href;
     }
 
     function metricCell(label, value) {
@@ -813,7 +1059,7 @@
 
     window.ResultView = {
         render,
-        getExportText,
+        printReport,
         normalizeFullResult,
     };
 })();

@@ -144,8 +144,7 @@ fabric-calculator/
 │   │   ├── quick.js            # 快速估算页面逻辑
 │   │   ├── quotation.js        # 报价管理页面逻辑
 │   │   ├── history.js          # 历史记录页面逻辑
-│   │   ├── curves.js           # 曲线模型页面逻辑
-│   │   └── image-tool.js       # AI图片识别逻辑
+│   │   └── curves.js           # 曲线模型页面逻辑
 │   └── calc_images/            # 裁片图片缓存
 │
 ├── templates/                  # HTML模板

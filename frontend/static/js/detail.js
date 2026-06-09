@@ -83,19 +83,16 @@ function exportDetailResult() {
         return;
     }
 
-    const text = ResultView.getExportText(currentRecord);
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `用量计算_${currentRecord.id}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (!window.ResultView?.printReport) {
+        alert('报告组件未加载，请刷新页面后重试');
+        return;
+    }
+    ResultView.printReport(currentRecord);
 }
 
 function goToQuotationFromDetail() {
     if (currentRecord) {
-        sessionStorage.setItem('consumptionData', JSON.stringify(currentRecord.full_result || currentRecord.result || {}));
+        sessionStorage.setItem('consumptionData', JSON.stringify(currentRecord));
     }
     window.location.href = '/quotation';
 }

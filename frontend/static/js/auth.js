@@ -271,7 +271,7 @@ const Auth = {
     requireLogin(actionName = '此操作') {
         if (this.isLoggedIn()) return true;
         
-        alert(`⚠️ 请先登录后再${actionName}\n\n即将跳转到登录页面...`);
+        alert(`请先登录后再${actionName}\n\n即将跳转到登录页面...`);
         sessionStorage.setItem('redirect_after_login', window.location.href);
         window.location.href = '/login';
         return false;

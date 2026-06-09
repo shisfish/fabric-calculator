@@ -529,84 +529,6 @@ class QuickEstimator {
 
 ---
 
-### 3.6 AI图片识别 (image-tool.js)
-
-#### 文件位置
-[static/js/image-tool.js](file:///Users/shisfish/Documents/garment-workspace/fabric-calculator/static/js/image-tool.js)
-
-#### 功能职责
-
-- 图片上传
-- 参照物标定
-- 裁片区域框选
-- 测量结果自动填表
-
-#### 核心功能
-
-```javascript
-class ImageMeasurementTool {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
-    this.sessionId = null;
-    this.calibrated = false;
-    this.pieces = [];
-  }
-
-  async uploadImage(imageData) {
-    const formData = new FormData();
-    formData.append('image_data', imageData);
-    
-    const response = await fetch('/api/image/upload', {
-      method: 'POST',
-      body: formData
-    });
-    
-    const result = await response.json();
-    this.sessionId = result.data.session_id;
-    this.drawImage(imageData);
-  }
-
-  async calibrate(refRect, refLengthCm) {
-    const response = await fetch('/api/image/calibrate', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        session_id: this.sessionId,
-        ref_rect: refRect,
-        ref_length_cm: refLengthCm
-      })
-    });
-    
-    const result = await response.json();
-    this.calibrated = true;
-  }
-
-  async measurePiece(pieceName, rect) {
-    const response = await fetch('/api/image/measure', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        session_id: this.sessionId,
-        pieces: [{name: pieceName, rect: rect}]
-      })
-    });
-    
-    const result = await response.json();
-    this.pieces.push(result.data[0]);
-  }
-
-  fillTable() {
-    this.pieces.forEach(piece => {
-      document.getElementById(`piece-${piece.name}-length`).value = piece.length_cm;
-      document.getElementById(`piece-${piece.name}-width`).value = piece.width_cm;
-    });
-  }
-}
-```
-
----
-
 ## 四、样式模块
 
 ### 4.1 主样式 (style.css)
@@ -675,9 +597,6 @@ app.js
 
 quick.js
   └── 后端API (/api/quick-estimate)
-
-image-tool.js
-  └── 后端API (/api/image/*)
 ```
 
 ---

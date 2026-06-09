@@ -6,105 +6,166 @@ let consumptionData = null;
 let lastQuotationResult = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // 从 sessionStorage 读取用量数据
     const stored = sessionStorage.getItem('consumptionData');
     if (stored) {
         try {
-            consumptionData = JSON.parse(stored);
+            consumptionData = normalizeConsumptionData(JSON.parse(stored));
             renderConsumptionInfo(consumptionData);
         } catch (e) {
             console.error('解析用量数据失败:', e);
+            renderConsumptionInfo(null);
         }
+    } else {
+        renderConsumptionInfo(null);
     }
 });
+
+function normalizeConsumptionData(raw) {
+    const record = raw?.full_result ? raw : {};
+    const full = record.full_result || raw || {};
+    const inputData = record.input_data || {};
+    const params = {
+        ...(record.params || {}),
+        ...(inputData || {}),
+        ...(full.params || {}),
+    };
+    const fabrics = params.fabrics || inputData.fabrics || full.fabrics || [];
+    const breakdown = normalizeMaterialBreakdown(full);
+    const materials = [];
+
+    if (fabrics.length) {
+        const breakdownEntries = Object.entries(breakdown);
+        fabrics.forEach((fabric, index) => {
+            const id = String(fabric.id || fabric.material || `fabric_${index + 1}`);
+            const calculated = breakdown[id]
+                || breakdownEntries.find(([, item]) => item.name === fabric.name || item.material_name === fabric.name)?.[1]
+                || breakdownEntries[index]?.[1]
+                || {};
+            materials.push({
+                material_type: id,
+                name: fabric.name || calculated.name || id,
+                length_m: numberOrZero(
+                    calculated.length_m ??
+                    calculated.per_piece_length_m ??
+                    calculated.production_length_m
+                ),
+                weight_g: numberOrZero(calculated.weight_g),
+                weight_kg: numberOrZero(calculated.weight_kg),
+                pricing_unit: isWeightMaterial(id) ? 'g' : 'm',
+            });
+        });
+    } else {
+        Object.entries(breakdown).forEach(([id, material]) => {
+            materials.push({
+                material_type: id,
+                name: material.name || material.material_name || id,
+                length_m: numberOrZero(
+                    material.length_m ??
+                    material.per_piece_length_m ??
+                    material.production_length_m
+                ),
+                weight_g: numberOrZero(material.weight_g),
+                weight_kg: numberOrZero(material.weight_kg),
+                pricing_unit: isWeightMaterial(id) ? 'g' : 'm',
+            });
+        });
+    }
+
+    return {
+        ...full,
+        params: {
+            ...params,
+            category: params.category || record.category || raw.category || 'custom',
+            quantity: positiveNumber(params.quantity || record.result?.quantity || raw.quantity, 100),
+            fabrics,
+        },
+        material_breakdown: Object.fromEntries(materials.map(material => [
+            material.material_type,
+            {
+                name: material.name,
+                length_m: material.length_m,
+                weight_g: material.weight_g,
+                weight_kg: material.weight_kg,
+            },
+        ])),
+        quotation_materials: materials,
+    };
+}
+
+function normalizeMaterialBreakdown(full) {
+    if (full.material_breakdown && Object.keys(full.material_breakdown).length) {
+        return full.material_breakdown;
+    }
+    if (full.material_totals && Object.keys(full.material_totals).length) {
+        return full.material_totals;
+    }
+    if (Array.isArray(full.nesting_groups)) {
+        return Object.fromEntries(full.nesting_groups.map((group, index) => {
+            const id = group.material || `fabric_${index + 1}`;
+            return [id, {
+                ...group,
+                name: group.material_name || group.name || id,
+                length_m: group.per_piece_length_m ?? group.production_length_m ?? group.length_m,
+            }];
+        }));
+    }
+    return {};
+}
 
 function renderConsumptionInfo(data) {
     const container = document.getElementById('quotation-consumption-info');
     if (!data) {
         container.innerHTML = '<p class="empty-hint">暂无用量数据，请先完成用量计算</p>';
+        updatePricingTable(null);
         return;
     }
 
-    const isQuick = data.method === '快速估算（经验公式法）';
-    let html = '';
-
-    if (isQuick) {
-        html = `
-            <div class="info-row"><span class="info-label">计算方式</span><span class="info-value">${data.method}</span></div>
-            <div class="info-row"><span class="info-label">品类</span><span class="info-value">${data.category}</span></div>
-            <div class="info-row"><span class="info-label">主面料单件用量</span><span class="info-value">${data.main_fabric.per_piece_length_m} 米</span></div>
-            ${data.lining ? `<div class="info-row"><span class="info-label">里布单件用量</span><span class="info-value">${data.lining.per_piece_length_m} 米</span></div>` : ''}
-            ${data.filling_fabric ? `<div class="info-row"><span class="info-label">胆料单件用量</span><span class="info-value">${data.filling_fabric.per_piece_length_m} 米</span></div>` : ''}
-            <div class="info-row"><span class="info-label">订单数量</span><span class="info-value">${data.params.quantity} 件</span></div>
-        `;
-    } else {
-        const preciseMaterials = Object.values(data.material_breakdown || {});
-        const fabrics = data.params?.fabrics || data.fabrics || [];
-        html = `
-            <div class="info-row"><span class="info-label">品类</span><span class="info-value">${data.params.category}</span></div>
-            <div class="info-row"><span class="info-label">面料种类</span><span class="info-value">${fabrics.length || preciseMaterials.length} 种</span></div>
-            ${preciseMaterials.map(material => `
-                <div class="info-row">
-                    <span class="info-label">${material.name || '面料'}</span>
-                    <span class="info-value">${material.length_m || 0} 米</span>
-                </div>
-            `).join('')}
-        `;
-    }
-
-    container.innerHTML = html;
-
-    // 根据用量数据动态更新材料价格表
+    const materials = data.quotation_materials || [];
+    const quantityInput = document.getElementById('quotation-quantity');
+    if (quantityInput) quantityInput.value = data.params.quantity;
+    container.innerHTML = `
+        <div class="info-row"><span class="info-label">品类</span><span class="info-value">${escapeHtml(getCategoryName(data.params?.category))}</span></div>
+        <div class="info-row"><span class="info-label">面料种类</span><span class="info-value">${materials.length} 种</span></div>
+        <div class="info-row"><span class="info-label">报价数量</span><span class="info-value">${data.params.quantity} 件</span></div>
+        ${materials.map(material => `
+            <div class="info-row">
+                <span class="info-label">${escapeHtml(material.name)}</span>
+                <span class="info-value">${formatMaterialUsage(material)}</span>
+            </div>
+        `).join('')}
+    `;
     updatePricingTable(data);
 }
 
 function updatePricingTable(data) {
     const tbody = document.getElementById('pricing-tbody');
-    let rows = '';
-
-    if (data.method === '快速估算（经验公式法）') {
-        rows += createPricingRow('main', '主面料', '元/米');
-        if (data.lining) {
-            rows += createPricingRow('lining', '里布', '元/米');
-        }
-        if (data.filling_fabric) {
-            rows += createPricingRow('filling_fabric_double', '胆料（双层）', '元/米');
-        }
-    } else {
-        const matBreakdown = data.material_breakdown || {};
-        Object.entries(matBreakdown).forEach(([key, val]) => {
-            if (key === 'down_filling' || key === 'cotton_filling') {
-                rows += createPricingRow(key, val.name, '元/g', 'unit_price_per_g');
-            } else {
-                rows += createPricingRow(key, val.name, '元/米');
-            }
-        });
-    }
-
-    if (rows) {
-        tbody.innerHTML = rows;
-    }
+    const materials = data?.quotation_materials || [];
+    tbody.innerHTML = materials.length
+        ? materials.map(material => createPricingRow(material)).join('')
+        : '<tr><td colspan="4" class="empty-row">请先从计算结果或历史记录进入报价管理</td></tr>';
 }
 
-function createPricingRow(type, name, unitLabel, priceField = 'unit_price_per_m') {
+function createPricingRow(material) {
+    const isWeight = material.pricing_unit === 'g';
+    const priceField = isWeight ? 'unit_price_per_g' : 'unit_price_per_m';
+    const unitLabel = isWeight ? '元/克' : '元/米';
     return `
-        <tr>
-            <td><input type="text" class="inline-input" value="${name}" data-type="${type}" data-field="name"></td>
-            <td><input type="number" class="inline-input" placeholder="0.00" data-type="${type}" data-field="${priceField}" step="0.01"> ${unitLabel}</td>
-            <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="${type}" data-field="supplier"></td>
+        <tr data-material-type="${escapeAttr(material.material_type)}">
+            <td>
+                <input type="text" class="inline-input pricing-material-name" value="${escapeAttr(material.name)}" data-type="${escapeAttr(material.material_type)}" data-field="name" readonly>
+            </td>
+            <td class="pricing-usage">
+                <strong>${formatMaterialUsage(material)}</strong>
+                <input type="hidden" data-field="length_m" value="${material.length_m}">
+                <input type="hidden" data-field="weight_g" value="${material.weight_g}">
+            </td>
+            <td>
+                <input type="number" class="inline-input" placeholder="0.00" data-type="${escapeAttr(material.material_type)}" data-field="${priceField}" step="0.01" min="0">
+                <span class="pricing-unit">${unitLabel}</span>
+            </td>
+            <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="${escapeAttr(material.material_type)}" data-field="supplier"></td>
         </tr>
     `;
-}
-
-function addPricingRow() {
-    const tbody = document.getElementById('pricing-tbody');
-    const row = document.createElement('tr');
-    row.innerHTML = `
-        <td><input type="text" class="inline-input" placeholder="材料名称" data-type="custom" data-field="name"></td>
-        <td><input type="number" class="inline-input" placeholder="0.00" data-type="custom" data-field="unit_price_per_m" step="0.01"> 元/米</td>
-        <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="custom" data-field="supplier"></td>
-    `;
-    tbody.appendChild(row);
 }
 
 function collectPricingData() {
@@ -114,14 +175,18 @@ function collectPricingData() {
         const name = row.querySelector('[data-field="name"]')?.value || '';
         const unitPricePerM = parseFloat(row.querySelector('[data-field="unit_price_per_m"]')?.value) || 0;
         const unitPricePerG = parseFloat(row.querySelector('[data-field="unit_price_per_g"]')?.value) || 0;
+        const lengthM = parseFloat(row.querySelector('[data-field="length_m"]')?.value) || 0;
+        const weightG = parseFloat(row.querySelector('[data-field="weight_g"]')?.value) || 0;
         const supplier = row.querySelector('[data-field="supplier"]')?.value || '';
 
-        if (name && (unitPricePerM > 0 || unitPricePerG > 0)) {
+        if (name) {
             materials.push({
                 material_type: type,
                 name: name,
                 unit_price_per_m: unitPricePerM,
                 unit_price_per_g: unitPricePerG,
+                length_m: lengthM,
+                weight_g: weightG,
                 supplier: supplier,
             });
         }
@@ -134,16 +199,20 @@ async function calculateQuotation() {
         alert('暂无用量数据，请先完成用量计算');
         return;
     }
+    if (!consumptionData.quotation_materials?.length) {
+        alert('当前计算结果没有可报价的面料数据');
+        return;
+    }
 
     const pricingData = {
         materials: collectPricingData(),
-        labor_cost_per_piece: parseFloat(document.getElementById('labor-cost').value) || 0,
-        accessories_cost_per_piece: parseFloat(document.getElementById('accessories-cost').value) || 0,
-        packaging_cost_per_piece: parseFloat(document.getElementById('packaging-cost').value) || 0,
-        other_cost_per_piece: parseFloat(document.getElementById('other-cost').value) || 0,
-        profit_margin_percent: parseFloat(document.getElementById('profit-margin').value) || 15,
-        tax_rate_percent: parseFloat(document.getElementById('tax-rate').value) || 13,
-        quantity: consumptionData.params?.quantity || 100,
+        labor_cost_per_piece: readNumber('labor-cost', 0),
+        accessories_cost_per_piece: readNumber('accessories-cost', 0),
+        packaging_cost_per_piece: readNumber('packaging-cost', 0),
+        other_cost_per_piece: readNumber('other-cost', 0),
+        profit_margin_percent: readNumber('profit-margin', 15),
+        tax_rate_percent: readNumber('tax-rate', 13),
+        quantity: positiveNumber(document.getElementById('quotation-quantity')?.value, 100),
     };
 
     showLoading(true);
@@ -168,6 +237,60 @@ async function calculateQuotation() {
     } finally {
         showLoading(false);
     }
+}
+
+function formatMaterialUsage(material) {
+    if (material.pricing_unit === 'g') {
+        return `${formatNumber(material.weight_g)} 克/件`;
+    }
+    return `${formatNumber(material.length_m, 3)} 米/件`;
+}
+
+function formatNumber(value, digits = 2) {
+    return numberOrZero(value).toLocaleString('zh-CN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: digits,
+    });
+}
+
+function positiveNumber(value, fallback) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function readNumber(elementId, fallback) {
+    const value = document.getElementById(elementId)?.value;
+    if (value === undefined || value === null || value === '') return fallback;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+}
+
+function numberOrZero(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+}
+
+function isWeightMaterial(materialType) {
+    return materialType === 'down_filling' || materialType === 'cotton_filling';
+}
+
+function getCategoryName(category) {
+    return window.DictManager?.getCategoryName
+        ? DictManager.getCategoryName(category, category)
+        : (category || '-');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value);
 }
 
 function renderQuotationResult(data) {
@@ -221,8 +344,17 @@ function renderQuotationResult(data) {
             <h4 style="font-size:14px;margin-bottom:8px;">材料成本明细</h4>
             ${data.material_costs.map(mc => `
                 <div class="quick-detail-row">
-                    <span>${mc.name} ${mc.supplier ? '(' + mc.supplier + ')' : ''}</span>
-                    <strong>¥${mc.total_cost}</strong>
+                    <span>
+                        ${escapeHtml(mc.name)} ${mc.supplier ? '(' + escapeHtml(mc.supplier) + ')' : ''}
+                        <small class="material-cost-formula">
+                            ${mc.weight_g > 0 ? `${formatNumber(mc.weight_g)}克/件` : `${formatNumber(mc.length_m, 3)}米/件`}
+                            × ${escapeHtml(mc.unit_price_desc)}
+                        </small>
+                    </span>
+                    <span class="material-cost-values">
+                        <strong>¥${mc.per_piece_cost}/件</strong>
+                        <small>订单合计 ¥${mc.total_cost}</small>
+                    </span>
                 </div>
             `).join('')}
             <div class="quick-detail-row" style="border-top:1px solid #e2e8f0;margin-top:4px;padding-top:8px;">

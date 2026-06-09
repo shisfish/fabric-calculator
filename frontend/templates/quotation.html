@@ -34,35 +34,27 @@
                             <thead>
                                 <tr>
                                     <th>材料名称</th>
+                                    <th>单件用量</th>
                                     <th>单价</th>
                                     <th>供应商</th>
                                 </tr>
                             </thead>
                             <tbody id="pricing-tbody">
                                 <tr>
-                                    <td><input type="text" class="inline-input" value="主面料" data-type="main" data-field="name"></td>
-                                    <td><input type="number" class="inline-input" placeholder="45.00" data-type="main" data-field="unit_price_per_m" step="0.01"> 元/米</td>
-                                    <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="main" data-field="supplier"></td>
-                                </tr>
-                                <tr>
-                                    <td><input type="text" class="inline-input" value="里布" data-type="lining" data-field="name"></td>
-                                    <td><input type="number" class="inline-input" placeholder="12.00" data-type="lining" data-field="unit_price_per_m" step="0.01"> 元/米</td>
-                                    <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="lining" data-field="supplier"></td>
-                                </tr>
-                                <tr>
-                                    <td><input type="text" class="inline-input" value="衬布" data-type="interlining" data-field="name"></td>
-                                    <td><input type="number" class="inline-input" placeholder="8.00" data-type="interlining" data-field="unit_price_per_m" step="0.01"> 元/米</td>
-                                    <td><input type="text" class="inline-input" placeholder="供应商名称" data-type="interlining" data-field="supplier"></td>
+                                    <td colspan="4" class="empty-row">请先从计算结果或历史记录进入报价管理</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <button class="btn btn-sm btn-outline" onclick="addPricingRow()">+ 添加材料</button>
                 </div>
 
                 <div class="card">
                     <h3>⚙️ 其他费用</h3>
                     <div class="form-grid">
+                        <div class="form-group">
+                            <label>报价数量 (件)</label>
+                            <input type="number" id="quotation-quantity" value="100" step="1" min="1">
+                        </div>
                         <div class="form-group">
                             <label>单件加工费 (元)</label>
                             <input type="number" id="labor-cost" value="35" step="1" min="0">

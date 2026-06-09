@@ -985,7 +985,10 @@ class QuotationEngine:
             "quantity": 100,                   # 数量
         }
         """
-        quantity = pricing_data.get("quantity", consumption_data["params"].get("quantity", 1))
+        params = consumption_data.get("params") or {}
+        quantity = int(pricing_data.get("quantity") or params.get("quantity") or 1)
+        if quantity < 1:
+            quantity = 1
         material_breakdown = consumption_data.get("material_breakdown", {})
         materials_pricing = pricing_data.get("materials", [])
 
@@ -996,7 +999,7 @@ class QuotationEngine:
 
         # 计算各材料成本
         material_costs = []
-        total_material_cost = 0
+        per_piece_material_cost = 0
 
         for mat_type, mat_info in material_breakdown.items():
             pricing = material_price_map.get(mat_type, {})
@@ -1008,25 +1011,28 @@ class QuotationEngine:
             if mat_type in ["down_filling", "cotton_filling"]:
                 # 填充物按重量计价
                 unit_price_per_g = float(pricing.get("unit_price_per_g", unit_price / 1000))
-                cost = mat_info["weight_g"] * unit_price_per_g
+                usage = float(pricing.get("weight_g", mat_info.get("weight_g", 0)) or 0)
+                cost_per_piece = usage * unit_price_per_g
                 unit_desc = f"{unit_price_per_g:.2f}元/g"
             else:
-                cost = mat_info["length_m"] * unit_price
+                usage = float(pricing.get("length_m", mat_info.get("length_m", 0)) or 0)
+                cost_per_piece = usage * unit_price
                 unit_desc = f"{unit_price:.2f}元/米"
 
             material_costs.append({
                 "material_type": mat_type,
                 "name": name,
                 "supplier": supplier,
-                "length_m": mat_info.get("length_m", 0),
+                "length_m": float(pricing.get("length_m", mat_info.get("length_m", 0)) or 0),
+                "weight_g": float(pricing.get("weight_g", mat_info.get("weight_g", 0)) or 0),
                 "weight_kg": mat_info.get("weight_kg", 0),
                 "unit_price_desc": unit_desc,
-                "total_cost": round(cost, 2),
+                "per_piece_cost": round(cost_per_piece, 2),
+                "total_cost": round(cost_per_piece * quantity, 2),
             })
-            total_material_cost += cost
+            per_piece_material_cost += cost_per_piece
 
-        # 单件材料成本
-        per_piece_material_cost = total_material_cost / quantity if quantity > 0 else total_material_cost
+        total_material_cost = per_piece_material_cost * quantity
 
         # 其他成本
         labor_cost = float(pricing_data.get("labor_cost_per_piece", 0))

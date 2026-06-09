@@ -190,75 +190,7 @@
         <!-- Step 3: 录入裁片 -->
         <div class="panel" id="panel-3">
             <h2>录入裁片数据</h2>
-            <p class="panel-desc">手动填写各分片测量数据，或使用AI图片识别自动测量。</p>
-
-            <!-- AI识别入口 -->
-            <div class="card ai-card" id="ai-card">
-                <div class="ai-card-header">
-                    <h3>📷 AI图片识别</h3>
-                    <span class="badge badge-ai">辅助测量</span>
-                </div>
-                <p class="ai-card-desc">上传衣服平铺照片（旁边放一把尺子作为参照），在图片上框选各分片区域，系统自动计算尺寸并填入下方表格。</p>
-
-                <!-- 步骤3a: 上传图片 -->
-                <div id="ai-step-upload" class="ai-step">
-                    <div class="upload-zone" id="upload-zone">
-                        <div class="upload-icon">📸</div>
-                        <div class="upload-text">点击或拖拽上传衣服照片</div>
-                        <div class="upload-hint">建议：衣服平铺拍摄，旁边放一把30cm直尺作为参照</div>
-                        <input type="file" id="image-input" accept="image/*" style="display:none;">
-                    </div>
-                </div>
-
-                <!-- 步骤3b: 标定参照物 -->
-                <div id="ai-step-calibrate" class="ai-step" style="display:none;">
-                    <div class="ai-instruction">
-                        <strong>第1步：框选参照物</strong>
-                        <span>在图片中用鼠标框选尺子（或其他参照物）的区域</span>
-                    </div>
-                    <div class="canvas-container" id="calibrate-canvas-container">
-                        <canvas id="calibrate-canvas"></canvas>
-                    </div>
-                    <div class="ai-controls">
-                        <div class="form-group inline-form">
-                            <label>参照物实际长度:</label>
-                            <input type="number" id="ref-length" value="30" step="1" min="1" style="width:80px;">
-                            <span>cm</span>
-                        </div>
-                        <button class="btn btn-sm btn-primary" onclick="confirmCalibration()">✅ 确认标定</button>
-                        <button class="btn btn-sm btn-secondary" onclick="resetAi()">🔄 重新上传</button>
-                    </div>
-                </div>
-
-                <!-- 步骤3c: 框选裁片 -->
-                <div id="ai-step-measure" class="ai-step" style="display:none;">
-                    <div class="ai-instruction">
-                        <strong>第2步：框选裁片区域</strong>
-                        <span>在图片上依次框选各裁片（前片、后片、袖子等），系统自动计算尺寸</span>
-                    </div>
-                    <div class="canvas-container" id="measure-canvas-container">
-                        <canvas id="measure-canvas"></canvas>
-                    </div>
-                    <div class="ai-controls">
-                        <div class="form-group inline-form">
-                            <label>当前裁片:</label>
-                            <select id="current-piece-select" style="width:160px;">
-                                <option value="">-- 选择裁片 --</option>
-                            </select>
-                        </div>
-                        <button class="btn btn-sm btn-primary" onclick="addMeasurement()">📏 添加测量</button>
-                        <button class="btn btn-sm btn-outline" onclick="undoMeasurement()">↩️ 撤销</button>
-                        <button class="btn btn-sm btn-success" onclick="applyToTable()">✅ 填入表格</button>
-                        <button class="btn btn-sm btn-secondary" onclick="resetAi()">🔄 重新开始</button>
-                    </div>
-
-                    <!-- 已测量裁片列表 -->
-                    <div class="measured-list" id="measured-list" style="display:none;">
-                        <h4>已测量裁片</h4>
-                        <div id="measured-items"></div>
-                    </div>
-                </div>
-            </div>
+            <p class="panel-desc">手动填写各分片的测量数据。</p>
 
             <div class="table-container">
                 <table class="data-table" id="pieces-table">
@@ -294,9 +226,9 @@
         <!-- Step 4: 计算结果 -->
         <div class="panel" id="panel-4">
             <!-- 顶部操作按钮区 -->
-            <div class="result-actions-bar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:8px;">
+            <div class="result-actions-bar">
                 <button class="btn btn-secondary" onclick="goStep(3)">✏️ 返回修改</button>
-                <button class="btn btn-outline" onclick="exportResult()">📥 导出结果</button>
+                <button class="btn btn-outline" onclick="exportResult()">🖨️ 导出PDF报告</button>
                 <button class="btn btn-primary" onclick="goToQuotation()">💰 生成报价单</button>
             </div>
 
@@ -377,6 +309,5 @@
     <script src="/static/js/result-view.js?v=20260603a"></script>
     <script src="/static/js/app.js?v=20260603a"></script>
     <script type="module" src="/static/js/bundle.js"></script>
-    <script src="/static/js/image-tool.js"></script>
 </body>
 </html>
