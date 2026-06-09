@@ -404,58 +404,118 @@ function renderCostBreakdown(data) {
 
 function exportQuotation() {
     if (!lastQuotationResult || !consumptionData) return;
-    const text = generateQuotationText(lastQuotationResult, consumptionData);
-    downloadText(text, `报价单_${new Date().toISOString().slice(0,10)}.txt`);
+    if (!window.ExportManager) {
+        alert('导出组件未加载，请刷新页面后重试');
+        return;
+    }
+    ExportManager.choose({
+        title: '导出报价单',
+        document: buildQuotationDocument(lastQuotationResult, consumptionData),
+        onPdf: () => printQuotationReport(lastQuotationResult, consumptionData),
+    });
 }
 
-function generateQuotationText(data, consData) {
-    let text = '========================================\n';
-    text += '           报 价 单\n';
-    text += '========================================\n';
-    text += `日期: ${new Date().toLocaleDateString()}\n`;
-    text += `数量: ${data.quantity} 件\n\n`;
-
-    text += '--- 材料成本 ---\n';
-    data.material_costs.forEach(mc => {
-        text += `${mc.name}: ¥${mc.total_cost}`;
-        if (mc.supplier) text += ` (${mc.supplier})`;
-        text += '\n';
-    });
-    text += `材料成本合计: ¥${data.total_material_cost}\n`;
-    text += `单件材料成本: ¥${data.per_piece_material_cost}\n\n`;
-
-    text += '--- 其他费用 (单件) ---\n';
-    text += `加工费: ¥${data.labor_cost_per_piece}\n`;
-    text += `辅料费: ¥${data.accessories_cost_per_piece}\n`;
-    text += `包装费: ¥${data.packaging_cost_per_piece}\n`;
-    text += `其他费用: ¥${data.other_cost_per_piece}\n`;
-    text += `单件总成本: ¥${data.per_piece_total_cost}\n\n`;
-
-    text += '--- 报价 ---\n';
-    text += `利润率: ${data.profit_margin_percent}%\n`;
-    text += `利润: ¥${data.profit_per_piece}/件\n`;
-    text += `税前单价: ¥${data.price_before_tax}\n`;
-    text += `税率: ${data.tax_rate_percent}%\n`;
-    text += `税额: ¥${data.tax_per_piece}/件\n`;
-    text += `含税单价: ¥${data.price_with_tax}\n`;
-    text += `总金额: ¥${data.total_amount.toLocaleString()}\n`;
-    text += '========================================\n';
-
-    return text;
+function buildQuotationDocument(data, consData) {
+    const date = new Date().toISOString().slice(0, 10);
+    return {
+        filename: `报价单_${date}`,
+        title: '面料用量报价单',
+        summary: [
+            { label: '日期', value: new Date().toLocaleDateString('zh-CN') },
+            { label: '服装品类', value: getCategoryName(consData.params?.category) },
+            { label: '报价数量', value: `${data.quantity} 件` },
+            { label: '含税单价', value: `¥${data.price_with_tax}` },
+            { label: '报价总额', value: `¥${formatNumber(data.total_amount)}` },
+        ],
+        sections: [
+            {
+                title: '材料成本明细',
+                headers: ['材料', '单件用量', '单价', '供应商', '单件成本', '订单合计'],
+                rows: data.material_costs.map(material => [
+                    material.name,
+                    material.weight_g > 0 ? `${formatNumber(material.weight_g)} 克/件` : `${formatNumber(material.length_m, 3)} 米/件`,
+                    material.unit_price_desc,
+                    material.supplier || '-',
+                    `¥${material.per_piece_cost}`,
+                    `¥${material.total_cost}`,
+                ]),
+            },
+            {
+                title: '单件费用与报价',
+                headers: ['项目', '金额'],
+                rows: [
+                    ['单件材料成本', `¥${data.per_piece_material_cost}`],
+                    ['加工费', `¥${data.labor_cost_per_piece}`],
+                    ['辅料费', `¥${data.accessories_cost_per_piece}`],
+                    ['包装费', `¥${data.packaging_cost_per_piece}`],
+                    ['其他费用', `¥${data.other_cost_per_piece}`],
+                    ['单件总成本', `¥${data.per_piece_total_cost}`],
+                    [`利润 (${data.profit_margin_percent}%)`, `¥${data.profit_per_piece}`],
+                    ['税前单价', `¥${data.price_before_tax}`],
+                    [`税额 (${data.tax_rate_percent}%)`, `¥${data.tax_per_piece}`],
+                    ['含税单价', `¥${data.price_with_tax}`],
+                    ['总金额', `¥${formatNumber(data.total_amount)}`],
+                ],
+            },
+        ],
+    };
 }
 
 function printQuotation() {
-    window.print();
+    if (!lastQuotationResult || !consumptionData) return;
+    printQuotationReport(lastQuotationResult, consumptionData);
 }
 
-function downloadText(text, filename) {
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+function printQuotationReport(data, consData) {
+    const reportWindow = window.open('', '_blank');
+    if (!reportWindow) {
+        alert('浏览器阻止了报价单窗口，请允许本站打开新窗口后重试');
+        return;
+    }
+    const documentData = buildQuotationDocument(data, consData);
+    reportWindow.document.open();
+    reportWindow.document.write(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>报价单</title>
+    <style>
+        @page { size: A4; margin: 14mm; }
+        body { color:#172033; font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif; font-size:12px; }
+        h1 { margin:0; color:#1d4ed8; font-size:26px; }
+        .header { display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:12px; border-bottom:2px solid #2563eb; }
+        .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:16px 0; }
+        .summary div { padding:10px; background:#f1f5f9; border-radius:6px; }
+        .summary span { display:block; color:#64748b; font-size:11px; }
+        .summary strong { font-size:16px; }
+        h2 { margin:18px 0 8px; padding-left:8px; border-left:4px solid #2563eb; font-size:15px; }
+        table { width:100%; border-collapse:collapse; }
+        th,td { padding:8px; border:1px solid #cbd5e1; text-align:left; }
+        th { background:#eff6ff; color:#1e3a8a; }
+        .total { margin-top:16px; padding:16px; background:#eff6ff; text-align:right; }
+        .total strong { color:#1d4ed8; font-size:24px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div><h1>面料用量报价单</h1><div>${escapeHtml(getCategoryName(consData.params?.category))}</div></div>
+        <div>日期：${escapeHtml(new Date().toLocaleDateString('zh-CN'))}</div>
+    </div>
+    <div class="summary">
+        ${documentData.summary.slice(2).map(item => `<div><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.value)}</strong></div>`).join('')}
+    </div>
+    ${documentData.sections.map(section => `
+        <h2>${escapeHtml(section.title)}</h2>
+        <table>
+            <thead><tr>${section.headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>
+            <tbody>${section.rows.map(row => `<tr>${row.map(value => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`).join('')}</tbody>
+        </table>
+    `).join('')}
+    <div class="total">报价总额<br><strong>¥${formatNumber(data.total_amount)}</strong></div>
+    <script>window.addEventListener('load',function(){window.setTimeout(function(){window.print()},200)})<\/script>
+</body>
+</html>`);
+    reportWindow.document.close();
 }
 
 function showLoading(show) {

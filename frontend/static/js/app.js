@@ -807,11 +807,11 @@ function exportResult() {
         return;
     }
 
-    if (!window.ResultView?.printReport) {
+    if (!window.ResultView?.exportReport) {
         alert('报告组件未加载，请刷新页面后重试');
         return;
     }
-    ResultView.printReport(lastCalcResult);
+    ResultView.exportReport(lastCalcResult);
 }
 
 function goToQuotation() {

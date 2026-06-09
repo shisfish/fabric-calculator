@@ -581,8 +581,8 @@
                             ${pieces.map(piece => `
                                 <tr>
                                     <td>${escapeHtml(piece.name || '-')}</td>
-                                    <td>${escapeHtml(formatSize(firstDefined(piece.original_length, piece.length, piece.height, piece.originalSize?.height), firstDefined(piece.original_width, piece.width, piece.originalSize?.width)))}</td>
-                                    <td>${escapeHtml(formatSize(piece.effective_length, piece.effective_width))}</td>
+                                    <td>${escapeHtml(formatPieceOriginalSize(piece))}</td>
+                                    <td>${escapeHtml(formatPieceSeamSize(piece, full))}</td>
                                     <td>${escapeHtml(String(firstDefined(piece.count, piece.quantity, piece.cutCount, 1)))}</td>
                                     <td>${escapeHtml((piece.calculation_method || piece.calculationMethod) === 'area' ? '面积法' : '排料')}</td>
                                     <td>${escapeHtml(formatNumber(firstDefined(piece.area_cm2, piece.area, piece.area_with_shrinkage_cm2)))}</td>
@@ -682,6 +682,18 @@
         if (value.startsWith('static/')) return `/${value}`;
         if (value.startsWith('/')) return value;
         return `/static/${value}`;
+    }
+
+    function exportReport(recordOrResult) {
+        if (!window.ExportManager) {
+            alert('导出组件未加载，请刷新页面后重试');
+            return;
+        }
+        return ExportManager.choose({
+            title: '导出用量计算报告',
+            document: buildReportDocument(recordOrResult),
+            onPdf: () => printReport(recordOrResult),
+        });
     }
 
     function printReport(recordOrResult) {
@@ -888,8 +900,8 @@
                     ${pieces.map(piece => `
                     <tr>
                         <td>${escapeHtml(piece.name || '-')}</td>
-                        <td>${escapeHtml(formatSize(firstDefined(piece.original_length, piece.length, piece.height, piece.originalSize?.height), firstDefined(piece.original_width, piece.width, piece.originalSize?.width)))}</td>
-                        <td>${escapeHtml(formatSize(piece.effective_length, piece.effective_width))}</td>
+                        <td>${escapeHtml(formatPieceOriginalSize(piece))}</td>
+                        <td>${escapeHtml(formatPieceSeamSize(piece, full))}</td>
                         <td>${escapeHtml(String(firstDefined(piece.count, piece.quantity, piece.cutCount, 1)))}</td>
                         <td>${escapeHtml((piece.calculation_method || piece.calculationMethod) === 'area' ? '面积法' : '排料')}</td>
                         <td>${escapeHtml(formatNumber(firstDefined(piece.area_cm2, piece.area, piece.area_with_shrinkage_cm2)))}</td>
@@ -939,6 +951,131 @@
 
     function reportInfoItem(label, value) {
         return `<div class="info-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value || '-'))}</strong></div>`;
+    }
+
+    function buildReportDocument(recordOrResult) {
+        const record = recordOrResult.full_result ? recordOrResult : { full_result: recordOrResult };
+        const full = normalizeFullResult(record.full_result || recordOrResult || {});
+        const inputData = record.input_data || {};
+        const params = full.params || record.params || inputData || {};
+        const type = record.type || 'precise';
+        const category = record.category || inputData.category || inputData.measurements?.category || params.category;
+        const materials = getMaterials(full, params);
+        const pieces = getPieces(full, record, inputData);
+        const date = new Date().toISOString().slice(0, 10);
+
+        return {
+            filename: `面料用量报告_${getCategoryName(category)}_${date}`,
+            title: '面料用量计算报告',
+            summary: [
+                { label: '计算类型', value: getTypeLabel(type) },
+                { label: '服装品类', value: getCategoryName(category) },
+                { label: '记录编号', value: record.id || '-' },
+                { label: '记录时间', value: record.timestamp || '-' },
+                { label: '缝份', value: formatWithUnit(firstDefined(params.seam_allowance, params.seamAllowance, full.metadata?.seamAllowance), 'cm') },
+            ],
+            sections: [
+                {
+                    title: '材料用量汇总',
+                    headers: ['材料', '门幅', '缩水率', '排料长度', '面积法长度', '合计用料', '面积', '利用率'],
+                    rows: materials.map(item => [
+                        item.name || item.material || '-',
+                        formatWithUnit(item.fabric_width, 'cm'),
+                        formatPercent(item.shrinkage_rate, true),
+                        formatWithUnit(item.nesting_length_m, 'm'),
+                        formatWithUnit(item.area_method_length_m, 'm'),
+                        formatWithUnit(item.length_m, 'm'),
+                        formatWithUnit(item.area_m2, 'm²'),
+                        formatPercent(item.width_utilization),
+                    ]),
+                },
+                {
+                    title: '裁片明细',
+                    headers: ['裁片名称', '原始尺寸(cm)', '含缝份尺寸(cm)', '数量', '计算方式', '面积(cm²)', '材料'],
+                    rows: pieces.map(piece => [
+                        piece.name || '-',
+                        formatPieceOriginalSize(piece),
+                        formatPieceSeamSize(piece, full),
+                        String(firstDefined(piece.count, piece.quantity, piece.cutCount, 1)),
+                        (piece.calculation_method || piece.calculationMethod) === 'area' ? '面积法' : '排料',
+                        formatNumber(firstDefined(piece.area_cm2, piece.area, piece.area_with_shrinkage_cm2)),
+                        getMaterialName(piece.material || 'main'),
+                    ]),
+                },
+            ],
+        };
+    }
+
+    function formatPieceOriginalSize(piece) {
+        const length = firstDefined(
+            piece.original_length,
+            piece.originalLength,
+            piece.originalSize?.height,
+            piece.length,
+            piece.height
+        );
+        const width = firstDefined(
+            piece.original_width,
+            piece.originalWidth,
+            piece.originalSize?.width,
+            piece.width
+        );
+        return formatSize(length, width);
+    }
+
+    function formatPieceSeamSize(piece, full) {
+        const matchingSeamPiece = (full?.seam?.pieces || []).find(item =>
+            (item.id && item.id === piece.id) || (item.name && item.name === piece.name)
+        );
+        const explicitLength = firstDefined(
+            piece.effective_length,
+            piece.effectiveLength,
+            piece.seamSize?.height,
+            piece.seam_size?.height,
+            matchingSeamPiece?.seamSize?.height,
+            matchingSeamPiece?.effective_length
+        );
+        const explicitWidth = firstDefined(
+            piece.effective_width,
+            piece.effectiveWidth,
+            piece.seamSize?.width,
+            piece.seam_size?.width,
+            matchingSeamPiece?.seamSize?.width,
+            matchingSeamPiece?.effective_width
+        );
+        if (explicitLength !== undefined || explicitWidth !== undefined) {
+            return formatSize(explicitLength, explicitWidth);
+        }
+
+        const originalLength = firstDefined(
+            piece.original_length,
+            piece.originalLength,
+            piece.originalSize?.height,
+            piece.length,
+            piece.height
+        );
+        const originalWidth = firstDefined(
+            piece.original_width,
+            piece.originalWidth,
+            piece.originalSize?.width,
+            piece.width
+        );
+        const seam = toNumber(firstDefined(
+            piece.seam_allowance,
+            piece.seamAllowance,
+            piece.seamDistance,
+            matchingSeamPiece?.seamAllowance,
+            matchingSeamPiece?.seamDistance,
+            full?.params?.seam_allowance,
+            full?.params?.seamAllowance,
+            full?.metadata?.seamAllowance,
+            full?.seam?.seamDistance
+        ));
+        if (!seam || (!toNumber(originalLength) && !toNumber(originalWidth))) return '-';
+        return formatSize(
+            toNumber(originalLength) + seam * 2,
+            toNumber(originalWidth) + seam * 2
+        );
     }
 
     function absoluteAssetUrl(path) {
@@ -1059,6 +1196,7 @@
 
     window.ResultView = {
         render,
+        exportReport,
         printReport,
         normalizeFullResult,
     };

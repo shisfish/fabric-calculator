@@ -7,6 +7,7 @@ Fabric Consumption Quick Calculator
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from functools import wraps
 from calculator_engine import FabricCalculator, QuotationEngine
+from export_service import build_document
 from curved_engine import CurvedPieceCalculator
 from db_manager import db_manager
 from pymysql import OperationalError
@@ -14,6 +15,7 @@ import json
 import os
 import sys
 import hashlib
+from io import BytesIO
 from datetime import datetime
 
 # 前端资源路径（相对于server/目录）
@@ -339,6 +341,27 @@ def calculate_quotation():
 
     except Exception as e:
         return jsonify({"success": False, "message": f"报价计算错误: {str(e)}"}), 500
+
+
+@app.route('/api/export/document', methods=['POST'])
+@login_required
+def export_document():
+    """生成可编辑的 Word 或 Excel 文档。"""
+    try:
+        data = request.get_json() or {}
+        export_format = data.get("format")
+        document = data.get("document") or {}
+        content, mimetype, extension = build_document(document, export_format)
+        filename = str(document.get("filename") or "导出文件").strip() or "导出文件"
+        filename = "".join("_" if char in '<>:"/\\|?*' else char for char in filename)
+        return send_file(
+            BytesIO(content),
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=f"{filename}.{extension}",
+        )
+    except Exception as e:
+        return jsonify({"success": False, "message": f"文档生成失败: {str(e)}"}), 400
 
 
 @app.route('/api/history', methods=['GET'])

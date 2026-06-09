@@ -53,6 +53,88 @@ body {
     stroke-linejoin: round;
 }
 
+.export-format-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.export-format-dialog {
+    width: min(520px, 100%);
+    padding: 24px;
+    border-radius: 12px;
+    background: white;
+    box-shadow: var(--shadow-lg);
+}
+
+.export-format-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.export-format-hint {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.export-format-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.export-format-options button {
+    padding: 16px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.export-format-options button:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+}
+
+.export-format-options strong,
+.export-format-options span {
+    display: block;
+}
+
+.export-format-options strong {
+    color: var(--primary);
+    font-size: 16px;
+}
+
+.export-format-options span {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.export-format-cancel {
+    width: 100%;
+    padding: 9px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--border);
+    cursor: pointer;
+}
+
+@media (max-width: 560px) {
+    .export-format-options {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* 导航栏 */
 .navbar {
     background: var(--card-bg);
